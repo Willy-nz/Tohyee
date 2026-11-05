@@ -45,6 +45,7 @@ const TABLES: Record<string, TableText> = {
   tohyee_farm_pasture_readings: { label: "Pasture readings", noun: "pasture readings", description: "Pasture cover readings by paddock." },
   tohyee_farm_grazings: { label: "Grazings", noun: "grazings", description: "Mobs in and out of paddocks." },
   tohyee_farm_supplements: { label: "Supplements fed", noun: "supplements fed", description: "Supplements fed out by paddock." },
+  tohyee_farm_rainfall: { label: "Rainfall", noun: "rain readings", description: "Rain gauge readings by day, in mm." },
   // Google Analytics (decision 607).
   ...Object.fromEntries(GA_REPORTS.map((report) => [report.table, { label: report.label, noun: report.noun, description: report.description }])),
   // Google Search Console (decision 1181).

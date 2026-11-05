@@ -3252,6 +3252,19 @@ that something happened.
   covers before and after) and supplements fed in kg DM. Satellite and
   model readings are labelled as estimates. Records only.
 
+- **Rainfall** (RF1-RF8, decisions 1451-1456, tenant migration 0246):
+  Farm › More › **Rainfall**. A farm has rain gauges (named, with a note,
+  optionally placed on the map as a blue "R"). Farm › Log › **Rain gauge**
+  records a day's mm from a phone, with **No rain (0 mm)**, through the
+  device's queue, so it works with no signal and is kept once. Readings can
+  be changed and backdated, with who and when kept; bookkeepers remove one
+  entered by mistake (kept). Rainfall shows this month, this season and the
+  last 12 months, and a chart and table by month or season, each beside the
+  same time last year, with how many days have a reading (a missing day is
+  never counted as dry). Bookkeepers import a gauge's readings from CSV or
+  Excel with a preview. In Analytics as `tohyee_farm_rainfall`; the AI has
+  a read-only `rainfall` tool. No outside weather data is fetched.
+
 - **Mobs** (decisions 1421-1430, MOB1-MOB10, tenant migration 0233; common
   NZ practice, not yet reviewed): Farm › More › Mobs lists each mob (one
   IRD class, head, tag colour, paddock and last weight) with quick actions
@@ -3353,7 +3366,7 @@ that something happened.
   it once. The pages themselves still need a signal to open: there's no
   offline app yet (decision 913 says how it would work). Not kept in
   Tohyee yet: rainfall, photos and voice notes, treatments, births and
-  deaths.
+  deaths. (Rainfall is kept now: see Rainfall above.)
 
 - **Tohyee for Android** (#502, decisions 1140-1152;
   [MOBILE-APP.md](MOBILE-APP.md#the-android-app)): an optional Android app
