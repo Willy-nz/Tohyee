@@ -271,6 +271,8 @@ export function FarmTasks({ organisationId, farm, startNew = false }: FarmContex
 type History = { history: Array<{ id: string; doneFor: string; doneByEmail: string; doneByName?: string; doneAt: string; undoneByEmail: string | null; undoneByName?: string; undoneAt: string | null }> };
 
 function TaskDetail({ organisationId, farm, task, canRecord, onChanged, onClose }: { organisationId: string; farm: Farm; task: FarmTask; canRecord: boolean; onChanged: (message?: string) => void; onClose: () => void }) {
+  // Cancelling (and opening again) is for bookkeepers and up (decision 1457).
+  const canCancel = useWorkspace().can("bookkeeper");
   const history = useApiData<History>(`/api/farming/tasks/${task.id}/done`, { organisationId, n: task.lastDone?.id ?? "" });
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -343,9 +345,11 @@ function TaskDetail({ organisationId, farm, task, canRecord, onChanged, onClose 
               Undo done for {shortDate(task.lastDone.doneFor, today)}
             </Button>
           ) : null}
-          <Button variant="secondary" disabled={busy} onClick={() => void act(() => api(`/api/farming/tasks/${task.id}`, { method: "PATCH", body: { organisationId, status: task.status === "open" ? "cancelled" : "open" } }), task.status === "open" ? "Task cancelled. It's kept under Cancelled." : "Task opened again.")}>
-            {task.status === "open" ? "Cancel task" : "Open again"}
-          </Button>
+          {canCancel ? (
+            <Button variant="secondary" disabled={busy} onClick={() => void act(() => api(`/api/farming/tasks/${task.id}`, { method: "PATCH", body: { organisationId, status: task.status === "open" ? "cancelled" : "open" } }), task.status === "open" ? "Task cancelled. It's kept under Cancelled." : "Task opened again.")}>
+              {task.status === "open" ? "Cancel task" : "Open again"}
+            </Button>
+          ) : null}
           <Button variant="secondary" onClick={onClose}>
             Close
           </Button>

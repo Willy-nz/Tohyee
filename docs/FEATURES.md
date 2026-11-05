@@ -3273,7 +3273,7 @@ that something happened.
   moves to its next date. Today has a Tasks card with Done (works with no
   signal), the farm calendar shows the next 30 days, and the person it's
   for gets reminders in the Android app with their safety actions.
-  Cancelled tasks are kept.
+  Only bookkeepers and up cancel a task; cancelled tasks are kept.
 
 - **The AI reads farm data** (AIW10-AIW14, decision 560): a connected AI
   can read soil tests, fertiliser products and plans, pasture cover,

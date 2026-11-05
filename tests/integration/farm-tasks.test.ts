@@ -4,6 +4,7 @@ import * as tasksRoute from "@/app/api/farming/farms/[farmId]/tasks/route";
 import * as teamRoute from "@/app/api/farming/farms/[farmId]/team/route";
 import * as doneRoute from "@/app/api/farming/tasks/[taskId]/done/route";
 import * as dueRoute from "@/app/api/farming/tasks/due/route";
+import * as taskRoute from "@/app/api/farming/tasks/[taskId]/route";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { coreQuery } from "@/lib/db/transactions";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -103,10 +104,16 @@ describeWithDatabase("farm team tasks", () => {
     await run((tx) => markTaskDone(tx, w.trough, {}, today));
   });
 
-  it("FT2 cancelling keeps a task, out of the to-do list", async () => {
+  it("FT2 only bookkeepers and up cancel; cancelling keeps a task, out of the to-do list", async () => {
     const run = as(owner);
-    const spare = await run((tx) => addTask(tx, { farmId: w.home, title: "Spray thistles", dueOn: "2026-11-20" }));
+    // Farm staff can't cancel a task, even one they added (Jess, 5 Nov 2026), but can still change it.
+    const theirs = await call(worker, tasksRoute.POST as Handler, `/api/farming/farms/${w.home}/tasks`, { farmId: w.home }, "POST", { title: "Spray thistles", dueOn: "2026-11-20" });
+    const spare = theirs.body.task as { id: string };
+    const refused = await call(worker, taskRoute.PATCH as Handler, `/api/farming/tasks/${spare.id}`, { taskId: spare.id }, "PATCH", { status: "cancelled" });
+    expect([refused.status, refused.body.error]).toEqual([403, "Cancelling a task needs the bookkeeper role or higher. Mark it done, or ask a bookkeeper or the owner."]);
+    expect((await call(worker, taskRoute.PATCH as Handler, `/api/farming/tasks/${spare.id}`, { taskId: spare.id }, "PATCH", { note: "Ragwort too" })).status).toBe(200);
     await run((tx) => updateTask(tx, spare.id, { status: "cancelled" }));
+    await expect(as(worker)((tx) => updateTask(tx, spare.id, { status: "open" }))).rejects.toThrow("Opening a cancelled task again needs the bookkeeper role");
     expect((await run((tx) => listTasks(tx, { farmId: w.home }))).map((task) => task.title)).not.toContain("Spray thistles");
     expect((await run((tx) => listTasks(tx, { farmId: w.home, view: "cancelled" }))).map((task) => task.title)).toEqual(["Spray thistles"]);
     await expect(run((tx) => markTaskDone(tx, spare.id, {}))).rejects.toThrow("cancelled");
