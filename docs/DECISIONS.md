@@ -13432,6 +13432,203 @@ calls, not yet reviewed. Built on the farm map and geometry.ts.
       remembered on that device only. Paddock colours aren't a layer: the
       "Colour paddocks by" switch already chooses them.
 
+### Satellite vegetation: pipeline and data (#612; 5 Nov 2026; decisions 1520-1537)
+
+Jess's plan in #612: free Sentinel-2 imagery on the farm maps, paddock
+greenness over time, offline. Claude's calls where the plan leaves a choice,
+not yet reviewed. For analytics and maps, the plan itself is the reference.
+The Copernicus adapter was written from the public documentation and has
+not yet been tried against the live service (this build machine can't
+reach it). See docs/SATELLITE-VEGETATION.md.
+
+1520. **Optional, and per farm.** Off until an owner or admin connects an
+      imagery account and turns it on. Each farm is turned on by itself, and
+      turning it on confirms that farm's paddock boundaries as they are: they
+      (plus a 50 m margin) are the area sent to the provider. The boundary
+      versions confirmed are kept; the screen says when they've changed since.
+1521. **Greenness, not feed.** What's shown is NDVI, a greenness index. It's
+      never called pasture cover and never turned into kg DM/ha, anywhere
+      (screens, exports, Analytics, the AI). The note "This shows greenness,
+      not feed available" is beside it. Measured or modelled pasture cover is
+      a separate, later piece of work (#612 Phase 3), not built.
+1522. **Two providers behind one interface.** Copernicus: the public STAC
+      catalogue (`stac.dataspace.copernicus.eu/v1`, collection
+      `sentinel-2-l2a`) to find dates, and the Sentinel Hub Process API on
+      the Copernicus Data Space Ecosystem to clip just the farm's area and
+      bands, signed in with the organisation's own OAuth client (client
+      credentials). Clipping by the provider was chosen over downloading
+      whole products: a farm is a few hundred KB, a product is hundreds of
+      MB. "Made-up demo pictures" is the second provider: deterministic
+      pictures for tests, the demo farm and test servers
+      (`TOHYEE_VEGETATION_DEMO=on`), always labelled as made up. The demo
+      farm can't connect Copernicus (decision 858).
+1523. **The secret stays on the server, and no new software is needed.** The
+      client secret is encrypted with the server's key in a `_ciphertext`
+      column (so a restore re-keys it, decision 737). It goes only to the
+      provider's sign-in, and is never sent to browsers, logs, exports or the AI;
+      the screen shows only the end of the client ID and who connected it
+      and when. Only owners and admins connect, test or change it. Pictures
+      are 16-bit PNG, read and written by a small codec on Node's own zlib:
+      nothing to install on Windows or Linux, and no GDAL.
+1524. **One grid a farm.** Web Mercator (EPSG:3857), the projection the farm
+      map draws in, with pixels about 10 m on the ground (Sentinel-2's red
+      and near-infrared bands): 10 / cos(latitude) metres, rounded to 0.5 m,
+      and the grid snapped to multiples of it, so two dates of a farm line
+      up pixel for pixel even when its outline box changes. The provider
+      resamples onto it with nearest neighbour; that adds no detail. A
+      paddock's pixels are those whose centre is inside it; an edge pixel
+      has a corner outside. At most 1,000,000 pixels (about 100 km²) and
+      2,500 a side.
+1525. **Only a clear view counts.** The scene classification (SCL, 20 m, so
+      each of its pixels covers four of ours) keeps classes 4 (vegetation)
+      and 5 (not vegetated). Everything else is missing: no data,
+      saturated, dark or shadowed ground, cloud shadow, water, unclassified
+      (often haze at cloud edges), cloud, thin cirrus, snow.
+1526. **NDVI = (B08 − B04) / (B08 + B04) on reflectance.** Reflectance is
+      (DN + offset) / 10000. Tohyee asks for harmonised values
+      (`harmonizeValues: true`, the documented default), which have the
+      processing baseline 04.00 offset already taken off, so the offset is 0;
+      a raw product would pass −1000. The offset doesn't cancel, so it's
+      always applied before the ratio. Unit-tested on hand-made rasters.
+1527. **When it checks.** Each farm about once a day, at a random time up to
+      3 hours after it's due, so servers don't all ask at once. The first
+      check looks back 60 days (changeable, 7-365); later ones look back to
+      5 days before the last date seen. Dates more than 80% cloudy over the
+      whole satellite picture aren't fetched. "Check now" is allowed once
+      every 15 minutes a farm. A daily check doesn't mean a daily picture:
+      the satellites pass every few days and can't see through cloud.
+1528. **Boundaries and versions.** Each paddock's numbers are tied to the
+      boundary version they were worked out with, and the processor version
+      (`tohyee-ndvi-1`). Numbers are never changed or deleted. Editing a
+      boundary doesn't touch earlier numbers; "Work it out again" (owners and
+      admins) adds numbers for the new boundary while the picture is still
+      kept, and the screens show the newest boundary's numbers, marking
+      older ones "earlier boundary".
+1529. **One quiet worker.** One job at a time for the whole server, at most 3
+      a minute and 20 seconds of work a minute, pausing between paddocks so
+      other requests run. The picture-size cap bounds memory. Off with
+      `TOHYEE_VEGETATION_SCHEDULER=off`.
+1530. **Thresholds, careful to start.** A paddock date is "good" with at
+      least 20 clear pixels (about 0.2 ha) and 80% of it clear; both
+      changeable (5-10000 pixels, 50-100%). Fewer pixels than the minimum is
+      "too small"; no pixel centre inside (narrower than a pixel) is too
+      small too. A paddock under 3 × the minimum is flagged small; one
+      where half or more of its pixels touch the edge is flagged narrow.
+      Mean and median are kept with the clear pixel count and clear share.
+      Nothing clear is missing (null), never 0, and missing is never filled
+      in. Change since the previous mostly clear date is worked out only
+      over pixels clear on both dates, and only when that meets the same
+      thresholds.
+1531. **States, and the date shown.** Not set up, checking, ready (a mostly
+      clear date in the last 20 days), cloudy (recent dates, none clear),
+      out of date (nothing clear for 20 days), paused, reconnect. "Mostly
+      clear" means a paddock good enough to compare and at least half the
+      farm's paddock land clear; the map opens on the newest such date, and
+      the others can be chosen.
+1532. **Fixed colours.** Greenness on seven fixed steps from light brown
+      (under 0.2) to dark green (0.8 and over), and change on five
+      (down 0.15 or more to up 0.15 or more), the same on every date: never
+      stretched to the picture. Lightness changes step by step, so it reads
+      in grey too. Missing is grey stripes, never a colour that could be
+      read as poor pasture. Only paddock land is coloured.
+1533. **Attribution.** "Contains modified Copernicus Sentinel data [year]"
+      (greenness is worked out from the bands, so it's modified data) on
+      the map, the paddock chart, exports and offline packs, kept apart
+      from the LINZ basemap's own attribution. Spanning years:
+      "2025–2026". Made-up pictures say "Made-up demo pictures, not
+      satellite data." instead.
+1534. **Jobs that can't double up.** Each job has a unique key (a date for
+      a farm and processor version, a day's check), so asking twice is one
+      job. A fetch saves the picture and a checkpoint, then works it out:
+      a restart goes on from the checkpoint without fetching or counting it
+      again. A date and each paddock-boundary pair are unique, so recording
+      twice adds nothing. Failures retry after 5, 30, 120 and 720 minutes,
+      5 tries at most; "slow down" waits as long as the provider says. A
+      refused account stops everything until someone reconnects; a used-up
+      budget, the storage limit or a full disk pauses with the reason shown
+      and nothing lost. It never switches to a paid service.
+1535. **Budgets.** Before each fetch the month's use (calendar month, UTC)
+      plus the expected cost must fit the organisation's budget: 2,000
+      processing units and 1,000 requests a month to start (changeable).
+      The expected cost is the larger of the provider's published rule
+      (1 unit is a 512 × 512 picture of 3 bands at 16 bits) and the farm's
+      last real charge; the provider's own count (`x-processingunits-spent`)
+      is recorded when it sends one. The free Copernicus allowance was
+      10,000 units a month when this was written; check the account's own
+      page.
+1536. **Pictures on the data disk.** Pictures are files in
+      `TOHYEE_VEGETATION_DIR` (Docker: the `/vegetation` volume), never
+      database rows; the numbers stay in the organisation's database. They
+      can all be fetched again, so they're not in the database backups.
+      They're removed after 120 days (changeable, 14-3650), except each
+      farm's newest mostly clear one. A 500 MB storage limit pauses
+      fetching when reached. Deleting the demo farm deletes its pictures.
+1537. **Test one farm.** For the pilot on a real server: owners and admins
+      can fetch one date (the least cloudy of the last 30 days) for one
+      farm and see the bytes, the time to search, fetch and work it out,
+      the server's memory before and after, the processing units the
+      provider charged (or the estimate, labelled), and a preview. At most
+      once a minute; counted in the month's use; nothing is kept as an
+      observation. Tohyee's own measurements of a farm's cost weren't made
+      here (no access to the service), so none are given: this is how
+      they're made.
+
+### Satellite vegetation: guided setup and the map (#612; 5 Nov 2026; decision 1539)
+
+Jess asked (5 Nov 2026): "make it easy to guide me through setting up that
+pasture thing".
+
+1539. **Setup, one thing a screen.** Farm › Map › Satellite vegetation, for
+      owners and admins: what you'll need (about 10 minutes), what it shows,
+      making the free Copernicus account, making the OAuth client (numbered
+      steps with the page and button, and a note that the site's buttons
+      may be named slightly differently), pasting the client ID and secret
+      with a "Where do I find this?" (i) on each, **Test connection**
+      (wrong ID or secret, account not activated, allowance used up,
+      unreachable, each in plain words) before Save, choosing a farm and
+      confirming its boundaries on a map, **Test one farm** with a preview,
+      the budget, turning it on, and "Done: here's what happens next". The
+      step is remembered on the device and never runs ahead of what the
+      server says is done, so someone can stop and come back. The test
+      makes one tiny request (4 × 4 pixels) so a used-up allowance or an
+      account that can't process shows now. On the map, Aerial /
+      Vegetation / Change sit with the layer buttons, with the capture
+      date, the date picker, the fixed legend, the note and the
+      attribution; tapping a paddock shows its greenness, clear share,
+      change and a trend on a fixed 0-1 scale (clear dates joined, partly
+      hidden ones hollow, no clear view as grey ticks), with a table. Other
+      members see the farms' state and the map once it's on.
+
+### Satellite vegetation: farms, offline, Analytics and the AI (#612; 5 Nov 2026; decisions 1538 and 1540)
+
+1538. **Scoped like every farm record.** Every satellite read, picture,
+      export, trend, overview, offline pack, Analytics table and AI answer
+      goes through the farm access rules (decision 744): a farm a person
+      can't see is "not found", the same as one that doesn't exist, and
+      another organisation's are never reached (one database each).
+      Satellite vegetation › Your farms lists each farm the person can see
+      with its state, latest clear date and how many paddocks were clear
+      enough. The CSV export carries "Greenness (NDVI), not feed
+      available. Blank means no clear view, not zero." and the
+      attribution. Analytics gets `tohyee_farm_paddock_greenness` (a row a
+      paddock a date, with clear pixels, `valid_coverage_pct`, quality and
+      boundary), only for members who see every farm, like the other
+      `tohyee_farm_` tables. The AI's read-only `paddock_greenness` tool
+      gives acquisition time, clear share, quality, flags and an
+      uncertainty note per paddock; its description says NDVI must not be
+      converted to kg DM/ha, pasture cover or feed available. It never sees
+      the connection or its secret.
+1540. **Offline: small and dated.** A farm's offline map keeps the latest
+      clear picture and up to 3 earlier ones, at most 2 MB of them, with
+      their capture dates, quality, legend facts and attribution (the
+      pictures travel inside the answers), and each paddock's trend. A
+      date that doesn't fit is left out and named. Shown from the device,
+      the map says "Kept on this device since …: there may be newer
+      satellite pictures". Offline access follows the pack's own rules
+      (14-day offline session, sign-out clears it); a device that's offline
+      can't hear about a revoked access until it reconnects. Wi-Fi-only
+      downloads aren't built: browsers on iPhones can't tell Wi-Fi from
+      mobile data, so the 2 MB cap is the control.
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

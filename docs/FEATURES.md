@@ -3326,6 +3326,40 @@ that something happened.
   buttons turn hazards, effluent, assets, rain gauges, tasks and people on
   or off, remembered on the device.
 
+- **Satellite vegetation: the pipeline** (#612, decisions 1520-1537, tenant
+  migration 0253; docs/SATELLITE-VEGETATION.md): optional, free Sentinel-2
+  pictures of a farm's paddocks from the organisation's own Copernicus
+  account, worked into greenness (NDVI) a paddock: mean and median, clear
+  pixels and clear share, tied to the paddock boundary version used. Cloud
+  and shadow are missing, never zero; small and narrow paddocks are
+  flagged. One quiet worker checks each farm about once a day, with
+  idempotent jobs, checkpoints, retries, and pauses at the monthly budget,
+  the storage limit or a full disk. Pictures are files on the data disk
+  with a retention; the numbers stay. A "Test one farm" measure for the
+  pilot. Greenness, not feed: no kg DM/ha. The Copernicus connection is
+  not yet tried against the live service; made-up demo pictures stand in
+  for tests and the demo farm.
+
+- **Satellite vegetation: setup and the map** (#612, decision 1539): Farm ›
+  Map › Satellite vegetation walks owners and admins through it one step a
+  screen (the free Copernicus account, the OAuth client, Test connection,
+  a farm and its boundaries, Test one farm with a preview, the budget,
+  turning it on), saving progress. The farm map gets Aerial / Vegetation /
+  Change, the capture date and other dates, a fixed legend with missing
+  coverage striped grey, the greenness note and the Copernicus
+  attribution; a tapped paddock shows its numbers and trend. The help is in
+  docs/SATELLITE-VEGETATION.md.
+
+- **Satellite vegetation: farms, offline, Analytics and the AI** (#612,
+  decisions 1538 and 1540): an overview of every farm you can see; the
+  latest clear picture and up to 3 earlier ones (2 MB at most) and each
+  paddock's trend in the offline map pack; `tohyee_farm_paddock_greenness`
+  in Analytics (members who see every farm); and a read-only
+  `paddock_greenness` AI tool with acquisition time, clear share and
+  uncertainty, which never converts greenness to kg DM/ha. Not built:
+  Wi-Fi-only downloads (browsers can't reliably tell) and pasture cover
+  estimates (#612 Phase 3, a separate piece of work).
+
 - **Treatments and withholding** (decisions 1431-1438, TRT1-TRT8, tenant
   migration 0234; common NZ practice, not yet reviewed): treat a mob from
   its card (product from Safety's chemical register or typed, dose,
