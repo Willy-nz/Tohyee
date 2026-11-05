@@ -13171,3 +13171,41 @@ reviewed; no other farm or accounting app was copied.
       with the reason. The same file can't be imported twice for a gauge.
       Tohyee fetches no weather data from anywhere; every figure is the
       farm's own.
+
+### Farm team tasks (5 Nov 2026; decisions 1457-1461; FT1-FT7)
+
+Jess asked for the farm features Tohyee was missing against a mob-based
+livestock app (5 Nov 2026), general team tasks among them. Claude's calls,
+not yet reviewed. Built on the existing paths: the Android app's reminders
+(as safety actions are), the Today tab and the farm calendar. There's no
+second reminder system.
+
+1457. **A task is a job for the farm team, on one farm.** It has what needs
+      doing, a due day, and optionally who it's for, a repeat (every week,
+      2 weeks, 4 weeks or month, the farm calendar's repeats), a paddock, a
+      pin on the map and a note. "Who it's for" is someone who can record
+      farm work and see that farm (farm staff, bookkeepers and up); viewers
+      can't tick a task off, so they aren't offered. Farm staff and up add,
+      change and cancel tasks on their farms; viewers see them. A cancelled
+      task is kept (Cancelled) and can be opened again; nothing is deleted.
+1458. **Pins show on the Map.** An open task with a pin is an amber "T" on
+      the Map tab; tapping it opens Tasks.
+1459. **Reminders are the person's own, in the Android app.** The phone's
+      reminders (decisions 1146-1148) now include the signed-in person's
+      tasks on farms they work on, the morning of the day each is next
+      due, and today for an overdue one, beside their safety actions. Like
+      the rest, they're worked out from the records each time and never
+      stored. Tasks for anyone (nobody named) don't remind anyone.
+1460. **On Today and the farm calendar.** Today has a Tasks card with the
+      farm's tasks overdue, due today and in the next 7 days (the person's
+      own first) and a Done button; the farm calendar shows tasks due in the
+      next 30 days on every farm the person can see, an overdue one on
+      today. The farm's tasks are in the offline farm pack.
+1461. **Done and undone keep who and when.** Done records who and when for
+      the day the task was due, and goes through the device's queue, so it
+      works with no signal; sent twice, it's kept once. If the task has
+      already moved on (someone else ticked it), a stale Done is refused
+      with the day it's now due. A repeating task then moves to its next
+      date after the one done: dates missed before it aren't owed. Undo
+      takes back the latest Done, keeping who undid it and when. Every
+      Done and Undo is listed on the task.
