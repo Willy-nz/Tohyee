@@ -4,7 +4,7 @@ import type { SessionUser } from "@/lib/auth/sessions";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { getAnimal } from "@/lib/farming/animal-detail";
 import { importAnimals, importRecords, previewAnimalImport, previewRecordImport } from "@/lib/farming/animal-import";
-import { createAnimal, listAnimals, moveAnimals, placeAnimal, setAnimalStatus } from "@/lib/farming/animals";
+import { type Animal, createAnimal, listAnimals, moveAnimals, placeAnimal, setAnimalStatus } from "@/lib/farming/animals";
 import { acceptSuggestion, declineSuggestion, listScales, listSuggestions, mobBcs, photosToScore, recordBcs, recordReadings, referencePhotos, setReference, setScale, suggestBcs, addPhotosToScore } from "@/lib/farming/bcs";
 import { createMob, getMob, listMobs, mobAction } from "@/lib/farming/mobs";
 import { addPaddock, saveFarm, setFarmingEnabled } from "@/lib/farming/paddocks";
@@ -74,7 +74,7 @@ describeWithDatabase("farm animals and body condition", () => {
   it("AN4 a sale or death of tagged animals goes through the mob, once, naming the tags", async () => {
     const w = await setup({ livestock: true });
     const milkers = (await w.as((tx) => createMob(tx, { farmId: w.farm.id, name: "Milkers", kind: "dairy_cattle", classCode: "ma_cows", head: 10, onDate: "2026-07-01" }))).mob;
-    const tags = [];
+    const tags: Animal[] = [];
     for (const tag of ["11", "12", "13"]) tags.push(await w.as((tx) => createAnimal(tx, { farmId: w.farm.id, kind: "dairy_cattle", tag, mobId: milkers.id, onDate: "2026-07-01" })));
     // A sale of 8 leaves 2 head but 3 tagged: refused until at least one tag is chosen.
     await expect(w.as((tx) => mobAction(tx, milkers.id, { action: "sell", head: 8, onDate: "2026-08-10" }))).rejects.toThrow("Choose at least 1 more");

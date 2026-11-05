@@ -260,9 +260,11 @@ export function BcsPanel({
           rows={records.slice(0, 20).map((record) => ({
             key: record.id,
             title: shortDate(record.scoredOn, today),
-            parts: [bcsText(record), record.source === "ai_suggestion" ? "from an AI suggestion, accepted" : record.source === "import" ? "imported" : "", record.tally ? Object.entries(record.tally).map(([score, n]) => `${n} at ${score}`).join(", ") : ""].filter(Boolean),
-            details: record.photos.length ? (
+            parts: [bcsText(record), record.source === "ai_suggestion" ? "from an AI suggestion, accepted" : record.source === "import" ? "imported" : ""].filter(Boolean),
+            // The tally and photos open under the line, so a long tally never widens the card on a phone.
+            details: record.photos.length || record.tally ? (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                {record.tally ? <p style={{ margin: 0, flexBasis: "100%" }}>{Object.entries(record.tally).map(([score, n]) => `${n} at ${score}`).join(", ")}</p> : null}
                 {record.photos.map((photo) => (
                   <div key={photo.id} style={{ display: "grid", gap: 4 }}>
                     <PhotoThumb organisationId={organisationId} fileId={photo.fileId} alt={`${subject.name}, BCS ${record.score}`} />
