@@ -324,6 +324,8 @@ export type GrazingRecord = {
   paddockId: string;
   paddockName: string;
   mob: string;
+  /** The mob record, when the grazing is a mob's (decision 1422). */
+  mobId: string | null;
   head: number | null;
   inOn: string;
   outOn: string | null;
@@ -334,13 +336,13 @@ export type GrazingRecord = {
   createdByEmail: string;
 };
 
-type GrazingRow = { id: string; paddock_id: string; paddock_name: string; hectares: string | null; mob: string; head: number | null; in_on: string; out_on: string | null; pre_cover: number | null; post_cover: number | null; note: string | null; created_by_email: string };
+type GrazingRow = { id: string; paddock_id: string; paddock_name: string; hectares: string | null; mob: string; mob_id: string | null; head: number | null; in_on: string; out_on: string | null; pre_cover: number | null; post_cover: number | null; note: string | null; created_by_email: string };
 
 async function loadGrazings(tx: OrgTx, where: string, params: unknown[], limit?: number): Promise<GrazingRecord[]> {
   const rows = await tx.query<GrazingRow>(
     `select g.id::text, g.paddock_id::text, p.name as paddock_name,
             coalesce(p.effective_ha, round((select b.mapped_ha from paddock_boundaries b where b.paddock_id = p.id order by b.id desc limit 1), 2))::text as hectares,
-            g.mob, g.head, g.in_on::text, g.out_on::text, g.pre_cover, g.post_cover, g.note, g.created_by_email
+            g.mob, g.mob_id::text, g.head, g.in_on::text, g.out_on::text, g.pre_cover, g.post_cover, g.note, g.created_by_email
        from grazings g join paddocks p on p.id = g.paddock_id
       where g.status = 'active' and ${where}
       order by g.in_on desc, g.id desc${limit ? ` limit ${Math.trunc(limit)}` : ""}`,
@@ -351,6 +353,7 @@ async function loadGrazings(tx: OrgTx, where: string, params: unknown[], limit?:
     paddockId: row.paddock_id,
     paddockName: row.paddock_name,
     mob: row.mob,
+    mobId: row.mob_id,
     head: row.head,
     inOn: row.in_on,
     outOn: row.out_on,
@@ -398,7 +401,7 @@ export async function addGrazing(tx: OrgTx, input: { farmId?: unknown; paddockId
   if (again) return (await loadGrazings(tx, "g.id = $1", [again]))[0];
   if (outOn === null) {
     const open = await tx.query("select 1 from grazings where paddock_id = $1 and status = 'active' and out_on is null", [paddock.id]);
-    if (open.rowCount) throw new ConflictError(`${paddock.name} already has a mob in it. Record the day out first.`);
+    if (open.rowCount) throw new ConflictError(`${paddock.name} already has a mob in it. Record the day out first, or use Mobs to move a mob record in.`);
   }
   const row = await tx.query<{ id: string }>(
     "insert into grazings (farm_id, paddock_id, mob, head, in_on, out_on, pre_cover, post_cover, note, created_by_email, operation_id, request_hash) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id::text",

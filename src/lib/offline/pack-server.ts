@@ -11,6 +11,9 @@
 
 import { GET as calendarGet } from "@/app/api/farming/calendar/route";
 import { GET as grazingsGet } from "@/app/api/farming/farms/[farmId]/grazings/route";
+import { GET as mobsGet } from "@/app/api/farming/farms/[farmId]/mobs/route";
+import { GET as stockingGet } from "@/app/api/farming/farms/[farmId]/stocking/route";
+import { GET as mobGet } from "@/app/api/farming/mobs/[mobId]/route";
 import { GET as paddockStatusGet } from "@/app/api/farming/farms/[farmId]/paddock-status/route";
 import { GET as paddocksGet } from "@/app/api/farming/farms/[farmId]/paddocks/route";
 import { GET as pastureGet } from "@/app/api/farming/farms/[farmId]/pasture/route";
@@ -33,6 +36,7 @@ import { GET as planGet } from "@/app/api/farming/plans/[planId]/route";
 import { GET as productsGet } from "@/app/api/farming/products/route";
 import { GET as rainGaugesGet } from "@/app/api/farming/farms/[farmId]/rain-gauges/route";
 import { GET as farmTasksGet } from "@/app/api/farming/farms/[farmId]/tasks/route";
+import { GET as mapAssetsGet } from "@/app/api/farming/farms/[farmId]/map-assets/route";
 import { GET as effluentCareGet } from "@/app/api/farming/effluent/care/route";
 import { GET as effluentLogGet } from "@/app/api/farming/effluent/log/route";
 import { GET as effluentTodayGet } from "@/app/api/farming/effluent/today/route";
@@ -159,12 +163,18 @@ export async function buildSection(request: Request, input: { organisationId: st
       for (const paddockId of ids(paddocks, "paddocks", "id")) await r.read(paddockGet, `/api/farming/paddocks/${paddockId}`, { paddockId }, {});
       // Rain gauges, for the map and the Log's rain reading with no signal (decision 1452).
       await r.read(rainGaugesGet, `/api/farming/farms/${farm}/rain-gauges`, f, {});
+      // Farm assets on the map (decision 1462).
+      await r.read(mapAssetsGet, `/api/farming/farms/${farm}/map-assets`, f, {});
       break;
     }
     case "pasture": {
       await r.read(pastureGet, `/api/farming/farms/${farm}/pasture`, f, { onDate: today });
       await readHistory(r, grazingsGet, `/api/farming/farms/${farm}/grazings`, f, "grazings", since);
       await r.read(grazingsGet, `/api/farming/farms/${farm}/grazings`, f, { open: "1" });
+      // The farm's mobs and each one's card (decision 1428), so moves and weights can be recorded with no signal.
+      const mobs = await r.read(mobsGet, `/api/farming/farms/${farm}/mobs`, f, {});
+      for (const mobId of ids(mobs, "mobs", "id")) await r.read(mobGet, `/api/farming/mobs/${mobId}`, { mobId }, {});
+      await r.read(stockingGet, `/api/farming/farms/${farm}/stocking`, f, {});
       await readHistory(r, supplementsGet, `/api/farming/farms/${farm}/supplements`, f, "supplements", since);
       await readHistory(r, readingsGet, `/api/farming/farms/${farm}/pasture/readings`, f, "readings", since);
       // Each paddock's card: its readings and grazings, trimmed to the months kept.

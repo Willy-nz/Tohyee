@@ -122,12 +122,15 @@ describeWithDatabase("offline farm packs", () => {
 
   it("keeps the map, pasture and calendar for the farm, with a year of history", async () => {
     const map = await section(worker, "map", w.home);
-    expect(map.body.entries.map((entry) => entry.path)).toEqual([`/api/farming/farms/${w.home}/paddocks`, `/api/farming/farms/${w.home}/paddock-status`, `/api/farming/paddocks/${w.paddock}`, `/api/farming/farms/${w.home}/rain-gauges`]);
+    expect(map.body.entries.map((entry) => entry.path)).toEqual([`/api/farming/farms/${w.home}/paddocks`, `/api/farming/farms/${w.home}/paddock-status`, `/api/farming/paddocks/${w.paddock}`, `/api/farming/farms/${w.home}/rain-gauges`, `/api/farming/farms/${w.home}/map-assets`]);
     const pasture = await section(worker, "pasture", w.home);
     expect(pasture.body.entries.map((entry) => entry.path)).toEqual([
       `/api/farming/farms/${w.home}/pasture`,
       `/api/farming/farms/${w.home}/grazings`,
       `/api/farming/farms/${w.home}/grazings`,
+      // The farm's mobs (none here), each mob's card, and the stocking rate (decision 1428).
+      `/api/farming/farms/${w.home}/mobs`,
+      `/api/farming/farms/${w.home}/stocking`,
       `/api/farming/farms/${w.home}/supplements`,
       `/api/farming/farms/${w.home}/pasture/readings`,
       `/api/farming/paddocks/${w.paddock}/pasture`,

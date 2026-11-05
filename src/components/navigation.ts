@@ -329,6 +329,7 @@ export const SETTINGS: MenuGroup[] = [
     heading: "People and access",
     links: [
       { href: "/operations/members", label: "People and roles", minRole: "admin" },
+      { href: "/operations/members/hire", label: "Hire help", minRole: "admin" },
       { href: "/operations/settings/payroll-access", label: "Payroll access", minRole: "admin" },
       { href: "/operations/settings/approval-rules", label: "Approval rules" },
     ],
@@ -573,12 +574,13 @@ export const FARM_MENUS: Menu[] = [
     module: "farming",
     // Its first link (Farms and paddocks) is drawn as a map; the menu is the whole farm.
     art: "farm",
-    area: ["/operations/farm/more", "/operations/farm/offline", "/operations/farm/security", "/operations/farming"],
+    area: ["/operations/farm/more", "/operations/farm/offline", "/operations/farm/security", "/operations/farm/mobs", "/operations/farming"],
     groups: [
       {
         heading: "Paddocks and feed",
         links: [
           { href: "/operations/farming", label: "Farms and paddocks" },
+          { href: "/operations/farm/mobs", label: "Mobs" },
           { href: "/operations/farming/pasture", label: "Pasture and feed" },
           { href: "/operations/farming/rainfall", label: "Rainfall" },
           { href: "/operations/farming/soil", label: "Soil tests" },
