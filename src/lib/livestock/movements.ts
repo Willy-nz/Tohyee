@@ -715,11 +715,34 @@ async function assertDocumentLine(tx: OrgTx, kind: "invoice" | "bill", lineId: s
 }
 
 /** Voids a movement (it stays, marked voided, with the reason). Ageing movements are undone with their run. */
-export async function voidMovement(tx: OrgTx, idInput: unknown, input: { reason: unknown }): Promise<Movement> {
+const MOB_EVENT_WORDS: Record<string, string> = { sold: "sale", died: "death", born: "birth", bought: "purchase", reclass: "class change", created: "addition" };
+
+/**
+ * Voids a movement (it stays, marked voided, with the reason). Ageing movements are undone with their run.
+ * A movement that's a mob's event (#609, decision 1500) is refused here: voiding it alone would leave the
+ * mob's head count out of step with the books. It's reversed from the mob instead, which voids it with
+ * `fromMobReversal` in the same transaction. Account sale voids come through here too, so the same rule holds.
+ */
+export async function voidMovement(tx: OrgTx, idInput: unknown, input: { reason: unknown; fromMobReversal?: boolean }): Promise<Movement> {
   const settings = await requireLivestock(tx);
   const movement = await getMovement(tx, idInput);
   const reason = requireString(input.reason, "A reason", { maxLength: 500 });
   if (movement.voided) return movement;
+  if (!input.fromMobReversal) {
+    const linked = await tx.query<{ name: string | null; class_code: string; kind: string; event_type: string; created_how: string | null; event_date: string }>(
+      `select m.name, m.class_code, m.kind, e.event_type, e.created_how, e.event_date::text from mob_events e join mobs m on m.id = e.mob_id
+        where e.livestock_movement_id = $1 and not exists (select 1 from mob_events r where r.reverses_event_id = e.id)`,
+      [movement.id],
+    );
+    const event = linked.rows[0];
+    if (event) {
+      const mob = event.name ?? className(event.kind, event.class_code);
+      const what = event.event_type === "created" ? (event.created_how === "born" ? "birth" : "purchase") : (MOB_EVENT_WORDS[event.event_type] ?? "event");
+      throw new ConflictError(
+        `This movement is ${mob}'s ${what} on ${event.event_date}. Reverse the ${what} on ${mob} instead (Farm › More › Mobs › ${mob}, its history), so the mob's head count and the books stay the same. Nothing was voided.`,
+      );
+    }
+  }
   await assertYearOpen(tx, settings, movement.movementDate);
   await lockLivestock(tx);
   let voidJournalId: string | null = null;

@@ -13432,6 +13432,79 @@ calls, not yet reviewed. Built on the farm map and geometry.ts.
       remembered on that device only. Paddock colours aren't a layer: the
       "Colour paddocks by" switch already chooses them.
 
+### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
+
+Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
+reviewed. No migration.
+
+1510. **"What they did" pages by a cursor, not a time.** The list has one
+      fixed order: time to the microsecond, newest first; then books events
+      before server events at the same instant; then the higher event id
+      first. "Older" sends back the last entry's place in that order (time,
+      stream and id), so events that share a time, in one stream or across
+      both, each show once. Before this, the next page started strictly
+      before the last time shown, so the rest of a batch written at one
+      instant was skipped. A cursor that isn't one Tohyee made is refused
+      with "Go back to Newest".
+1511. **Hidden events stay hidden on every page.** Private mail (decision
+      571), and payroll for someone without payroll access, are left out
+      before the page is cut, so they're never counted, shown or used as a
+      cursor. Pages are still 100 entries.
+1512. **A task can only be for someone whose access is current.** The
+      people offered for a task, and the server's check when a task is
+      added or its person is changed, use the same rule as signing in
+      (decision 1467): after their start, before their end, login on. Ended
+      and not-yet-started members aren't offered, and are refused with why
+      ("Hemi's access to this organisation has ended…", "Ana's access
+      starts on …"). The check runs when the person changes: other changes
+      to a task keep who it's for.
+1513. **Open tasks for someone who can't sign in are flagged, not changed.**
+      A task still to do whose person's access has ended or not started, or
+      whose login is off or who was removed, shows "Needs reassigning" on
+      Tasks, Today and the farm calendar. Nothing is deleted or moved: it
+      stays theirs until someone picks another person (the change is in
+      the task's history), and the flag goes if their access is extended.
+      Done and cancelled tasks aren't flagged, so their history is as it
+      was.
+1514. **No tasks ahead of someone's start, for now.** Tohyee has no rule for
+      giving work to someone before their access starts, so it's refused
+      with the date it starts and "give it to them once their access
+      starts". If that's wanted later, it would check the task's due day
+      against their access dates, not just the login.
+
+### Mob corrections (#609 items 1 and 2; 5 Nov 2026; decisions 1500-1505)
+
+Built by Claude from issue #609 with the coordinator's preferred design
+(examples MOB11-MOB14, common NZ practice, not yet reviewed).
+
+1500. **A mob's livestock movement isn't voided on its own.** Voiding a
+      livestock movement that's a mob's sale, death, birth, purchase or
+      class change (made by the mob, or linked from an invoice or bill) is
+      refused, naming the mob and the event and saying to reverse it on the
+      mob. An account sale's void comes through the same check. Otherwise
+      the books' head count and the mob's would differ.
+1501. **Reversing is one step on both.** On the mob's history, "Reverse
+      this" (bookkeepers and up, with a reason) adds a "reversed" event that
+      names the one it reverses (history is never edited) and voids the
+      movement, in one transaction, with an audit entry. If anything
+      refuses (a locked period, an approved valuation, a class going below
+      zero), nothing changes. An event is reversed once at most; its
+      invoice or bill line can then be linked again.
+1502. **No blind add-back.** If the mob has since moved, split, merged,
+      changed class or closed, the person chooses the mob the animals go
+      back into (or come out of). It must be active, on the same farm and of
+      the movement's class; a mob with fewer head than a birth or purchase
+      being reversed is refused.
+1503. **A class change is reversed only on an unchanged mob.** If the mob
+      has moved, split, merged or closed since, or isn't in the new class
+      now, it's refused: change its class again instead.
+1504. **A linked class change must be the same change.** Linking an existing
+      reclass movement checks its new class too, beside its type, kind,
+      class, head, date and void. A mismatch is refused before anything
+      changes: no mob, event or movement.
+1505. **Migration 0252** adds the "reversed" event type and the link to the
+      event reversed, once each.
+
 
 ### Farm treatments, withholding and product stock (5 Nov 2026; decisions 1431-1438)
 

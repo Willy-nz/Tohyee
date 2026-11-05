@@ -52,8 +52,8 @@ function Activity({ organisationId }: { organisationId: string }) {
                 </tr>
               </thead>
               <tbody>
-                {data.entries.map((entry, index) => (
-                  <tr key={`${entry.at}-${index}`}>
+                {data.entries.map((entry) => (
+                  <tr key={entry.key}>
                     <td data-label="When">{formatDateTime(entry.at)}</td>
                     <td data-label="What">{entry.what}</td>
                     <td data-label="How">{entry.via ?? (entry.where === "server" ? "Settings" : "In Tohyee")}</td>
