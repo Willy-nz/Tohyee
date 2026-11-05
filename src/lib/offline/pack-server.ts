@@ -39,6 +39,8 @@ import { GET as productsGet } from "@/app/api/farming/products/route";
 import { GET as rainGaugesGet } from "@/app/api/farming/farms/[farmId]/rain-gauges/route";
 import { GET as farmTasksGet } from "@/app/api/farming/farms/[farmId]/tasks/route";
 import { GET as mapAssetsGet } from "@/app/api/farming/farms/[farmId]/map-assets/route";
+import { GET as farmVegetationGet } from "@/app/api/farming/farms/[farmId]/vegetation/route";
+import { GET as paddockVegetationGet } from "@/app/api/farming/paddocks/[paddockId]/vegetation/route";
 import { GET as effluentCareGet } from "@/app/api/farming/effluent/care/route";
 import { GET as effluentLogGet } from "@/app/api/farming/effluent/log/route";
 import { GET as effluentTodayGet } from "@/app/api/farming/effluent/today/route";
@@ -141,6 +143,46 @@ function ids(body: unknown, key: string, idField: string): string[] {
  * Builds one section for one farm (or for the organisation), as the
  * person asking. `months` of history (12 by default; more on request).
  */
+/** At most this many clear dates a farm besides the latest, and this many bytes of them in all (decision 1540). */
+export const OFFLINE_VEGETATION_DATES = 3;
+export const OFFLINE_VEGETATION_BYTES = 2 * 1024 * 1024;
+
+function entryBytes(entry: PackEntry | undefined): number {
+  return entry ? JSON.stringify(entry.body).length : 0;
+}
+
+/**
+ * The satellite part of a farm's map section (decision 1540): only once
+ * it's set up for the farm; the latest date (pictures inline, with its
+ * date, quality, legend facts and attribution), then earlier mostly clear
+ * dates while they fit in OFFLINE_VEGETATION_BYTES, then each paddock's
+ * trend (numbers only). A date that doesn't fit is left out and named.
+ */
+async function readVegetation(r: Reader, farm: string, paddockIds: string[]): Promise<void> {
+  const before = r.entries.length;
+  const latest = (await r.read(farmVegetationGet, `/api/farming/farms/${farm}/vegetation`, { farmId: farm }, {})) as { vegetation?: { state?: string; scene?: { id: string } | null; scenes?: Array<{ id: string; usable: boolean; hasPicture: boolean }> } } | null;
+  if (!latest?.vegetation || latest.vegetation.state === "not_set_up") {
+    // Not set up: keep the (small) answer so the map knows, nothing more.
+    return;
+  }
+  let bytes = entryBytes(r.entries[before]);
+  const shownId = latest.vegetation.scene?.id;
+  const earlier = (latest.vegetation.scenes ?? []).filter((scene) => scene.usable && scene.hasPicture && scene.id !== shownId).slice(0, OFFLINE_VEGETATION_DATES);
+  for (const scene of earlier) {
+    const at = r.entries.length;
+    const path = `/api/farming/farms/${farm}/vegetation`;
+    if ((await r.read(farmVegetationGet, path, { farmId: farm }, { sceneId: scene.id })) === null) continue;
+    const size = entryBytes(r.entries[at]);
+    if (bytes + size > OFFLINE_VEGETATION_BYTES) {
+      r.entries.splice(at, 1);
+      r.skipped.push({ path: `${path}?sceneId=${scene.id}`, reason: "Left out: over the satellite pictures' size limit for a device." });
+      break;
+    }
+    bytes += size;
+  }
+  for (const paddockId of paddockIds) await r.read(paddockVegetationGet, `/api/farming/paddocks/${paddockId}/vegetation`, { paddockId }, {});
+}
+
 export async function buildSection(request: Request, input: { organisationId: string; farmId: string | null; section: SectionKey; months: number; today: string }): Promise<BuiltSection> {
   const { organisationId, farmId, section, months, today } = input;
   if (section !== "organisation" && section !== "notebook" && !farmId) throw new ValidationError("Choose a farm.");
@@ -167,6 +209,8 @@ export async function buildSection(request: Request, input: { organisationId: st
       await r.read(rainGaugesGet, `/api/farming/farms/${farm}/rain-gauges`, f, {});
       // Farm assets on the map (decision 1462).
       await r.read(mapAssetsGet, `/api/farming/farms/${farm}/map-assets`, f, {});
+      // Satellite vegetation (#612, decision 1540): the latest clear picture and a few earlier ones, capped, and each paddock's trend.
+      await readVegetation(r, farm, ids(paddocks, "paddocks", "id"));
       break;
     }
     case "pasture": {

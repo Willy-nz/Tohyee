@@ -7,6 +7,12 @@ import * as trendRoute from "@/app/api/farming/paddocks/[paddockId]/vegetation/r
 import * as pictureRoute from "@/app/api/farming/vegetation/scenes/[sceneId]/picture/route";
 import * as settingsRoute from "@/app/api/farming/vegetation/route";
 import * as overviewRoute from "@/app/api/farming/vegetation/overview/route";
+import * as packRoute from "@/app/api/farming/offline-pack/route";
+import { findAiTool } from "@/lib/ai/catalogue";
+import { readBooks } from "@/lib/analytics/books";
+import { closeAnalytics, queryAnalytics, replaceTohyeeTables } from "@/lib/analytics/engine";
+import { requireAnalyticsTable } from "@/lib/analytics/farm-access";
+import { OFFLINE_VEGETATION_BYTES, OFFLINE_VEGETATION_DATES } from "@/lib/offline/pack-server";
 import type { SessionUser } from "@/lib/auth/sessions";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
@@ -65,6 +71,7 @@ describeWithDatabase("satellite vegetation", () => {
 
   beforeAll(async () => {
     process.env.TOHYEE_VEGETATION_DIR = folder;
+    process.env.TOHYEE_ANALYTICS_DIR = `${folder}-analytics`;
     process.env.TOHYEE_SECRET_KEY ??= "vegetation-test-secret-key-at-least-32-characters";
     server = await startTestServer();
     owner = await createTestUser("veg-owner@example.com", { displayName: "Aroha" });
@@ -86,8 +93,10 @@ describeWithDatabase("satellite vegetation", () => {
   });
 
   afterAll(async () => {
+    await closeAnalytics(ORG).catch(() => undefined);
     await server?.teardown();
     await rm(folder, { recursive: true, force: true });
+    await rm(`${folder}-analytics`, { recursive: true, force: true });
   });
 
   const call = async (user: SessionUser, handler: Handler, url: string, context: Record<string, string>, method = "GET", body?: Record<string, unknown>, organisationId = ORG) => {
@@ -247,6 +256,58 @@ describeWithDatabase("satellite vegetation", () => {
     expect(csv.text.split("\n")[0]).toContain("Greenness (NDVI), not feed available. Blank means no clear view, not zero.");
     expect(csv.text).toContain("acquired_at_utc,paddock");
     expect(csv.text).not.toMatch(/kg ?DM/i);
+  });
+
+  it("the AI reads observations with acquisition time, coverage and uncertainty, never kg DM/ha, and only farms the person can see", async () => {
+    const tool = findAiTool("paddock_greenness")!;
+    expect(tool.level).toBe("read");
+    expect(tool.description).toContain("must not be converted to kg DM/ha");
+    const farm = (await as(owner)((tx) => tool.run(tx, { farmId: w.home }, {} as never))) as { note: string; date: { acquiredAt: string }; observations: Array<{ paddock: string; acquiredAt: string; coveragePct: string | null; quality: string; uncertainty: string; meanNdvi: string | null }> };
+    expect(farm.note).toBe("Greenness (NDVI), not feed available. Never convert it to kg DM/ha.");
+    expect(farm.date.acquiredAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    const pen = farm.observations.find((o) => o.paddock === "Calf pen")!;
+    expect(pen).toMatchObject({ quality: "too_small" });
+    expect(pen.uncertainty).toContain("Too small to measure reliably");
+    expect(JSON.stringify(farm)).not.toMatch(/kgDM|kg DM\/ha"|secret|clientId/i);
+    const trend = (await as(owner)((tx) => tool.run(tx, { paddockId: w.two }, {} as never))) as { observations: Array<{ acquiredAt: string; coveragePct: string | null; meanNdvi: string | null; quality: string }> };
+    expect(trend.observations.length).toBeGreaterThan(5);
+    // Cloud: unknown, never 0.
+    expect(trend.observations.filter((o) => o.quality === "no_data").every((o) => o.meanNdvi === null)).toBe(true);
+    // Farm staff on Home farm: Runoff isn't found for them, through the AI too.
+    await expect(as(worker)((tx) => tool.run(tx, { farmId: w.runoff }, {} as never))).rejects.toThrow("Farm not found");
+    await expect(as(worker)((tx) => tool.run(tx, { paddockId: w.back }, {} as never))).rejects.toThrow("Paddock not found");
+  });
+
+  it("is in Analytics as tohyee_farm_paddock_greenness, only for members who see every farm", async () => {
+    await as(owner)(async (tx) => replaceTohyeeTables(ORG, await readBooks(tx)));
+    const rows = await queryAnalytics(ORG, "select quality, cast(count(*) as integer) as n, cast(count(mean_ndvi) as integer) as with_ndvi from tohyee_farm_paddock_greenness group by quality order by quality");
+    const byQuality = Object.fromEntries((rows as Array<{ quality: string; n: number; with_ndvi: number }>).map((row) => [row.quality, row]));
+    expect(byQuality.no_data.with_ndvi).toBe(0);
+    expect(byQuality.good.with_ndvi).toBe(byQuality.good.n);
+    const columns = await queryAnalytics(ORG, "select column_name from information_schema.columns where table_name = 'tohyee_farm_paddock_greenness'");
+    expect((columns as Array<{ column_name: string }>).map((c) => c.column_name).join(",")).not.toMatch(/kg|_dm|pasture_cover|feed/i);
+    await expect(as(worker)((tx) => requireAnalyticsTable(tx, "tohyee_farm_paddock_greenness"))).rejects.toThrow("members who see every farm");
+    await as(owner)((tx) => requireAnalyticsTable(tx, "tohyee_farm_paddock_greenness"));
+  });
+
+  it("the offline pack keeps the latest picture and a few earlier ones within the cap, and refuses other farms", async () => {
+    const get = async (user: SessionUser, url: string) => {
+      const response = await (packRoute.GET as Handler)(apiRequest(`${url}&organisationId=${ORG}`, { method: "GET", cookie: await sessionCookieFor(user) }), {} as never);
+      return { status: response.status, body: (await response.json()) as { entries: Array<{ path: string; query: Record<string, string>; body: unknown }>; skipped: Array<{ path: string; reason: string }> } };
+    };
+    const map = await get(worker, `/api/farming/offline-pack?section=map&farmId=${w.home}`);
+    expect(map.status).toBe(200);
+    const pictures = map.body.entries.filter((entry) => entry.path === `/api/farming/farms/${w.home}/vegetation`);
+    expect(pictures.length).toBeGreaterThanOrEqual(2);
+    expect(pictures.length).toBeLessThanOrEqual(1 + OFFLINE_VEGETATION_DATES);
+    expect(pictures.reduce((sum, entry) => sum + JSON.stringify(entry.body).length, 0)).toBeLessThanOrEqual(OFFLINE_VEGETATION_BYTES);
+    const latest = pictures[0].body as { vegetation: { scene: { acquiredAt: string }; attribution: string }; pictures: { overlay: string } };
+    // Capture date, attribution and the picture travel with it.
+    expect(latest.vegetation.scene.acquiredAt).toBeTruthy();
+    expect(latest.vegetation.attribution).toBe("Made-up demo pictures, not satellite data.");
+    expect(latest.pictures.overlay).toMatch(/^data:image\/png/);
+    expect(map.body.entries.some((entry) => entry.path === `/api/farming/paddocks/${w.one}/vegetation`)).toBe(true);
+    expect((await get(worker, `/api/farming/offline-pack?section=map&farmId=${w.runoff}`)).status).toBe(404);
   });
 
   it("old pictures go after the retention; the numbers and the newest clear picture stay", async () => {
