@@ -3,6 +3,7 @@ import { writeAdminAuditEvent } from "@/lib/audit";
 import { closeAnalytics } from "@/lib/analytics/engine";
 import { analyticsFilePath, analyticsWorkFolder } from "@/lib/analytics/paths";
 import { removeOrganisationMedia } from "@/lib/security-cameras/storage";
+import { removeOrganisationPictures } from "@/lib/farming/vegetation/storage";
 import { todayIsoDate } from "@/lib/dates";
 import { closeOrganisationPool, getAdminPool } from "@/lib/db/pools";
 import { quoteSqlIdentifier } from "@/lib/db/sql";
@@ -198,6 +199,7 @@ export async function deleteDemoFarm(person: DemoPerson, options: DemoOptions = 
   await rm(`${analyticsFilePath(organisation.id)}.wal`, { force: true });
   await rm(analyticsWorkFolder(organisation.id), { recursive: true, force: true });
   await removeOrganisationMedia(organisation.id);
+  await removeOrganisationPictures(organisation.id);
   await dropDatabase(organisation.databaseName);
   await withCoreTransaction(async (client) => {
     await client.query("delete from organisations where id = $1 and demo_for_user_id = $2", [organisation.id, person.id]);
