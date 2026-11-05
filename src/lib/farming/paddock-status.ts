@@ -18,8 +18,12 @@ export type PaddockStatus = {
   paddockId: string;
   name: string;
   hectares: string | null;
-  /** The mob in now (no day out, or a day out after the date). */
-  inNow: { grazingId: string; mob: string; head: number | null; inOn: string } | null;
+  /**
+   * The mob in now (no day out, or a day out after the date). With several
+   * mob records in (decision 1422) it's all of them: names joined, head
+   * added up, the earliest day in, and `mobs` lists each.
+   */
+  inNow: { grazingId: string; mob: string; head: number | null; inOn: string; mobs: Array<{ grazingId: string; mobId: string | null; mob: string; head: number | null; inOn: string }> } | null;
   /** The day the last mob came out, on or before the date (null when in now and never grazed before, or never grazed). */
   lastGrazedOn: string | null;
   cover: { cover: number; measuredOn: string; method: PastureMethod; estimate: boolean } | null;
@@ -40,6 +44,7 @@ export async function paddockStatuses(tx: OrgTx, input: { farmId: unknown; onDat
     mob: string | null;
     head: number | null;
     in_on: string | null;
+    mobs: Array<{ grazingId: string; mobId: string | null; mob: string; head: number | null; inOn: string }> | null;
     last_out: string | null;
     cover: number | null;
     measured_on: string | null;
@@ -47,13 +52,17 @@ export async function paddockStatuses(tx: OrgTx, input: { farmId: unknown; onDat
   }>(
     `select p.id::text, p.name,
             coalesce(p.effective_ha, round((select b.mapped_ha from paddock_boundaries b where b.paddock_id = p.id order by b.id desc limit 1), 2))::text as hectares,
-            g.id::text as grazing_id, g.mob, g.head, g.in_on::text,
+            g.grazing_id, g.mob, g.head, g.in_on::text, g.mobs,
             (select max(o.out_on) from grazings o where o.paddock_id = p.id and o.status = 'active' and o.out_on is not null and o.out_on <= $2)::text as last_out,
             r.cover, r.measured_on::text, r.method
        from paddocks p
-       left join lateral (select g.id, g.mob, g.head, g.in_on from grazings g
+       left join lateral (select (array_agg(g.id::text order by g.in_on desc, g.id desc))[1] as grazing_id,
+                                 string_agg(g.mob, ' + ' order by g.in_on, g.id) as mob,
+                                 case when count(*) = count(g.head) then sum(g.head)::int end as head, min(g.in_on) as in_on,
+                                 jsonb_agg(jsonb_build_object('grazingId', g.id::text, 'mobId', g.mob_id::text, 'mob', g.mob, 'head', g.head, 'inOn', g.in_on::text) order by g.in_on, g.id) as mobs
+                            from grazings g
                            where g.paddock_id = p.id and g.status = 'active' and g.in_on <= $2 and (g.out_on is null or g.out_on > $2)
-                           order by g.in_on desc, g.id desc limit 1) g on true
+                          having count(*) > 0) g on true
        left join lateral (select r.cover, r.measured_on, r.method from pasture_readings r
                            where r.paddock_id = p.id and r.status = 'active' and r.measured_on <= $2
                            order by r.measured_on desc, r.id desc limit 1) r on true
@@ -65,7 +74,7 @@ export async function paddockStatuses(tx: OrgTx, input: { farmId: unknown; onDat
     paddockId: row.id,
     name: row.name,
     hectares: row.hectares,
-    inNow: row.grazing_id ? { grazingId: row.grazing_id, mob: row.mob!, head: row.head, inOn: row.in_on! } : null,
+    inNow: row.grazing_id ? { grazingId: row.grazing_id, mob: row.mob!, head: row.head, inOn: row.in_on!, mobs: row.mobs ?? [] } : null,
     lastGrazedOn: row.last_out,
     cover: row.cover === null ? null : { cover: row.cover, measuredOn: row.measured_on!, method: row.method!, estimate: isEstimate(row.method!) },
   }));
