@@ -3265,6 +3265,16 @@ that something happened.
   Excel with a preview. In Analytics as `tohyee_farm_rainfall`; the AI has
   a read-only `rainfall` tool. No outside weather data is fetched.
 
+- **Farm team tasks** (FT1-FT7, decisions 1457-1461, tenant migration
+  0247): Farm › More › **Tasks**. A task has what needs doing, a due day,
+  and optionally who it's for (someone on that farm's team), a repeat
+  (weekly, 2-weekly, 4-weekly, monthly), a paddock, a map pin (an amber "T"
+  on the Map) and a note. Done and Undo keep who and when; a repeating task
+  moves to its next date. Today has a Tasks card with Done (works with no
+  signal), the farm calendar shows the next 30 days, and the person it's
+  for gets reminders in the Android app with their safety actions.
+  Cancelled tasks are kept.
+
 - **Mobs** (decisions 1421-1430, MOB1-MOB10, tenant migration 0233; common
   NZ practice, not yet reviewed): Farm › More › Mobs lists each mob (one
   IRD class, head, tag colour, paddock and last weight) with quick actions
@@ -3281,7 +3291,7 @@ that something happened.
 - **Treatments and withholding** (decisions 1431-1438, TRT1-TRT8, tenant
   migration 0234; common NZ practice, not yet reviewed): treat a mob from
   its card (product from Safety's chemical register or typed, dose,
-  quantity, batch, who, meat and milk withholding from the label). Each
+  quantity, batch, who, the time given if known, and meat and milk withholding from the label; milk counts from the time given exactly, or from the end of the day without one). Each
   mob shows "safe for slaughter from" and "milk safe from", carried through
   splits and merges, with warnings on sales and on its paddock. A spraying
   tractor job takes the label's grazing withholding, and its paddocks show

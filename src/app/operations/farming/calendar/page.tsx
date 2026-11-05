@@ -5,6 +5,7 @@ import { RequireOrganisation } from "@/components/books";
 import { FarmCalendarHome } from "@/components/farm-calendar";
 import { FarmEffluentDue } from "@/components/farm-effluent-care";
 import { FarmSafetyDue } from "@/components/farm-safety-tab";
+import { FarmTasksDue } from "@/components/farm-tasks";
 import { Page, PageHeader, Notice } from "@/components/ui";
 
 export default function FarmCalendarPage() {
@@ -16,6 +17,7 @@ export default function FarmCalendarPage() {
         <RequireOrganisation>
           {(organisationId) => (
             <>
+              <FarmTasksDue key={`tasks-${organisationId}`} organisationId={organisationId} />
               <FarmSafetyDue key={`safety-${organisationId}`} organisationId={organisationId} />
               <FarmEffluentDue key={`effluent-${organisationId}`} organisationId={organisationId} />
               <FarmCalendarHome key={organisationId} organisationId={organisationId} />

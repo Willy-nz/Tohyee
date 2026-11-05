@@ -21299,6 +21299,37 @@ and `tests/integration/rainfall.test.ts`.
   `tohyee_farm_rainfall` (a row a reading, removed ones left out): RF1-RF7
   sum to 99.0 mm over 6 readings for Cowshed.
 
+## Farming: farm team tasks (FT1-FT7; built by Claude 5 Nov 2026 when Jess asked for the missing farm features, Claude's rules, not yet reviewed)
+
+Records only: nothing posts to the books. Decisions 1457-1461. Tested in
+`tests/unit/farm-tasks.test.ts` and `tests/integration/farm-tasks.test.ts`.
+
+- **FT1 Who a task can be for.** Home farm and Runoff; Tama is farm staff
+  on Home farm, Mere on Runoff, Rangi a viewer. A Home farm task can be for
+  Aroha (the owner) or Tama, not Mere (not on the farm) or Rangi (can't
+  tick tasks off). A paddock from Runoff, or a repeat "daily", is refused.
+  Tama adds "Check the trough", from Mon 2 Nov 2026, every week, for Tama,
+  paddock 12, pinned on the map. Rangi can't add tasks; Mere can't see
+  Home farm's.
+- **FT2 Cancelled.** "Spray thistles" cancelled is kept under Cancelled,
+  out of To do, and can't be marked done until it's opened again.
+- **FT3 A one-off** is due on its day until done, then it's under Done.
+- **FT4 Done.** On Thu 5 Nov, "Check the trough" is overdue (due 2 Nov).
+  Tama marks it done for 2 Nov: it's due Mon 9 Nov ("this week"). Sent
+  again (a phone's queue), nothing more is kept. Done "for 16 Nov" is
+  refused: "This task is now due 2026-11-09". A weekly task done late for
+  23 Nov is next due 30 Nov (9 and 16 Nov aren't owed). A monthly task
+  from 31 Jan is due 28 Feb, then 31 Mar.
+- **FT5 Undo.** Undoing the 2 Nov Done makes it due 2 Nov again; the Done
+  is kept with who undid it.
+- **FT6 Calendar.** From 5 to 30 Nov: "Move the bull" (Runoff, due 1 Nov,
+  not done) on 5 Nov marked overdue; "Check the trough" on 9, 16, 23 and
+  30 Nov. Tama, on Home farm only, sees only "Check the trough".
+- **FT7 Reminders.** Mere's Android reminders include "Task: Move the
+  bull" (told about today, as it's overdue), opening Tasks on Runoff;
+  Tama's include "Task: Check the trough". Tasks for nobody in particular
+  remind nobody.
+
 ## Farming: mobs and the livestock head count (MOB1-MOB10; built by Claude 5 Nov 2026, common NZ practice, not yet reviewed)
 
 A mob is a group of one IRD class on a farm (decision 1421). Where it is
@@ -21362,8 +21393,15 @@ in `tests/integration/farm-treatments.test.ts` and
 - **TRT1 Safe for slaughter.** Milkers (200) treated on 1 Oct 2026 with a
   meat withholding of 14 days: **safe for slaughter from 15 Oct**. A blank
   withholding is "not entered", and nil is 0.
-- **TRT2 Milk safe from.** 96 hours from 1 Oct: counted from the end of 1
-  Oct, **6 Oct**. 36 hours: 4 Oct. Nil (0): 1 Oct.
+- **TRT2 Milk safe from, with no time given.** 96 hours from 1 Oct:
+  counted from the end of 1 Oct, **6 Oct**, shown "from end of day, no time
+  given". 36 hours: 4 Oct. Nil (0): 1 Oct.
+- **TRT2a Milk safe from a time given** (Jess, 5 Nov 2026). Given at 7:30
+  am on 1 Oct with 96 hours: **7:30 am on 5 Oct**, shown "from 7:30 am".
+  6:00 pm on 1 Oct with 36 hours: 6:00 am on 3 Oct. The time is the farm's
+  local time and the hours are real hours, so 8:00 am on 26 Sep 2026 plus
+  48 hours, across the start of daylight saving, is 9:00 am on 28 Sep. The
+  register shows the time given and which way the milk date was counted.
 - **TRT3 Withholding follows the animals.** Treated 1 Oct with 28 days: 20
   split off on 5 Oct as "Culls" carry **29 Oct**, and so does the mob they
   merge into on 6 Oct. A mob split off before 1 Oct doesn't.

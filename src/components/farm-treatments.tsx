@@ -14,7 +14,7 @@ import { DateInput } from "@/components/date-input";
 import { api, errorMessage } from "@/lib/client/api";
 import { shortDate } from "@/lib/farming/farm-words";
 import type { Mob } from "@/lib/farming/mobs";
-import { isPositiveQuantity, LABEL_NOTE, meatSafeOn, milkSafeFrom, STOCK_UNITS, type StockUnit } from "@/lib/farming/treatment-rules";
+import { isPositiveQuantity, LABEL_NOTE, meatSafeOn, milkBasisText, milkSafeFrom, parseTimeGiven, safeText, STOCK_UNITS, type StockUnit, timeText } from "@/lib/farming/treatment-rules";
 import type { ProductStock, SprayWithholding, Treatment } from "@/lib/farming/treatments";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import { newOperationId } from "@/lib/offline/queue";
@@ -28,7 +28,7 @@ import styles from "./farm-workspace.module.css";
  * Safety's chemical register, and a spray job's grazing withholding.
  */
 
-type Answers = { product: string; chemicalRecordId: string | null; dose: string; quantity: string; unit: StockUnit; meat: string; milk: string; givenBy: string; batch: string; reason: string; head: string; animals: string; day: string };
+type Answers = { givenTime: string; product: string; chemicalRecordId: string | null; dose: string; quantity: string; unit: StockUnit; meat: string; milk: string; givenBy: string; batch: string; reason: string; head: string; animals: string; day: string };
 
 const STEPS = ["product", "dose", "head", "withholding", "givenBy", "extra", "day", "review"] as const;
 
@@ -41,7 +41,7 @@ export function TreatFlow({ organisationId, farm, mob, onClose }: Pick<FarmConte
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<Answers>({ product: "", chemicalRecordId: null, dose: "", quantity: "", unit: "mL", meat: "", milk: "", givenBy: user.displayName || user.email, batch: "", reason: "", head: String(mob.head), animals: "", day: today });
+  const [answers, setAnswers] = useState<Answers>({ givenTime: "", product: "", chemicalRecordId: null, dose: "", quantity: "", unit: "mL", meat: "", milk: "", givenBy: user.displayName || user.email, batch: "", reason: "", head: String(mob.head), animals: "", day: today });
   const set = (patch: Partial<Answers>) => setAnswers((current) => ({ ...current, ...patch }));
   const step = STEPS[index];
   const next = () => setIndex((value) => Math.min(value + 1, STEPS.length - 1));
@@ -61,6 +61,7 @@ export function TreatFlow({ organisationId, farm, mob, onClose }: Pick<FarmConte
       head: answers.head,
       animals: head < mob.head ? answers.animals.trim() || null : null,
       treatedOn: answers.day,
+      givenTime: answers.givenTime || null,
       product: answers.product.trim() || null,
       chemicalRecordId: answers.chemicalRecordId,
       dose: answers.dose.trim(),
@@ -173,22 +174,29 @@ export function TreatFlow({ organisationId, farm, mob, onClose }: Pick<FarmConte
       );
     case "day":
       return (
-        <Step {...frame} question="Which day?" onNext={next}>
+        <Step {...frame} question="Which day, and what time?" onNext={next} nextDisabled={parseTimeGiven(answers.givenTime) === undefined}>
           <DayChoice value={answers.day} onChange={(day) => set({ day })} />
+          <Field label="Time given (if you know it)">
+            <input type="time" value={answers.givenTime} onChange={(event) => set({ givenTime: event.target.value })} />
+          </Field>
+          <p className={ui.muted}>
+            With the time, milk withholding counts from it exactly. <InfoTip label="Time given">Without a time, the hours count from the end of the day, to be safe. The time is the farm&apos;s local time.</InfoTip>
+          </p>
         </Step>
       );
     default: {
       const meat = meatSafeOn(answers.day, answers.meat === "" ? null : Number(answers.meat));
-      const milk = milkSafeFrom(answers.day, answers.milk === "" ? null : Number(answers.milk));
+      const givenTime = parseTimeGiven(answers.givenTime) ?? null;
+      const milk = milkSafeFrom(answers.day, answers.milk === "" ? null : Number(answers.milk), givenTime);
       const lines: Array<[string, string]> = [
         ["Mob", head < mob.head ? `${head} of ${mob.name}: ${answers.animals}` : `${mob.name} (${mob.head})`],
         ["Product", answers.product],
         ["Dose", answers.dose],
         ["Used", answers.quantity ? `${answers.quantity} ${answers.unit}` : "Not recorded"],
         ["Safe for slaughter from", meat ? formatDate(meat) : "No meat withholding entered"],
-        ["Milk safe from", milk ? formatDate(milk) : "No milk withholding entered"],
+        ["Milk safe from", milk ? `${safeText(milk, formatDate)} (${milkBasisText(givenTime)})` : "No milk withholding entered"],
         ["Given by", answers.givenBy],
-        ["Day", formatDate(answers.day)],
+        ["Day", `${formatDate(answers.day)}${givenTime ? `, ${timeText(givenTime)}` : ""}`],
       ];
       return (
         <Step {...frame} question="Check and save" onNext={() => void save()} nextLabel={busy ? "Saving…" : "Save"} nextDisabled={busy}>
@@ -232,7 +240,7 @@ export function TreatmentsCard({ organisationId, farmId, version }: { organisati
           rows={list.slice(0, 8).map((t) => ({
             key: t.id,
             title: shortDate(t.treatedOn, today),
-            parts: [t.mobName ?? t.animals ?? "", t.product, `${t.head} head`, t.meatSafeOn && t.meatSafeOn > today ? `meat ${shortDate(t.meatSafeOn, today)}` : "", t.milkSafeFrom && t.milkSafeFrom > today ? `milk ${shortDate(t.milkSafeFrom, today)}` : ""],
+            parts: [t.mobName ?? t.animals ?? "", t.product, `${t.head} head`, t.meatSafeOn && t.meatSafeOn > today ? `meat ${shortDate(t.meatSafeOn, today)}` : "", t.milkSafeFrom && t.milkSafeFrom > today ? `milk ${safeText(t.milkSafeFrom, (iso) => shortDate(iso, today))} (${milkBasisText(t.givenTime)})` : ""],
             details: (
               <p>
                 {t.dose}

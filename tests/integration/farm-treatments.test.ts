@@ -44,7 +44,8 @@ describeWithDatabase("farm treatments and withholding", () => {
     const w = await setup();
     const result = await w.asStaff((tx) => recordTreatment(tx, treat({ farmId: w.farm.id, mobId: w.cows.id, treatedOn: "2026-10-01", meatWithholdingDays: 14, milkWithholdingHours: 96 })));
     expect(result.treatment).toMatchObject({ head: 200, meatSafeOn: "2026-10-15", milkSafeFrom: "2026-10-06" });
-    expect(result.message).toBe("Treatment recorded: safe for slaughter from 2026-10-15, milk safe from 2026-10-06.");
+    expect(result.message).toBe("Treatment recorded: safe for slaughter from 2026-10-15, milk safe from 2026-10-06 (from end of day, no time given).");
+    expect(result.treatment).toMatchObject({ givenTime: null, milkBasis: "end_of_day" });
     // Nil is 0 (the day itself); blank is "not entered", never nil.
     const nil = await w.as((tx) => recordTreatment(tx, treat({ farmId: w.farm.id, mobId: w.cows.id, treatedOn: "2026-10-02", milkWithholdingHours: 0 })));
     expect(nil.treatment).toMatchObject({ meatSafeOn: null, milkSafeFrom: "2026-10-02", meatWithholdingDays: null });
@@ -62,6 +63,20 @@ describeWithDatabase("farm treatments and withholding", () => {
     await w.as((tx) => removeTreatment(tx, result.treatment.id, { reason: "wrong mob" }));
     expect((await w.as((tx) => getMob(tx, w.cows.id))).mob.withholding).toEqual({ meatSafeOn: null, milkSafeFrom: "2026-10-02" });
     expect((await w.as((tx) => listTreatments(tx, { farmId: w.farm.id, includeRemoved: true }))).length).toBe(3);
+  });
+
+  it("TRT2a a time given counts milk withholding from it exactly, also when sent again from a phone", async () => {
+    const w = await setup();
+    const operationId = randomUUID();
+    const timed = await w.asStaff((tx) => recordTreatment(tx, treat({ farmId: w.farm.id, mobId: w.cows.id, treatedOn: "2026-10-01", givenTime: "7:30", milkWithholdingHours: 96, operationId })));
+    expect(timed.treatment).toMatchObject({ givenTime: "07:30", milkSafeFrom: "2026-10-05T07:30", milkBasis: "time_given" });
+    expect(timed.message).toBe("Treatment recorded: milk safe from 2026-10-05 7:30 am (from 7:30 am).");
+    await w.asStaff((tx) => recordTreatment(tx, treat({ farmId: w.farm.id, mobId: w.cows.id, treatedOn: "2026-10-01", givenTime: "7:30", milkWithholdingHours: 96, operationId })));
+    await expect(w.asStaff((tx) => recordTreatment(tx, treat({ farmId: w.farm.id, mobId: w.cows.id, treatedOn: "2026-10-01", givenTime: "8:30", milkWithholdingHours: 96, operationId })))).rejects.toThrow("different details");
+    await expect(w.as((tx) => recordTreatment(tx, treat({ farmId: w.farm.id, mobId: w.cows.id, givenTime: "half seven" })))).rejects.toThrow("Time given");
+    expect((await w.as((tx) => getMob(tx, w.cows.id))).mob.withholding?.milkSafeFrom).toBe("2026-10-05T07:30");
+    const csv = await w.as((tx) => treatmentRegisterFile(tx, { farmId: w.farm.id, format: "csv" }));
+    expect(String(csv.content).trim().split("\r\n")[1]).toBe("2026-10-01,07:30,Milkers,200,Pour-on,,20 mL per head,,,Sam the vet,not entered,,96,2026-10-05 7:30 am,from 7:30 am,treatments-owner@example.com");
   });
 
   it("TRT3-TRT4 withholding follows split and merged stock; a sale in it warns but isn't stopped", async () => {
@@ -115,7 +130,7 @@ describeWithDatabase("farm treatments and withholding", () => {
     const csv = await w.as((tx) => treatmentRegisterFile(tx, { farmId: w.farm.id, from: "2026-10-01", to: "2026-10-31", format: "csv" }));
     const lines = String(csv.content).trim().split("\r\n");
     expect(lines[0]).toContain("Safe for slaughter from");
-    expect(lines[1]).toBe("2026-10-01,Milkers,200,Pour-on,B123,20 mL per head,,,Sam the vet,14,2026-10-15,not entered,,treatments-owner@example.com");
+    expect(lines[1]).toBe("2026-10-01,,Milkers,200,Pour-on,B123,20 mL per head,,,Sam the vet,14,2026-10-15,not entered,,,treatments-owner@example.com");
     const pdf = await w.as((tx) => treatmentRegisterFile(tx, { farmId: w.farm.id, format: "pdf" }));
     expect(Buffer.from(pdf.content as Uint8Array).subarray(0, 5).toString()).toBe("%PDF-");
     const moves = await w.as((tx) => stockMovementFile(tx, { farmId: w.farm.id, format: "csv" }));
