@@ -15,6 +15,7 @@ import { FarmPeopleCard, LocationSharingBanner, peopleMarkers, useFarmPeople } f
 import { gaugeOverlays, useRainGauges } from "@/components/farm-rainfall";
 import { assetOverlays, FarmAssetsCard, type MapDrawing, MapLayerToggles, MeasureCard, shownOverlays, useMapAssets, useMapLayers } from "@/components/farm-map-assets";
 import { type MapLayer, overlayLayer } from "@/lib/farming/map-assets-rules";
+import { MapPictureSwitch, PaddockGreenness, SatelliteVegetationLink, useFarmVegetation, useMapPicture, VegetationMapNotes, vegetationRaster } from "@/components/farm-vegetation";
 import { FarmOfflineStatus, OFFLINE_PAGE } from "@/components/farm-offline";
 import { FarmRowList } from "@/components/farm-rows";
 import { FarmSelector, useCanRecordFarmWork, useSelectedFarm } from "@/components/farm-selector";
@@ -342,6 +343,16 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
   // Measuring or placing an asset: taps on the map go to it (decision 1463).
   const [drawing, setDrawing] = useState<MapDrawing | null>(null);
   const [measuring, setMeasuring] = useState(false);
+  // Satellite vegetation (#612, decisions 1531-1533): Aerial / Vegetation / Change, once it's set up for this farm.
+  const { can } = useWorkspace();
+  const [picture, setPicture] = useMapPicture();
+  const [sceneId, setSceneId] = useState<string | null>(null);
+  const vegetation = useFarmVegetation(organisationId, farm.id, sceneId);
+  const vegetationOn = Boolean(vegetation.data && vegetation.data.vegetation.state !== "not_set_up");
+  const shownPicture = vegetationOn ? picture : "aerial";
+  const raster = vegetationRaster(vegetation.data, shownPicture);
+  const mapFills = raster ? Object.fromEntries(shaped.map((paddock) => [paddock.id, "rgba(0, 0, 0, 0)"])) : fills;
+  const greenness = selected && vegetationOn ? (vegetation.data!.vegetation.observations.find((observation) => observation.paddockId === selected) ?? null) : null;
   return (
     <div className={styles.grid}>
       <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
@@ -364,7 +375,8 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
           </>
         }
       >
-        <ColouringSwitch value={colouring} onChange={setColouring} />
+        {vegetationOn ? <MapPictureSwitch value={shownPicture} onChange={setPicture} /> : null}
+        {shownPicture === "aerial" ? <ColouringSwitch value={colouring} onChange={setColouring} /> : null}
         <MapLayerToggles present={present} isOn={layers.isOn} toggle={layers.toggle} />
         {statuses.error ? <Notice tone="error">{statuses.error}</Notice> : null}
         {shapes.data && statuses.data ? (
@@ -374,26 +386,30 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
             onSelect={setSelected}
             imageryKey={imageryKey}
             offerImagery={noKey}
-            fills={fills}
+            fills={mapFills}
+            raster={raster}
             overlays={shown}
             people={shownPeople}
             drawing={drawing?.points ?? null}
             drawingShape={drawing?.shape}
             onMapTap={drawing?.onTap}
-            label={`Map of the paddocks, coloured by ${colouring === "grazed" ? "days since grazed" : "cover reading age"}, with ${shown.length} hazards, assets and other marks${shownPeople.length ? ` and ${shownPeople.length} people sharing their location (listed under People on the map)` : ""}${drawing ? ". Tap to add a point" : ""}`}
+            label={`Map of the paddocks, ${raster ? `with the satellite ${shownPicture === "change" ? "change" : "greenness"} picture${vegetation.data?.vegetation.scene ? ` from ${vegetation.data.vegetation.scene.acquiredOn}` : ""}` : `coloured by ${colouring === "grazed" ? "days since grazed" : "cover reading age"}`}, with ${shown.length} hazards, assets and other marks${shownPeople.length ? ` and ${shownPeople.length} people sharing their location (listed under People on the map)` : ""}${drawing ? ". Tap to add a point" : ""}`}
           />
         ) : (
           <p className={ui.muted}>Loading…</p>
         )}
-        <Legend colouring={colouring} />
+        {shownPicture === "aerial" ? <Legend colouring={colouring} /> : null}
+        {vegetationOn && shownPicture !== "aerial" ? <VegetationMapNotes organisationId={organisationId} answer={vegetation.data!} picture={shownPicture} onScene={setSceneId} canSetUp={can("admin")} /> : null}
       </Card>
       {measuring ? <MeasureCard onDrawing={setDrawing} onClose={() => setMeasuring(false)} /> : null}
       <div id="assets-card" style={{ scrollMarginTop: 64 }}>
         {assets.data && !measuring ? <FarmAssetsCard organisationId={organisationId} farm={farm} assets={assets.data.assets} selected={asset} onSelect={setAsset} onChanged={assets.reload} onDrawing={setDrawing} /> : null}
       </div>
+      {vegetation.data || vegetation.error ? <SatelliteVegetationLink state={vegetation.data?.vegetation.state ?? null} /> : null}
       </div>
       <div>
         <div id="paddock-card" style={{ scrollMarginTop: 64 }}>
+          {status && vegetationOn && shownPicture !== "aerial" ? <PaddockGreenness organisationId={organisationId} paddockId={status.paddockId} observation={greenness} /> : null}
           {status ? <PaddockCard organisationId={organisationId} farm={farm} status={status} hazards={activeHazards} onClose={() => setSelected(null)} /> : null}
         </div>
         <div id="people-card" style={{ scrollMarginTop: 64 }}>

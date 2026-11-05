@@ -57,13 +57,13 @@ export type ScaleStep = { from: number | null; to: number | null; colour: [numbe
 
 /** Greenness, light brown to dark green; lightness falls step by step so it reads in grey too. */
 export const NDVI_SCALE: ScaleStep[] = [
-  { from: null, to: 0.2, colour: [196, 164, 120], label: "Under 0.2: bare or very little green" },
-  { from: 0.2, to: 0.4, colour: [222, 205, 120], label: "0.2 to 0.4" },
-  { from: 0.4, to: 0.5, colour: [200, 220, 110], label: "0.4 to 0.5" },
-  { from: 0.5, to: 0.6, colour: [140, 196, 90], label: "0.5 to 0.6" },
-  { from: 0.6, to: 0.7, colour: [80, 160, 70], label: "0.6 to 0.7" },
-  { from: 0.7, to: 0.8, colour: [40, 120, 50], label: "0.7 to 0.8" },
-  { from: 0.8, to: null, colour: [16, 80, 36], label: "0.8 and over: very green" },
+  { from: null, to: 0.2, colour: [238, 228, 204], label: "Under 0.2: bare or very little green" },
+  { from: 0.2, to: 0.4, colour: [222, 204, 140], label: "0.2 to 0.4" },
+  { from: 0.4, to: 0.5, colour: [176, 198, 102], label: "0.4 to 0.5" },
+  { from: 0.5, to: 0.6, colour: [146, 190, 94], label: "0.5 to 0.6" },
+  { from: 0.6, to: 0.7, colour: [92, 158, 70], label: "0.6 to 0.7" },
+  { from: 0.7, to: 0.8, colour: [46, 118, 52], label: "0.7 to 0.8" },
+  { from: 0.8, to: null, colour: [20, 80, 36], label: "0.8 and over: very green" },
 ];
 
 /** Change since an earlier date: orange for less green, blue for more, pale for little change. */
