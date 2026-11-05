@@ -13185,9 +13185,11 @@ second reminder system.
       2 weeks, 4 weeks or month, the farm calendar's repeats), a paddock, a
       pin on the map and a note. "Who it's for" is someone who can record
       farm work and see that farm (farm staff, bookkeepers and up); viewers
-      can't tick a task off, so they aren't offered. Farm staff and up add,
-      change and cancel tasks on their farms; viewers see them. A cancelled
-      task is kept (Cancelled) and can be opened again; nothing is deleted.
+      can't tick a task off, so they aren't offered. Farm staff and up add
+      and change tasks on their farms and mark them done or undone; viewers
+      see them. Only bookkeepers and up cancel a task, or open a cancelled
+      one again: farm staff can't, even for a task they added (Jess, 5 Nov
+      2026). A cancelled task is kept (Cancelled); nothing is deleted.
 1458. **Pins show on the Map.** An open task with a pin is an amber "T" on
       the Map tab; tapping it opens Tasks.
 1459. **Reminders are the person's own, in the Android app.** The phone's

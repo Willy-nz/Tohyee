@@ -21311,8 +21311,11 @@ Records only: nothing posts to the books. Decisions 1457-1461. Tested in
   Tama adds "Check the trough", from Mon 2 Nov 2026, every week, for Tama,
   paddock 12, pinned on the map. Rangi can't add tasks; Mere can't see
   Home farm's.
-- **FT2 Cancelled.** "Spray thistles" cancelled is kept under Cancelled,
-  out of To do, and can't be marked done until it's opened again.
+- **FT2 Cancelled.** Tama adds "Spray thistles" but can't cancel it
+  ("Cancelling a task needs the bookkeeper role or higher"); he can still
+  change its note. Aroha (the owner) cancels it: it's kept under Cancelled,
+  out of To do, and can't be marked done until a bookkeeper or above opens
+  it again (Tama can't). Jess, 5 Nov 2026.
 - **FT3 A one-off** is due on its day until done, then it's under Done.
 - **FT4 Done.** On Thu 5 Nov, "Check the trough" is overdue (due 2 Nov).
   Tama marks it done for 2 Nov: it's due Mon 9 Nov ("this week"). Sent
