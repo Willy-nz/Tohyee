@@ -8,6 +8,7 @@ import {
   type SessionUser,
 } from "@/lib/auth/sessions";
 import { ForbiddenError, HttpError, NotFoundError, UnauthorizedError } from "@/lib/errors";
+import { accessRefusal } from "@/lib/organisations/access";
 import { getMembership, type Membership } from "@/lib/organisations/registry";
 import { assertLocalAdminRequest } from "@/lib/server-admin/local";
 import { assertRemoteAllowed } from "@/lib/auth/remote";
@@ -116,6 +117,8 @@ export function requireServerAdmin(auth: AuthContext, request: Request): void {
 /**
  * The caller must be a member of the organisation with at least `minimum`.
  * Non-members get "not found" so organisation IDs can't be probed.
+ * A member outside their access dates (time-limited access, decision 1468)
+ * is refused with why: "Your access to … ended on …".
  */
 export async function requireOrganisationRole(
   auth: AuthContext,
@@ -123,6 +126,10 @@ export async function requireOrganisationRole(
   minimum: Role,
 ): Promise<Membership> {
   const membership = await getMembership(organisationId, auth.user.id);
+  if (!membership) {
+    const refusal = await accessRefusal(organisationId, auth.user.id);
+    if (refusal) throw refusal;
+  }
   if (!membership || !membership.organisation.isActive) {
     throw new NotFoundError("Organisation not found.");
   }
