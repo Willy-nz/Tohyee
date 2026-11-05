@@ -1,4 +1,5 @@
 import { writeAdminAuditEvent } from "@/lib/audit";
+import { memberAccessCurrentSql } from "@/lib/organisations/registry";
 import { type Role, roleAtLeast } from "@/lib/auth/roles";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { coreQuery, type DbClient, withCoreTransaction } from "@/lib/db/transactions";
@@ -27,7 +28,7 @@ export type GroupUser = { id: string; email: string };
 export async function rolesOf(userId: string): Promise<Map<string, Role>> {
   const found = await coreQuery<{ organisation_id: string; role: Role }>(
     `select m.organisation_id, m.role from organisation_members m join organisations o on o.id = m.organisation_id
-      where m.user_id = $1 and o.is_active`,
+      where m.user_id = $1 and o.is_active and ${memberAccessCurrentSql("m")}`,
     [userId],
   );
   return new Map(found.rows.map((row) => [row.organisation_id, row.role]));

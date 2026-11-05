@@ -145,6 +145,20 @@ that something happened.
   email, the inviter is shown the link to pass on. Only owners invite
   owners. An organisation can add or invite 30 people an hour. Audited.
   The demo farm refuses it. Server › Users still manages every login.
+- **Time-limited access** (decisions 1466-1474): when inviting someone, or
+  later on People and roles, an owner or admin can choose **Access from**
+  and **Access until** (a date, and a time if wanted; New Zealand time).
+  Before the start and after the end Tohyee refuses everything they try
+  (pages, the API, AI keys and AI apps, farm app keys, calendar links) and
+  tells them "Your access to … ended on …. Ask … to extend it." Each person
+  shows "Access until 12 Dec", "Ended" or "Starts", with **+1 week**,
+  **+1 month**, **Dates** and **End now**, and a filter for access ending
+  soon. The member and the owners and admins get an email (when Settings ›
+  Email is set up) and a notice 3 days before it ends. Ended members stay
+  listed, greyed, with **What they did** (their actions in this
+  organisation); nothing is deleted. One owner always keeps access with no
+  end. There's no way yet to limit someone to one area (for example only
+  bank reconciliation): use the role, payroll access and farms.
 - **Payroll employee records** (PE1-PE12; examples not yet approved by Jess):
   employee details, pay frequency, tax code, student loan and KiwiSaver
   settings (including a temporary rate reduction approved by IRD, with its

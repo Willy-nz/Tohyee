@@ -8,7 +8,19 @@ import { createSetupLink, emailInvitation } from "@/lib/auth/setup-links";
 import { coreQuery, type DbClient, withCoreTransaction } from "@/lib/db/transactions";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ForbiddenError, NotFoundError, TooManyRequestsError, ValidationError } from "@/lib/errors";
-import { getOrganisation } from "@/lib/organisations/registry";
+import { businessTimeZone } from "@/lib/dates";
+import {
+  type AccessInput,
+  type AccessState,
+  accessState,
+  extendedEnd,
+  formatMoment,
+  type LocalMoment,
+  parseAccessWindow,
+  startParts,
+  untilParts,
+} from "@/lib/organisations/access-window";
+import { getOrganisation, memberAccessCurrentSql } from "@/lib/organisations/registry";
 import { removePayrollAccess, removePayrollAccessOnJoin } from "@/lib/payroll/access";
 
 export type Member = {
@@ -25,6 +37,13 @@ export type Member = {
   invited: boolean;
   /** When the invitation was last sent (null unless invited). */
   invitationSentAt: string | null;
+  /** Time-limited access (decisions 1466-1474): instants, null for no limit. */
+  accessStartsAt: string | null;
+  accessEndsAt: string | null;
+  /** The same, as people entered them (business time zone). */
+  accessFrom: LocalMoment | null;
+  accessUntil: LocalMoment | null;
+  accessState: AccessState;
 };
 
 type MemberRow = {
@@ -36,7 +55,22 @@ type MemberRow = {
   created_at: string;
   invited: boolean;
   invitation_sent_at: string | null;
+  access_starts_at: string | null;
+  access_ends_at: string | null;
 };
+
+function accessFields(starts: Date | string | null, ends: Date | string | null) {
+  const timeZone = businessTimeZone();
+  const accessStartsAt = starts ? new Date(starts).toISOString() : null;
+  const accessEndsAt = ends ? new Date(ends).toISOString() : null;
+  return {
+    accessStartsAt,
+    accessEndsAt,
+    accessFrom: accessStartsAt ? startParts(accessStartsAt, timeZone) : null,
+    accessUntil: accessEndsAt ? untilParts(accessEndsAt, timeZone) : null,
+    accessState: accessState({ startsAt: accessStartsAt, endsAt: accessEndsAt }),
+  };
+}
 
 function toMember(row: MemberRow): Member {
   return {
@@ -48,11 +82,12 @@ function toMember(row: MemberRow): Member {
     addedAt: row.created_at,
     invited: row.invited,
     invitationSentAt: row.invited && row.invitation_sent_at ? new Date(row.invitation_sent_at).toISOString() : null,
+    ...accessFields(row.access_starts_at, row.access_ends_at),
   };
 }
 
 const MEMBER_SELECT = `
-  select m.user_id, u.email, u.display_name, m.role, u.is_active, m.created_at,
+  select m.user_id, u.email, u.display_name, m.role, u.is_active, m.created_at, m.access_starts_at, m.access_ends_at,
          (i.user_id is not null and u.last_login_at is null) as invited, i.last_sent_at as invitation_sent_at
     from organisation_members m
     join users u on u.id = m.user_id
@@ -85,13 +120,19 @@ function assertCanManage(actorRole: Role, targetCurrentRole: Role | null, newRol
 }
 
 async function assertAnOwnerRemains(client: DbClient, organisationId: string) {
-  const owners = await client.query<{ count: string }>(
-    `select count(*)::text as count from organisation_members
-      where organisation_id = $1 and role = 'owner'`,
+  const owners = await client.query<{ count: string; lasting: string }>(
+    `select count(*)::text as count,
+            -- Time-limited access (decision 1473): one owner always has access now with no end.
+            count(*) filter (where m.access_ends_at is null and ${memberAccessCurrentSql("m")})::text as lasting
+       from organisation_members m
+      where m.organisation_id = $1 and m.role = 'owner'`,
     [organisationId],
   );
   if (owners.rows[0]?.count === "0") {
     throw new ValidationError("An organisation must always have at least one owner.");
+  }
+  if (owners.rows[0]?.lasting === "0") {
+    throw new ValidationError("At least one owner must keep access with no end date. Make someone else an owner first.");
   }
 }
 
@@ -151,9 +192,13 @@ export async function inviteMember(
   auth: AuthContext,
   actorRole: Role,
   organisationId: string,
-  input: { email: unknown; displayName: unknown; role: unknown },
+  input: { email: unknown; displayName: unknown; role: unknown; access?: AccessInput },
 ): Promise<InviteResult> {
   const email = normaliseEmail(input.email);
+  // Time-limited access (decision 1466): optional "from" and "until".
+  const window = parseAccessWindow(input.access ?? {}, businessTimeZone());
+  const windowValues = [window.startsAt?.toISOString() ?? null, window.endsAt?.toISOString() ?? null];
+  const windowDetails = accessAuditDetails(window.startsAt, window.endsAt);
   // People and roles always asks (as Xero does); it's only used for a new login.
   const displayName = input.displayName == null || (typeof input.displayName === "string" && !input.displayName.trim()) ? null : parseDisplayName(input.displayName);
   const role = parseRole(input.role);
@@ -180,15 +225,15 @@ export async function inviteMember(
       const existing = await client.query<{ id: string }>("select id from users where email = $1", [email]);
       const userId = existing.rows[0].id;
       const inserted = await client.query(
-        "insert into organisation_members (organisation_id, user_id, role) values ($1, $2, $3) on conflict do nothing",
-        [organisationId, userId, role],
+        "insert into organisation_members (organisation_id, user_id, role, access_starts_at, access_ends_at) values ($1, $2, $3, $4, $5) on conflict do nothing",
+        [organisationId, userId, role, ...windowValues],
       );
       if (inserted.rowCount === 0) throw new ValidationError(`${email} is already a member. Change their role instead.`);
       await writeAdminAuditEvent(client, actor, {
         eventType: "organisation.member_added",
         entityType: "organisation",
         entityId: organisationId,
-        details: { email, role },
+        details: { email, role, ...windowDetails },
       });
       return { member: await readMember(client, organisationId, userId), link: null };
     }
@@ -198,7 +243,10 @@ export async function inviteMember(
       entityId: newUserId,
       details: { email, isServerAdmin: false, invitedTo: organisationId },
     });
-    await client.query("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, $3)", [organisationId, newUserId, role]);
+    await client.query(
+      "insert into organisation_members (organisation_id, user_id, role, access_starts_at, access_ends_at) values ($1, $2, $3, $4, $5)",
+      [organisationId, newUserId, role, ...windowValues],
+    );
     await client.query(
       "insert into organisation_invitations (organisation_id, user_id, invited_by_user_id, invited_by_email) values ($1, $2, $3, $4)",
       [organisationId, newUserId, auth.user.id, auth.user.email],
@@ -207,7 +255,7 @@ export async function inviteMember(
       eventType: "organisation.member_invited",
       entityType: "organisation",
       entityId: organisationId,
-      details: { email, role, userId: newUserId },
+      details: { email, role, userId: newUserId, ...windowDetails },
     });
     const link = await createSetupLink(client, newUserId, auth.user);
     return { member: await readMember(client, organisationId, newUserId), link };
@@ -444,4 +492,103 @@ export async function removeMember(
     const { disconnectMemberFarmMail } = await import("@/lib/farming/calendar");
     await disconnectMemberFarmMail(organisation, userId);
   }
+}
+
+// ---------------------------------------------------------------- time-limited access
+
+/** The window for the audit trail: instants, and the dates as people see them. */
+function accessAuditDetails(startsAt: Date | string | null, endsAt: Date | string | null): Record<string, string> {
+  const timeZone = businessTimeZone();
+  const details: Record<string, string> = {};
+  if (startsAt) {
+    details.accessStartsAt = new Date(startsAt).toISOString();
+    details.accessFrom = formatMoment(startParts(startsAt, timeZone));
+  }
+  if (endsAt) {
+    details.accessEndsAt = new Date(endsAt).toISOString();
+    details.accessUntil = formatMoment(untilParts(endsAt, timeZone));
+  }
+  return details;
+}
+
+async function writeAccess(
+  auth: AuthContext,
+  actorRole: Role,
+  organisationId: string,
+  userId: string,
+  next: (current: { startsAt: string | null; endsAt: string | null }, now: Date) => { startsAt: Date | string | null; endsAt: Date | string | null },
+  eventType: string,
+): Promise<Member> {
+  return withCoreTransaction(async (client) => {
+    // Serialised with every other membership change (last-owner rule, decision 1473).
+    await client.query("select pg_advisory_xact_lock(hashtext($1))", [`members:${organisationId}`]);
+    const role = await lockMember(client, organisationId, userId);
+    // Only owners change an owner's access, as with their role.
+    assertCanManage(actorRole, role, null);
+    const found = await client.query<{ access_starts_at: string | null; access_ends_at: string | null; now: string }>(
+      "select access_starts_at, access_ends_at, now() as now from organisation_members where organisation_id = $1 and user_id = $2",
+      [organisationId, userId],
+    );
+    const before = found.rows[0];
+    const window = next({ startsAt: before.access_starts_at, endsAt: before.access_ends_at }, new Date(before.now));
+    const startsAt = window.startsAt ? new Date(window.startsAt).toISOString() : null;
+    const endsAt = window.endsAt ? new Date(window.endsAt).toISOString() : null;
+    if (startsAt && endsAt && endsAt <= startsAt) throw new ValidationError("Access must end after it starts.");
+    await client.query(
+      "update organisation_members set access_starts_at = $3, access_ends_at = $4, updated_at = now() where organisation_id = $1 and user_id = $2",
+      [organisationId, userId, startsAt, endsAt],
+    );
+    await assertAnOwnerRemains(client, organisationId);
+    await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, {
+      eventType,
+      entityType: "organisation",
+      entityId: organisationId,
+      details: {
+        userId,
+        before: accessAuditDetails(before.access_starts_at, before.access_ends_at),
+        after: accessAuditDetails(startsAt, endsAt),
+      },
+    });
+    return readMember(client, organisationId, userId);
+  });
+}
+
+/**
+ * Sets when a member's access starts and ends (decision 1466); empty means
+ * no limit. An end in the past ends their access at once. Owners and
+ * admins; only owners for an owner. One owner always keeps access with no
+ * end (decision 1473).
+ */
+export async function setMemberAccess(auth: AuthContext, actorRole: Role, organisationId: string, userId: string, input: AccessInput): Promise<Member> {
+  const window = parseAccessWindow(input, businessTimeZone());
+  return writeAccess(auth, actorRole, organisationId, userId, () => window, "organisation.member_access_set");
+}
+
+export type AccessAction = "extend_week" | "extend_month" | "end_now";
+
+/**
+ * One-click changes (decision 1470): Extend by a week or a month (from the
+ * current end, or from today once it has ended), or End now. Nothing else
+ * about the member changes, and nothing is deleted.
+ */
+export async function changeMemberAccess(auth: AuthContext, actorRole: Role, organisationId: string, userId: string, action: unknown): Promise<Member> {
+  if (action !== "extend_week" && action !== "extend_month" && action !== "end_now") {
+    throw new ValidationError("action must be extend_week, extend_month or end_now.");
+  }
+  const timeZone = businessTimeZone();
+  return writeAccess(
+    auth,
+    actorRole,
+    organisationId,
+    userId,
+    (current, now) => {
+      if (action === "end_now") {
+        // Not started yet: it ends before it starts, so the start goes too.
+        const startsAt = current.startsAt && new Date(current.startsAt).getTime() >= now.getTime() ? null : current.startsAt;
+        return { startsAt, endsAt: now };
+      }
+      return { startsAt: current.startsAt, endsAt: extendedEnd(current.endsAt, action === "extend_week" ? "week" : "month", now, timeZone) };
+    },
+    action === "end_now" ? "organisation.member_access_ended" : "organisation.member_access_extended",
+  );
 }

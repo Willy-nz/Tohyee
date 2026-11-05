@@ -13209,3 +13209,84 @@ second reminder system.
       date after the one done: dates missed before it aren't owed. Undo
       takes back the latest Done, keeping who undid it and when. Every
       Done and Undo is listed on the task.
+### Time-limited access for members (5 Nov 2026; decisions 1466-1474)
+
+Jess asked for a way to give someone access "for a contracted amount of
+time" (for example a bookkeeper hired through a hiring site). There's no
+answer from Jess on the details, and Xero has no time-limited access, so
+these follow what NetSuite does with a user's access end date, kept to
+Tohyee's own roles. None of this is accounting behaviour, so there's no
+worked example.
+
+1466. **Access can have a start and an end.** When inviting someone, or
+      later from People and roles, an owner or admin can set "Access from"
+      and "Access until", each a date with an optional time. Empty means no
+      limit. Times are in the server's business time zone (Pacific/Auckland
+      unless `TOHYEE_TIME_ZONE` says otherwise): Tohyee has no
+      per-organisation time zone. "Until 12 Dec" with no time lasts the whole
+      of 12 Dec. They're stored on the membership (`organisation_members.
+      access_starts_at` and `access_ends_at`, core migration 0024) as
+      instants; the end is the first moment they can't get in.
+1467. **The check is in one place: getMembership.** A membership before its
+      start or after its end is treated as no membership by
+      `getMembership` and `listMembershipsForUser`
+      (`src/lib/organisations/registry.ts`, `memberAccessCurrentSql`). Every
+      route (`requireOrganisationRole`, so `withOrganisation` and the CRM,
+      farm and payroll wrappers), the PowerPoint add-in, AI keys, AI app
+      connections (and swapping an OAuth code for one), farm app keys and
+      calendar links already go through it, so all of them are refused at
+      the next request with nothing more to remember. The few places that
+      read `organisation_members` themselves to let someone in (private mail
+      owners, group reports, approvers) use the same SQL. Requests already
+      under way finish.
+1468. **Refusals say why.** A signed-in member gets 403 with "Your access to
+      <organisation> ended on <date>. Ask <owner> to extend it." (or "starts
+      on <date> … if you need it sooner"), naming the first owner with no
+      end date. Their organisation list leaves the organisation out and the
+      pages show the same sentence instead of "no organisation". The MCP
+      endpoint says the same for a real, unrevoked key or AI app token; other
+      key types (farm app keys) get their usual refusal. Only the member
+      gets this, and they already know the organisation.
+1469. **Keys aren't revoked when access ends.** Outside the dates they're
+      refused; if access is extended, the same keys and AI apps work again,
+      as NetSuite's do when an end date is moved. Remove (as before) still
+      revokes them for good. Ended members keep their payroll access record;
+      payroll is refused with everything else.
+1470. **Extend and End now are one click.** +1 week and +1 month count from
+      the current end, or from today when it has already ended; a time of
+      day is kept. "Dates" chooses any start and end. End now ends it at
+      once (and drops a start that hasn't come). Each change is in the
+      server's audit trail with the dates before and after.
+1471. **Reminders 3 days before.** The email job (every 10 minutes) queues an
+      email to the member and to each owner and admin with access now, 3
+      days before the end, through the organisation's own email (Settings ›
+      Email; nothing is queued when it isn't set up, or for the demo farm).
+      One each per end time (`access_emails`, tenant migration 0251), so an
+      Extend brings a new one. The top-bar notices show the same while it's
+      within 3 days: owners and admins see everyone's, linking to People and
+      roles filtered to ending access; the member sees their own.
+1472. **People and roles shows access, and what they did.** Each person
+      shows "Access until 12 Dec", "Ended 12 Dec", "Starts 1 Dec" or "No end
+      date", with a filter (everyone, ending in 3 days, with dates, ended).
+      Ended members stay listed, greyed, until someone presses Remove:
+      nothing is deleted. "What they did" lists one member's own actions in
+      this organisation (its audit trail and the server's audit trail for
+      it), newest first, for owners and admins. It shows what and when, not
+      details; private mail (decision 571) is never shown, and payroll
+      events only to someone with payroll access. Tohyee had no
+      organisation-wide audit log page before this.
+1473. **One owner always keeps lasting access.** An organisation always has
+      an owner whose access has started and has no end. Giving the last such
+      owner an end date (or End now) is refused, as are role changes and
+      removals that would leave none. Only owners change an owner's dates,
+      as with roles.
+1474. **Dates travel with the membership.** Restoring an organisation as a
+      copy, and recovering people from a server backup, keep each
+      membership's dates (backups made before this have none), so an ended
+      member doesn't come back by a restore.
+
+Not built: limiting a member to one area (for example only bank
+reconciliation). Tohyee's existing limits are the role, payroll access
+(PE9-PE13), the farms each member works on (decision 744), camera access and
+dashboards shared with report viewers. A narrower "areas" permission is a
+separate piece of work (proposed in the pull request).
