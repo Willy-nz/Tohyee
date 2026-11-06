@@ -7745,6 +7745,18 @@ Kobe Ltd, 50.00 + GST = **57.50**, dated 30 Apr, voided 5 May.
   without restarting at 1 April; its closing balance is then not the trial
   balance's, and the report says so.
 
+- **GL1** The **General ledger** report (Reports › General ledger; Jess
+  asked for one on 6 Nov 2026; not yet reviewed) is Account transactions
+  for every account that has an opening balance or a line in the range, in
+  code order; an account with neither is left out. Each shows its opening
+  balance (ATX6), lines and closing balance, and debits equal credits across
+  the report. Example (31 March year end): 1,000.00 owner funds into the
+  bank on 1 Apr 2026 and a 230.00 expense (6010) on 5 May 2026. For **1-31
+  May 2026**: 1000 opening **1,000.00**, credit **230.00**, closing
+  **770.00**; 3000 opening **(1,000.00)**, no lines, closing
+  **(1,000.00)**; 6010 opening **0.00**, debit **230.00**, closing
+  **230.00**; no other accounts; total debits and credits **230.00**.
+
 - **CRS1** A custom report can start from every standard report (Jess asked
   on 6 Nov 2026; not yet reviewed). Trial balance, stock valuation, bank
   reconciliation, budget vs actual and changes in equity start as list
