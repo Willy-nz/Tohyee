@@ -1,5 +1,6 @@
 "use client";
 
+import { useSaveAsCustomReport } from "@/components/reports/save-as-custom-report";
 import Link from "next/link";
 import { Fragment, useState } from "react";
 import { Money } from "@/components/books";
@@ -529,6 +530,7 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
   const [tracking, setTracking] = useState("");
   const [draftTracking, setDraftTracking] = useState("");
   const draftChosen = budgets.data?.budgets.find((budget) => budget.id === (draftBudget ?? chosen));
+  const save = useSaveAsCustomReport(organisationId, "budget_vs_actual", { budgetId: chosen, from: dates.from, to: dates.to });
   const report = useApiData<BudgetVsActual>(chosen ? "/api/reports/budget-vs-actual" : null, {
     organisationId,
     budgetId: chosen,
@@ -587,7 +589,11 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
             </>
           }
           info={<>Budgets are by month, so the dates cover whole months. Variance is actual less budget, so on costs a positive variance is over budget.</>}
-          more={[{ label: "Print", onSelect: () => window.print() }, ...(data ? [{ label: "Open the budget", href: `/operations/budgets/${data.budget.id}` }] : [])]}
+          more={[
+            { label: "Print", onSelect: () => window.print() },
+            ...(data ? [{ label: "Open the budget", href: `/operations/budgets/${data.budget.id}` }] : []),
+            ...(save.item ? [save.item] : []),
+          ]}
           exportProps={
             data
               ? {

@@ -58,6 +58,18 @@ type Loaded = { report: CustomReport; figures: AnyCustomReportFigures };
 
 const pageHref = (id: string) => `/operations/reports/custom/${id}`;
 
+/** What each starting point gives (CRS1). */
+const START_TEXT: Partial<Record<CustomReportBase, string>> = {
+  profit_and_loss: "Revenue, cost of sales, gross profit, other income, expenses and net profit.",
+  balance_sheet: "Assets, liabilities, net assets, equity, earnings and total equity.",
+  cash_flows: "Operating, investing and financing, then the net change and cash at the start and end.",
+  trial_balance: "Every account's debit or credit balance at the end of this month.",
+  inventory_valuation: "Each stock item's quantity, average cost and value today.",
+  bank_reconciliation: "Your first bank account at the end of this month. Save one from the Bank reconciliation report to choose the account.",
+  budget_vs_actual: "Your latest budget against actuals this financial year. Save one from the Budget vs actual report to choose the budget.",
+  changes_in_equity: "Equity at the start, profit, owner money in and out, and equity at the end.",
+};
+
 export function StartCustomReport({ organisationId }: { organisationId: string }) {
   const router = useRouter();
   const { can } = useWorkspace();
@@ -65,13 +77,28 @@ export function StartCustomReport({ organisationId }: { organisationId: string }
   const [busy, setBusy] = useState<CustomReportBase | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function start(base: CustomReportBase) {
+  const [ledgerKey] = useState(() => newIdempotencyKey("custom-report"));
+
+  async function start(base: CustomReportBase, generalLedger = false) {
     setBusy(base);
     setError(null);
+    const periodEnd = lastDayOfMonth(todayInBrowser());
     try {
       const result = await api<{ report: CustomReport }>("/api/custom-reports", {
         method: "POST",
-        body: { organisationId, source: "ui", idempotencyKey: keys[base], base, periodEnd: lastDayOfMonth(todayInBrowser()) },
+        body: generalLedger
+          ? {
+              organisationId,
+              source: "ui",
+              idempotencyKey: ledgerKey,
+              base,
+              layout: {
+                title: "General ledger",
+                filters: { from: null, to: periodEnd, accountId: null, trackingCategoryId: null, trackingValueId: null },
+                columns: ["date", "source", "description", "debit", "credit", "balance"],
+              },
+            }
+          : { organisationId, source: "ui", idempotencyKey: keys[base], base, periodEnd },
       });
       router.push(pageHref(result.report.id));
     } catch (caught) {
@@ -92,20 +119,28 @@ export function StartCustomReport({ organisationId }: { organisationId: string }
           <div key={base} className={ui.stat}>
             <div className={ui.statLabel}>Start from</div>
             <div className={ui.statValue}>{CUSTOM_REPORT_BASES[base]}</div>
-            <p className={ui.muted}>
-              {base === "profit_and_loss"
-                ? "Revenue, cost of sales, gross profit, other income, expenses and net profit."
-                : base === "balance_sheet"
-                  ? "Assets, liabilities, net assets, equity, earnings and total equity."
-                  : base === "cash_flows"
-                    ? "Operating, investing and financing, then the net change and cash at the start and end."
-                    : "Save the report's filters and columns as a new editable custom report."}
-            </p>
+            <p className={ui.muted}>{START_TEXT[base] ?? "Save the report's filters and columns as a new editable custom report."}</p>
             <Button onClick={() => void start(base)} disabled={busy !== null}>
               {busy === base ? "Starting…" : "Start from this"}
             </Button>
           </div>
         ))}
+        <div className={ui.stat}>
+          <div className={ui.statLabel}>Start from</div>
+          <div className={ui.statValue}>General ledger</div>
+          <p className={ui.muted}>Every account with a balance or lines this financial year: opening, lines and closing.</p>
+          <Button onClick={() => void start("account_transactions", true)} disabled={busy !== null}>
+            Start from this
+          </Button>
+        </div>
+        <div className={ui.stat}>
+          <div className={ui.statLabel}>Start from</div>
+          <div className={ui.statValue}>Annual financial statements</div>
+          <p className={ui.muted}>Built from your profit and loss, balance sheet and cash flows layouts: edit them with Edit layout beside each statement.</p>
+          <Link className={`${ui.button} ${ui.secondary}`} href="/operations/reports?report=statements">
+            Open the statements
+          </Link>
+        </div>
       </div>
     </Card>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { useSaveAsCustomReport } from "@/components/reports/save-as-custom-report";
 import { useState } from "react";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -70,6 +71,7 @@ export function ChangesInEquityReport({ organisationId }: { organisationId: stri
   const yearEndMonth = useYearEndMonth(organisationId);
   const [dates, setDates] = usePeriod();
   const report = useApiData<ChangesInEquity>("/api/reports/changes-in-equity", { organisationId, from: dates.from, to: dates.to });
+  const save = useSaveAsCustomReport(organisationId, "changes_in_equity", { from: dates.from, to: dates.to });
   const data = report.data;
   const title = "Statement of changes in equity";
   const period = data ? statementPeriod(data.from, data.to, yearEndMonth) : "";
@@ -84,7 +86,7 @@ export function ChangesInEquityReport({ organisationId }: { organisationId: stri
           yearEndMonth={yearEndMonth}
           onUpdate={setDates}
           busy={report.loading}
-          more={[print]}
+          more={[print, ...(save.item ? [save.item] : [])]}
           exportProps={data ? { organisationId, report: "changes-in-equity", title, period, style: "statement", tables: [{ id: "changes-in-equity-report" }] } : null}
         />
       }

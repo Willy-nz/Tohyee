@@ -13717,6 +13717,20 @@ Claude's calls, not yet reviewed. No migration.
 1558. **The phone's queue keeps the order things were saved in.** A new
       item is stamped just after the newest one, so two saved in the same
       millisecond, or after the clock was put back, still sync in order.
+
+### Every report as a custom report starting point (7 Nov 2026; decision 1567)
+
+Jess: a new custom report should have all the report options.
+
+1567. **Every report can start a custom report** (CRS1, not yet reviewed).
+      Trial balance, stock valuation, bank reconciliation, budget vs actual
+      and changes in equity start as list reports of the report's own
+      figures, with columns to choose; General ledger starts as Account
+      transactions for all accounts; Annual financial statements opens its
+      report (its statements follow the layouts). From Reports › Custom the
+      date is this month's end, with the first bank account or the latest
+      budget; Save as custom report on each of those reports keeps what was
+      chosen there. Tenant migration 0263.
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

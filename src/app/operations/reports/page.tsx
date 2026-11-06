@@ -1,5 +1,6 @@
 "use client";
 
+import { useSaveAsCustomReport } from "@/components/reports/save-as-custom-report";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, type ReactNode, Suspense, useState } from "react";
@@ -20,7 +21,7 @@ import { AnnualStatementsReport } from "@/components/reports/annual-statements";
 import type { CustomReportFigures, FinancialReportBase } from "@/lib/reports/custom-layout";
 import { SalesBySalespersonReport, useSalespeople } from "@/components/salespeople";
 import { reportCategories, useTracking } from "@/components/tracking";
-import { Badge, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
+import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { formatDate, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
 import { accountTransactionsHref } from "@/lib/reports/drilldown";
 import type { ProfitAndLossSplit, SplitColumn, SplitGroup } from "@/lib/reports/financial";
@@ -345,6 +346,7 @@ function TrialBalanceReport({ organisationId }: { organisationId: string }) {
   const tracking = useTracking(organisationId).data;
   const filter = parseTrackingChoice(applied);
   const report = useApiData<TrialBalance>("/api/reports/trial-balance", { organisationId, asAt: dates.to, ...trackingQuery(filter) });
+  const save = useSaveAsCustomReport(organisationId, "trial_balance", { asAt: dates.to });
   const data = report.data;
   const drilldown = data ? { from: data.financialYearStart, to: data.asAt, ...filterDrill(filter) } : null;
   const period = data ? statementAsAt(data.asAt) : "";
@@ -363,7 +365,7 @@ function TrialBalanceReport({ organisationId }: { organisationId: string }) {
           }}
           filters={<TrackingFilterField setup={tracking} value={draft} onChange={setDraft} />}
           busy={report.loading}
-          more={[printReport]}
+          more={[printReport, ...(save.item ? [save.item] : [])]}
           info={
             data ? (
               <>
@@ -883,9 +885,20 @@ function BalanceSheetTable({ report, filter }: { report: BalanceSheet; filter: T
 
 function StockReport({ organisationId }: { organisationId: string }) {
   const report = useApiData<Valuation>("/api/reports/inventory-valuation", { organisationId });
+  const save = useSaveAsCustomReport(organisationId, "inventory_valuation", { asAt: null });
   return (
-    <Card title="Stock on hand">
+    <Card
+      title="Stock on hand"
+      actions={
+        save.allowed ? (
+          <Button variant="secondary" size="small" disabled={save.busy} onClick={() => void save.save()}>
+            {save.busy ? "Saving…" : "Save as custom report"}
+          </Button>
+        ) : null
+      }
+    >
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
+      {save.error ? <Notice tone="error">{save.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {report.data ? (
         <ReportExport
