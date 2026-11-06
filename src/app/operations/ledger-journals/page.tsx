@@ -382,7 +382,7 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
   const journals = list.data?.journals ?? [];
   const pager =
     list.data && list.data.pages > 1 ? (
-      <div className={ui.rowButtons} role="navigation" aria-label="Journal pages">
+      <div className={ui.rowButtons} role="navigation" aria-label="Journal pages" style={{ alignItems: "center" }}>
         <Button variant="secondary" size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
           Previous
         </Button>
