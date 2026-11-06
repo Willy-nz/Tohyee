@@ -13652,6 +13652,18 @@ common NZ practice, not yet reviewed. No migration.
       but its date, quality, legend and attribution are kept, and the map
       says the picture was too big to keep on the device. Earlier dates
       are then kept only while everything fits.
+### Opening a bank transaction from a report (7 Nov 2026; decision 1565)
+
+Jess: clicking an account transaction took her to the reconcile screen, not
+the transaction, so she couldn't edit it.
+
+1565. **A bank transaction links to itself.** In Account transactions, the
+      journal report and anything else that names a journal's source, a bank
+      transaction opens `/operations/bank-transactions/<id>`. That opens its
+      bank account's Transactions tab with the transaction first,
+      highlighted, and Recode open (bookkeepers and up), even if it's older
+      than the 200 listed. Transfers still open their bank account.
+
 ### Tests that hung on CI (6 Nov 2026; decisions 1557-1558)
 
 Claude's calls, not yet reviewed. No migration.
