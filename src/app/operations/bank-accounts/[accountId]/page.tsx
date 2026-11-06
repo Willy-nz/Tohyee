@@ -2,8 +2,8 @@
 
 import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { FeedBadge } from "@/components/bank/common";
 import { BatchesPanel } from "@/components/bank/batches";
 import { ProposalsPanel } from "@/components/bank/proposals";
@@ -34,7 +34,10 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
   const detail = useApiData<{ bankAccount: BankAccount }>(`/api/bank-accounts/${accountId}`, { organisationId });
   const { can, current } = useWorkspace();
   const usageData = useApiData<{ account: UsageAccount }>(`/api/bank-accounts/${accountId}/usage`, { organisationId });
-  const [tab, setTab] = useState<Tab>("reconcile");
+  const params = useSearchParams();
+  // ?tab=transactions&transaction=<id> opens one bank transaction (decision 1565).
+  const [tab, setTab] = useState<Tab>(() => (TABS.find((entry) => entry === params.get("tab")) ?? "reconcile"));
+  const focusTransactionId = params.get("transaction");
   const [changingUse, setChangingUse] = useState(false);
 
   if (detail.error) return <Notice tone="error">{detail.error}</Notice>;
@@ -189,7 +192,7 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
             <FileFeedsPanel organisationId={organisationId} account={account} onChanged={detail.reload} />
           </>
         ) : null}
-        {tab === "transactions" ? <TransactionsPanel organisationId={organisationId} account={account} /> : null}
+        {tab === "transactions" ? <TransactionsPanel organisationId={organisationId} account={account} focusTransactionId={focusTransactionId} /> : null}
         {tab === "batches" ? <BatchesPanel organisationId={organisationId} accountId={account.id} onChanged={detail.reload} /> : null}
       </Card>
     </>
@@ -200,9 +203,11 @@ export default function BankAccountPage() {
   const { accountId } = useParams<{ accountId: string }>();
   return (
     <Page>
-      <RequireOrganisation>
-        {(organisationId) => <BankAccountView key={`${organisationId}:${accountId}`} organisationId={organisationId} accountId={accountId} />}
-      </RequireOrganisation>
+      <Suspense fallback={null}>
+        <RequireOrganisation>
+          {(organisationId) => <BankAccountView key={`${organisationId}:${accountId}`} organisationId={organisationId} accountId={accountId} />}
+        </RequireOrganisation>
+      </Suspense>
     </Page>
   );
 }

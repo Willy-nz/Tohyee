@@ -13652,6 +13652,18 @@ common NZ practice, not yet reviewed. No migration.
       but its date, quality, legend and attribution are kept, and the map
       says the picture was too big to keep on the device. Earlier dates
       are then kept only while everything fits.
+### Opening a bank transaction from a report (7 Nov 2026; decision 1565)
+
+Jess: clicking an account transaction took her to the reconcile screen, not
+the transaction, so she couldn't edit it.
+
+1565. **A bank transaction links to itself.** In Account transactions, the
+      journal report and anything else that names a journal's source, a bank
+      transaction opens `/operations/bank-transactions/<id>`. That opens its
+      bank account's Transactions tab with the transaction first,
+      highlighted, and Recode open (bookkeepers and up), even if it's older
+      than the 200 listed. Transfers still open their bank account.
+
 ### Annual financial statements as a report (6 Nov 2026; decisions 1559-1561)
 
 Jess asked for the statements to be "an option like P&L or balance sheet",
@@ -14156,3 +14168,18 @@ The separate combining control is a feature choice labelled "Use records in
 comparisons, Analytics and AI", with external AI access explained. Both features
 remain off by default; existing admin/farm access and deletion controls remain.
 Tenant migration 0261 removes the old database requirement for permission details.
+
+### The Journals list (7 Nov 2026; decision 1564)
+
+Jess: the list showed about 4,000 entries; only actual journals should
+show, 100 a page, and clicking one should let her edit it.
+
+1564. **Manual journals, 100 a page.** Accounting › Journals lists manual
+      journals and their corrections' replacements by default (not the
+      reversals a correction makes, and not journals from invoices, bank
+      lines, payments and the rest, which are still under Kind). It shows
+      100 a page with Previous, Next and the count. Clicking one opens it
+      above the list and scrolls to it. A manual journal has **Edit this
+      journal**: a posted journal isn't changed in place, so saving posts a
+      correction (a reversal and the new version), as before. The API takes
+      `page` and `pageSize` and gives `total`; `beforeId` still works.

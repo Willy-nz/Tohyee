@@ -3,7 +3,7 @@
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Money, RequireOrganisation, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { JournalDrafts } from "@/components/journals/journal-drafts";
@@ -12,7 +12,6 @@ import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
-import { api, errorMessage } from "@/lib/client/api";
 import { formatDate, formatDateTime, formatMoney, personName } from "@/lib/format";
 import type { Journal, JournalWithLines } from "@/lib/ledger/journals";
 
@@ -117,8 +116,8 @@ function JournalDetail({
       description={`${formatDate(journal.postingDate)} · posted by ${personName(journal, "createdBy") ?? "unknown"} on ${formatDateTime(journal.createdAt)}`}
       actions={
         canCorrect && can("bookkeeper") ? (
-          <Button variant="secondary" onClick={() => onCorrect(journal)}>
-            Correct this journal
+          <Button variant="secondary" onClick={() => onCorrect(journal)} title="A posted journal isn't changed in place: saving posts a correction (a reversal and the new version), so the history is kept.">
+            Edit this journal
           </Button>
         ) : null
       }
@@ -356,47 +355,50 @@ type Filters = { from: string; to: string; reference: string; kind: string };
 function Journals({ organisationId, initialJournalId }: { organisationId: string; initialJournalId: string | null }) {
   const { can } = useWorkspace();
   const accounts = useAccounts(organisationId);
-  const [filters, setFilters] = useState<Filters>({ from: "", to: "", reference: "", kind: "" });
+  // Manual journals by default, 100 a page (decision 1564).
+  const [filters, setFilters] = useState<Filters>({ from: "", to: "", reference: "", kind: "journals" });
   const [applied, setApplied] = useState<Filters>(filters);
-  const list = useApiData<{ journals: Journal[]; nextBeforeId: string | null }>("/api/ledger/journals", {
+  const [page, setPage] = useState(1);
+  const list = useApiData<{ journals: Journal[]; page: number; pages: number; total: number }>("/api/ledger/journals", {
     organisationId,
     postingDateFrom: applied.from,
     postingDateTo: applied.to,
     referenceQuery: applied.reference,
     kind: applied.kind,
+    page: String(page),
+    pageSize: "100",
   });
-  const [more, setMore] = useState<{ journals: Journal[]; nextBeforeId: string | null } | null>(null);
-  const [moreError, setMoreError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(initialJournalId);
+  const detailRef = useRef<HTMLDivElement>(null);
+  // Opening a journal from the list scrolls up to it.
+  useEffect(() => {
+    if (selected) detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [selected]);
   const [composing, setComposing] = useState(false);
   const [correcting, setCorrecting] = useState<JournalWithLines | null>(null);
   const [posted, setPosted] = useState<string | null>(null);
   const [draftsVersion, setDraftsVersion] = useState(0);
 
-  const journals = [...(list.data?.journals ?? []), ...(more?.journals ?? [])];
-  const nextBeforeId = more ? more.nextBeforeId : (list.data?.nextBeforeId ?? null);
-
-  async function loadMore() {
-    if (!nextBeforeId) return;
-    try {
-      const page = await api<{ journals: Journal[]; nextBeforeId: string | null }>("/api/ledger/journals", {
-        query: {
-          organisationId,
-          postingDateFrom: applied.from,
-          postingDateTo: applied.to,
-          referenceQuery: applied.reference,
-          kind: applied.kind,
-          beforeId: nextBeforeId,
-        },
-      });
-      setMore((current) => ({ journals: [...(current?.journals ?? []), ...page.journals], nextBeforeId: page.nextBeforeId }));
-    } catch (caught) {
-      setMoreError(errorMessage(caught));
-    }
-  }
+  const journals = list.data?.journals ?? [];
+  const pager =
+    list.data && list.data.pages > 1 ? (
+      <div className={ui.rowButtons} role="navigation" aria-label="Journal pages" style={{ alignItems: "center" }}>
+        <Button variant="secondary" size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+          Previous
+        </Button>
+        <span className={ui.muted}>
+          Page {list.data.page} of {list.data.pages} · {list.data.total.toLocaleString("en-NZ")} journals
+        </span>
+        <Button variant="secondary" size="small" disabled={page >= list.data.pages} onClick={() => setPage(page + 1)}>
+          Next
+        </Button>
+      </div>
+    ) : list.data ? (
+      <p className={ui.muted}>{list.data.total.toLocaleString("en-NZ")} journals</p>
+    ) : null;
 
   function refresh(select: string) {
-    setMore(null);
+    setPage(1);
     list.reload();
     setSelected(select);
   }
@@ -465,6 +467,7 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
         onPosted={(id) => refresh(id)}
       />
 
+      <div ref={detailRef} style={{ scrollMarginTop: 72 }} />
       {selected ? (
         <JournalDetail
           key={selected}
@@ -483,12 +486,12 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
         <RecordExtrasPanel key={`journal-${selected}`} organisationId={organisationId} recordType="ledger_journal" recordId={selected} />
       ) : null}
 
-      <Card title="Journals">
+      <Card title="Journals" description="Click a journal to open it. Manual journals can be edited: saving posts a correction, so the history is kept.">
         <form
           className={ui.inlineForm}
           onSubmit={(event) => {
             event.preventDefault();
-            setMore(null);
+            setPage(1);
             setApplied(filters);
           }}
         >
@@ -503,8 +506,9 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
           </Field>
           <Field label="Kind">
             <select value={filters.kind} onChange={(event) => setFilters({ ...filters, kind: event.target.value })}>
-              <option value="">All</option>
-              <option value="manual">Manual</option>
+              <option value="journals">Manual journals</option>
+              <option value="manual">Entered by hand (no corrections)</option>
+              <option value="">Everything: invoices, bank, payments and more</option>
               <option value="inventory">Stock</option>
               <option value="fx_revaluation">FX revaluation</option>
               <option value="invoice">Invoices</option>
@@ -530,7 +534,7 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
           </Button>
         </form>
         {list.error ? <Notice tone="error">{list.error}</Notice> : null}
-        {moreError ? <Notice tone="error">{moreError}</Notice> : null}
+        {pager}
         {list.data && journals.length === 0 ? (
           <Empty>No journals match.</Empty>
         ) : (
@@ -569,13 +573,7 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
             </table>
           </div>
         )}
-        {nextBeforeId ? (
-          <div>
-            <Button variant="secondary" onClick={() => void loadMore()}>
-              Load older journals
-            </Button>
-          </div>
-        ) : null}
+        {pager}
       </Card>
     </>
   );

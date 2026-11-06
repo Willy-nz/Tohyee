@@ -375,22 +375,37 @@ function VoidButton({ path, label, onVoided, organisationId }: { path: string; l
 }
 
 /** Spend and receive money and transfers posted on the account. */
-export function TransactionsPanel({ organisationId, account }: { organisationId: string; account: BankAccount }) {
+export function TransactionsPanel({ organisationId, account, focusTransactionId = null }: { organisationId: string; account: BankAccount; focusTransactionId?: string | null }) {
   const { can, current } = useWorkspace();
-  const transactions = useApiData<{ bankTransactions: BankTransaction[] }>("/api/bank-transactions", {
+  const listed = useApiData<{ bankTransactions: BankTransaction[] }>("/api/bank-transactions", {
     organisationId,
     accountId: account.id,
     limit: 200,
   });
+  // A transaction opened from a report (decision 1565): shown first, even if it's older than the 200 listed, with Recode open.
+  const focus = useApiData<{ bankTransaction: BankTransaction }>(focusTransactionId ? `/api/bank-transactions/${focusTransactionId}` : null, { organisationId });
+  const focused = focus.data?.bankTransaction ?? null;
+  const transactions = {
+    ...listed,
+    data: listed.data
+      ? { bankTransactions: focused ? [focused, ...listed.data.bankTransactions.filter((entry) => entry.id !== focused.id)] : listed.data.bankTransactions }
+      : null,
+  };
+  const [openedFocus, setOpenedFocus] = useState<string | null>(null);
   const transfers = useApiData<{ transfers: BankTransfer[] }>("/api/bank-transfers", { organisationId, accountId: account.id, limit: 200 });
   const tracking = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
   const [recoding, setRecoding] = useState<string | null>(null);
   const [recoded, setRecoded] = useState<string | null>(null);
+  if (focused && openedFocus !== focused.id) {
+    setOpenedFocus(focused.id);
+    if (focused.status === "posted" && can("bookkeeper")) setRecoding(focused.id);
+  }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
       {recoded ? <Notice tone="success">{recoded}</Notice> : null}
+      {focus.error ? <Notice tone="error">{focus.error}</Notice> : null}
       <p className={ui.muted}>
         Posted from reconciling. To undo one, unreconcile its line first (Statement lines tab), then void it here: voiding posts the exact
         reversal on the date you choose.
@@ -416,7 +431,10 @@ export function TransactionsPanel({ organisationId, account }: { organisationId:
             <tbody>
               {transactions.data.bankTransactions.map((transaction) => (
                 <Fragment key={transaction.id}>
-                <tr>
+                <tr
+                  className={transaction.id === focused?.id ? ui.selectedRow : undefined}
+                  ref={transaction.id === focused?.id ? (row) => row?.scrollIntoView({ block: "center" }) : undefined}
+                >
                   <td style={{ whiteSpace: "nowrap" }}>{formatDate(transaction.date)}</td>
                   <td>
                     {transaction.contactName}
