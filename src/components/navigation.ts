@@ -580,13 +580,14 @@ export const FARM_MENUS: Menu[] = [
     module: "farming",
     // Its first link (Farms and paddocks) is drawn as a map; the menu is the whole farm.
     art: "farm",
-    area: ["/operations/farm/more", "/operations/farm/offline", "/operations/farm/security", "/operations/farm/mobs", "/operations/farm/weather", "/operations/farming"],
+    area: ["/operations/farm/more", "/operations/farm/offline", "/operations/farm/security", "/operations/farm/mobs", "/operations/farm/animals", "/operations/farm/timeline", "/operations/farm/weather", "/operations/farming"],
     groups: [
       {
         heading: "Paddocks and feed",
         links: [
           { href: "/operations/farming", label: "Farms and paddocks" },
           { href: "/operations/farm/mobs", label: "Mobs" },
+          { href: "/operations/farm/animals", label: "Animals" },
           { href: "/operations/farming/pasture", label: "Pasture and feed" },
           { href: "/operations/farming/rainfall", label: "Rainfall" },
           { href: "/operations/farm/weather", label: "Weather forecast" },
@@ -601,6 +602,7 @@ export const FARM_MENUS: Menu[] = [
         links: [
           { href: "/operations/farming/calendar", label: "Farm calendar" },
           { href: "/operations/farming/tasks", label: "Tasks" },
+          { href: "/operations/farm/timeline", label: "Farm timeline" },
           { href: "/operations/farm/tractor", label: "Tractor mode" },
           { href: "/operations/farm/security", label: "Security" },
           { href: "/operations/farming/notebook", label: "Farm notebook" },

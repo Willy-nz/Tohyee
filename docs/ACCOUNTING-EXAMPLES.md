@@ -21573,3 +21573,119 @@ Records only: nothing posts or judges. Tested in
 - **BR6 Days since grazed against the round.** Last grazed 18 Oct, 25-day
   round, on 5 Nov: "18 of 25 days". Last grazed 1 Oct: "35 days since
   grazed (round 25)".
+
+## Farming: the farm timeline, grazing history import and farm words (TL1-TL5; built by Claude 5 Nov 2026, common NZ practice, not yet reviewed)
+
+Nothing here posts or changes a head count. Tested in
+`tests/integration/farm-timeline.test.ts`.
+
+- **TL1 One list.** Ewes added 1 Jun into A, moved to B 10 Jun, weighed
+  68.5 kg 11 Jun, drenched 12 Jun, scanned 140% 20 Jun, 10 sold 25 Jun; a
+  typed "Cattle" grazing in C 5-15 Jun; A sprayed 22 Jun with 7 days'
+  grazing withholding: nine lines, newest first, the spray saying "not
+  safe to graze for 7 days".
+- **TL2 Filters.** The Ewes alone: their six. Paddock A: the spray, the
+  move out of A and the Ewes added into A. Paddock B, treatments only: the
+  drench given while the Ewes were in B. The latest 3: three lines and
+  "more".
+- **TL3 Grazing history.** Steers (a mob record) A 1-10 Mar and B 10-20
+  Mar become two "moved" events; Steers in C 15-25 Mar overlaps B and is
+  refused. Typed "Heifers" in C 1-5 Mar is kept; a second Heifers row in
+  C 4-8 Mar overlaps it and is refused. A paddock not on the farm, or a
+  row with no day out, is refused with its reason.
+- **TL4 No head count change.** After the import Steers still have 50
+  head and aren't in a paddock now; the file can't be imported twice.
+- **TL5 Farm words.** "Herd" for mob, "Milkers" for mixed-age dairy cows
+  and "Shift" for move show on the screens only; the mob's class is still
+  mixed-age cows. An unknown word is refused; a blank goes back to the
+  standard word; only admins change them.
+
+## Farming: animals, weights and the head count (AN1-AN9; built by Claude 5 Nov 2026, common NZ practice, not yet reviewed)
+
+The mob's head is the one count (decisions 1481-1486). Tagging changes no
+head and no livestock movement; sales and deaths of tagged animals go
+through the mob's own steps. Tested in `tests/integration/farm-animals.test.ts`
+and `tests/unit/farm-animals.test.ts`.
+
+- **AN1 An animal.** Cow 214, dairy cattle, EID 982000123456789, female,
+  Friesian, born 1 Aug 2021. A second animal tagged 214, or another with
+  that EID, on the farm is refused. Calf 301 with dam "214" typed links to
+  cow 214.
+- **AN2 Tagging changes no head.** Milkers (3 mixed-age cows) with 214,
+  301 and 302 tagged in: still 3 head, **3 of 3 head tagged**, and **no
+  livestock movement**. A fourth tag into Milkers is refused: record more
+  head on the mob first. A sheep can't go in a dairy mob.
+- **AN3 N of M.** The mob's line and card say "3 of 3 head tagged".
+- **AN4 A sale or death of tagged animals.** Livestock on, 300 mixed-age
+  cows in the opening. Milkers, 10 head with tags 11, 12 and 13, sell 8
+  for $14,400.00 on 10 Aug: with no tag chosen it's refused (2 head would
+  be left with 3 tagged); with 11 chosen it's **one sale movement of 8**,
+  the mob has 2 head and 2 tagged, and 11 is sold on 10 Aug. A count to 1
+  is refused (2 tagged). A death of 1 naming 12 marks 12 dead; the year
+  shows **8 sold and 1 died**. Choosing 2 tags for 1 head is refused, and
+  so is the last head going while 13 is still in the mob. 12 can't be set
+  dead on its own: record the death on the mob.
+- **AN5 Moving tagged animals.** Herd 1 (5) with 21 and 22, Herd 2 (4), both
+  mixed-age cows. 21 moves to Herd 2 on 5 Jul: **Herd 1 has 4 and Herd 2
+  has 5; no livestock movement**. Moving 22 to the rising two-year heifers
+  is refused (another class). Correcting 22 into Herd 2 and back changes no
+  head. Splitting 2 from Herd 2 into Herd 3 with 21 chosen: Herd 2 has 3
+  and none tagged, Herd 3 has 2 with 21. Merging Herd 3 into Herd 1: 6
+  head, 2 tagged. 21's mobs: Herd 1 (tagged, moved out), Herd 2 (moved in,
+  split out), Herd 3 (split in, merged out), Herd 1 (merged in, now).
+- **AN6 Missing.** S3 missing on 20 Aug stays in Steers, counted, until a
+  death, sale or count; found puts it back on farm.
+- **AN7 A weigh session from tags.** Steers: S1 412.0, S2 430.5 and S3
+  401.0 kg on 1 Sep: the mob's weighing is **414.5 kg average of 3**
+  (1,243.5 / 3). On 1 Oct quick entry weighs S1 436.0 and S2 451.0, then
+  Finish: **443.5 kg average of 2, +29.0 kg over 30 days**. Sent again,
+  quick entry's weight isn't kept twice; a second Finish finds no tag
+  weights left.
+- **AN8 Gain per day.** S1 412.0 on 1 Sep and 436.0 on 1 Oct: **+24.0 kg
+  over 30 days, 0.80 kg a day**.
+- **AN9 Importing animals.** Ewes, 3 head. A file of E1-E5 for the Ewes mob:
+  E1, E2 (dam E1, in the file) and E3 (dam X9, not on the register) import,
+  tagged into Ewes, which keeps **3 head, 3 tagged**; E4 is refused (no
+  untagged head left) and E5's sex "Q" isn't known. X9 is kept as typed.
+  The same file again is refused.
+
+## Farming: body condition scores and AI suggestions (BCS1-BCS8; built by Claude 5 Nov 2026, common NZ practice, not yet reviewed)
+
+Records only: nothing posts (decisions 1487-1494). Tested in
+`tests/integration/farm-animals.test.ts` and `tests/unit/farm-animals.test.ts`.
+
+- **BCS1 Scales per kind.** Dairy and beef cattle 1-10, sheep, deer and
+  goats 1-5, in half points: 4.5 is kept, 4.3 is refused, 6 on a 1-5 scale
+  is refused.
+- **BCS2 A tally.** 50 cows: 12 at 4.0, 30 at 4.5 and 8 at 5.0: 223.0 / 50 =
+  4.46, **BCS 4.5 average of 50 (4.0 to 5.0)**. A tally of 51 for a mob of
+  50 is refused. Ewes: 20 at 2.5, 60 at 3.0 and 20 at 3.5 average 3.0, with
+  20 below the year-round 3.0.
+- **BCS3 An average.** Ewes 2.85 of 120 scored: **2.9**.
+- **BCS4 Trend and targets.** Cow 7 scored 4.5 on 1 Jul (in Cows) and Cows'
+  tally on 15 Jul: Cows' trend is **4.5 (tagged, 1 Jul) and 4.5 (mob, 15
+  Jul)**, with DairyNZ's targets (calving 5.0 and 5.5; mating at least 4.0
+  and 4.5). Goats have no targets. Changing dairy cattle to 1-5 for the
+  farm (admins only): no targets, no trend points, and the old scores keep
+  1-10.
+- **BCS5 Quick entry.** A score and/or a weight for a tag, through the
+  device's queue; sent again with the same operation id, nothing is kept
+  twice.
+- **BCS6 Importing scores and weights.** A file with E1 3.5 and 68.2 kg,
+  e2 2.5, E9 (not on the register), E3 6 (not on the 1-5 scale) and E3
+  61 kg: **2 scores and 2 weights**; E9 is listed as unmatched and nothing
+  is added.
+- **BCS7 AI suggestions.** Two photos of cow 9 kept to score. The AI
+  suggests 4.5 and about 520 kg for one, and 3.0 for the other. Until
+  decided: **no score, no weight, nothing in the mob's trend**. The first
+  is accepted changed to 5.0 with its weight: a BCS of **5.0, "From an AI
+  suggestion (4.5), changed; accepted by …"**, and a weight of 520.0 kg
+  marked as from a photo. The second is declined: nothing is recorded. A
+  second suggestion for a photo, or a score off the half points, is
+  refused. A photo scored from a suggestion can't be a reference.
+- **BCS8 Reference photos.** Cow 5 scored 5.0 by eye with a photo: marked a
+  reference for 5.0. A photo of Cows' average 4.5 needs a score typed: 4.0.
+  The farm's dairy references are **4.0 and 5.0**. The AI looks at a new
+  photo of cow 5 with both references, and its suggestion names them.
+  Another organisation has **no references, no photos to score**, and can't
+  suggest on this one.

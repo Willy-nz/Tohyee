@@ -1,10 +1,17 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BigNumber, Choices, DayChoice, Step } from "@/components/farm-log";
 import { FarmRowList } from "@/components/farm-rows";
 import { BreedingFlow, breedingTypesFor, MobBreeding, PlanRoundFlow, RotationCard, useRotation } from "@/components/farm-planning";
+import { FarmTermsCard, useFarmTerms } from "@/components/farm-timeline";
 import { ProductStockCard, TreatFlow, TreatmentsCard } from "@/components/farm-treatments";
+import { MobBcsPanel } from "@/components/farm-bcs";
+import { taggedText } from "@/lib/farming/animal-rules";
+import type { Animal } from "@/lib/farming/animals";
+import { classTerm, type FarmTerms, term } from "@/lib/farming/farm-terms";
 import { BREEDING_LABELS, type BreedingType } from "@/lib/farming/planning-rules";
 import type { RotationPlan } from "@/lib/farming/planning";
 import { useCanRecordFarmWork } from "@/components/farm-selector";
@@ -44,11 +51,12 @@ function useMobs(organisationId: string, farmId: string) {
   return useApiData<{ mobs: Mob[] }>(`/api/farming/farms/${farmId}/mobs`, { organisationId });
 }
 
-export function mobLine(mob: Mob, today: string, plan: RotationPlan | null = null): string[] {
+export function mobLine(mob: Mob, today: string, plan: RotationPlan | null = null, terms: FarmTerms = {}): string[] {
   const next = plan?.nextByMob[mob.id];
   return [
     `${mob.head.toLocaleString("en-NZ")} head`,
-    mob.className,
+    taggedText(mob.tagged, mob.head) ?? "",
+    term(terms, `class:${mob.kind}.${mob.classCode}`, mob.className),
     mob.paddock ? `${paddockLabel(mob.paddock.name)} since ${shortDate(mob.paddock.inOn, today)}` : "Not in a paddock",
     mob.lastWeight ? `${mob.lastWeight.averageKg} kg ${shortDate(mob.lastWeight.date, today)}` : "",
     withholdingText(mob.withholding, today, (iso) => shortDate(iso, today)) ?? "",
@@ -73,6 +81,7 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
   const mob = list.find((entry) => entry.id === selected) ?? null;
   const [version, setVersion] = useState(0);
   const rotation = useRotation(organisationId, farm.id, version);
+  const terms = useFarmTerms(organisationId);
   const reload = () => {
     mobs.reload();
     setVersion((value) => value + 1);
@@ -122,7 +131,7 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
       <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
         {done ? <Notice tone="success">{done}</Notice> : null}
         <Card
-          title="Mobs"
+          title={term(terms, "mobs")}
           actions={
             canRecord ? (
               <Button
@@ -131,7 +140,7 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
                   setFlow({ kind: "add" });
                 }}
               >
-                Add a mob
+                Add a {term(terms, "mob").toLowerCase()}
               </Button>
             ) : null
           }
@@ -150,7 +159,7 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
                     {entry.name}
                   </span>
                 ),
-                parts: mobLine(entry, today, rotation.data?.plan ?? null),
+                parts: mobLine(entry, today, rotation.data?.plan ?? null, terms),
                 onOpen: () => {
                   setSelected(entry.id);
                   requestAnimationFrame(() => document.getElementById("mob-card")?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -164,9 +173,11 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
             <MobCard
               key={`${mob.id}:${mob.head}:${mob.classCode}:${mob.paddock?.id ?? ""}:${mob.lastWeight?.date ?? ""}`}
               organisationId={organisationId}
+              farmName={farm.name}
               mob={mob}
               canRecord={canRecord}
               canBooks={can("bookkeeper")}
+              terms={terms}
               mobs={list}
               onChanged={(message) => {
                 setDone(message);
@@ -190,13 +201,15 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
         <ProductStockCard organisationId={organisationId} farmId={farm.id} version={version} />
         {can("bookkeeper") ? <TypedMobs organisationId={organisationId} farmId={farm.id} onMade={reload} /> : null}
         {can("bookkeeper") ? <ImportMobs organisationId={organisationId} farmId={farm.id} onImported={reload} /> : null}
+        <FarmTermsCard organisationId={organisationId} />
       </div>
     </div>
   );
 }
 
-function MobCard({ organisationId, mob, mobs, canRecord, canBooks, onAction, onChanged, onClose }: { organisationId: string; mob: Mob; mobs: Mob[]; canRecord: boolean; canBooks: boolean; onAction: (action: MobAction | "treat" | `breeding:${BreedingType}`) => void; onChanged: (message: string) => void; onClose: () => void }) {
+function MobCard({ organisationId, farmName, mob, mobs, canRecord, canBooks, terms, onAction, onChanged, onClose }: { organisationId: string; farmName: string; mob: Mob; mobs: Mob[]; canRecord: boolean; canBooks: boolean; terms: FarmTerms; onAction: (action: MobAction | "treat" | `breeding:${BreedingType}`) => void; onChanged: (message: string) => void; onClose: () => void }) {
   const today = todayInBrowser();
+  const router = useRouter();
   const detail = useApiData<{ mob: Mob; events: MobEvent[]; weights: MobWeight[] }>(`/api/farming/mobs/${mob.id}`, { organisationId });
   const actions = MOB_ACTIONS.filter((action) => (BOOKKEEPER_ACTIONS.includes(action) ? canBooks : canRecord)).filter((action) => action !== "births" || isBirthClass(mob.kind, mob.classCode));
   const events = detail.data?.events ?? [];
@@ -211,7 +224,7 @@ function MobCard({ organisationId, mob, mobs, canRecord, canBooks, onAction, onC
         <dd>{mob.head.toLocaleString("en-NZ")}</dd>
         <dt>Class</dt>
         <dd>
-          {mob.kindName}: {mob.className}{" "}
+          {term(terms, `kind:${mob.kind}`, mob.kindName)}: {classTerm(terms, mob.kind, mob.classCode, mob.className)}{" "}
           <InfoTip label="Class">The IRD class the books count this mob in. Selling, buying, deaths, births and class changes here change the livestock head count too, when Livestock is on.</InfoTip>
         </dd>
         <dt>Paddock</dt>
@@ -220,6 +233,11 @@ function MobCard({ organisationId, mob, mobs, canRecord, canBooks, onAction, onC
         <dd>{mob.lastWeight ? `${mob.lastWeight.averageKg} kg average on ${shortDate(mob.lastWeight.date, today)}${mob.lastWeight.gain ? `, ${gainText(mob.lastWeight.gain)}` : ""}` : "Not weighed yet"}</dd>
         <dt>Stock units</dt>
         <dd>{mob.stockUnits ?? "–"}</dd>
+        <dt>Tagged</dt>
+        <dd>
+          <Link href={`/operations/farm/animals?farm=${mob.farmId}`}>{taggedText(mob.tagged, mob.head) ?? "None on the animal register"}</Link>{" "}
+          <InfoTip label="Tagged animals">Animals on the register in this mob. Tagging doesn&apos;t change the mob&apos;s head. When tagged animals are sold or die, choose their tags on the mob&apos;s step.</InfoTip>
+        </dd>
         {mob.tagColour ? (
           <>
             <dt>Tag</dt>
@@ -232,7 +250,7 @@ function MobCard({ organisationId, mob, mobs, canRecord, canBooks, onAction, onC
         <div className={styles.bigButtons} role="group" aria-label={`Actions for ${mob.name}`}>
           {main.map((action) => (
             <button key={action} type="button" className={styles.bigButton} onClick={() => onAction(action)}>
-              {action === "treat" ? "Treat" : MOB_ACTION_LABELS[action]}
+              {term(terms, `action:${action}`, action === "treat" ? "Treat" : MOB_ACTION_LABELS[action])}
             </button>
           ))}
         </div>
@@ -243,14 +261,19 @@ function MobCard({ organisationId, mob, mobs, canRecord, canBooks, onAction, onC
             label={`More actions for ${mob.name}`}
             text="More actions"
             items={[
-              ...others.map((action) => ({ label: MOB_ACTION_LABELS[action], onSelect: () => onAction(action) })),
+              ...others.map((action) => ({ label: term(terms, `action:${action}`, MOB_ACTION_LABELS[action]), onSelect: () => onAction(action) })),
+              ...(canRecord ? [{ label: "Weigh or score each tag", onSelect: () => router.push(`/operations/farm/animals/quick?farm=${mob.farmId}&mob=${mob.id}`) }] : []),
               ...(canRecord ? breedingTypesFor(mob).map((type) => ({ label: `Record ${BREEDING_LABELS[type].toLowerCase()}`, onSelect: () => onAction(`breeding:${type}`) })) : []),
             ]}
           />
         </div>
       ) : null}
+      <MobBcsPanel organisationId={organisationId} mob={mob} farm={{ id: mob.farmId, name: farmName }} />
       <MobBreeding organisationId={organisationId} mob={mob} version={`${mob.head}:${mob.classCode}`} />
       <h3>History</h3>
+      <p>
+        <Link href={`/operations/farm/timeline?farm=${mob.farmId}&mob=${mob.id}`}>Timeline for {mob.name}</Link>
+      </p>
       {detail.error ? <Notice tone="error">{detail.error}</Notice> : null}
       {events.length ? (
         <FarmRowList
@@ -345,6 +368,9 @@ export function eventText(event: MobEvent): string {
     case "merged_out":
     case "merged_in":
       return `${label} ${event.otherMobName ?? ""}: ${Math.abs(event.headChange)} head`;
+    case "animals_out":
+    case "animals_in":
+      return `${label} ${event.otherMobName ?? ""}: ${Math.abs(event.headChange)} head${event.note ? ` (${event.note})` : ""}`;
     case "reversed":
       return `${label}: ${event.headChange > 0 ? "+" : ""}${event.headChange} head${event.otherMobName ? ` (from ${event.otherMobName})` : ""}${event.note ? `, ${event.note}` : ""}`;
     case "created":
@@ -691,6 +717,7 @@ type Answers = {
   toClassCode: string;
   note: string;
   movementId: string | null;
+  animalIds: string[];
 };
 
 function stepsFor(flow: MobFlowKind): string[] {
@@ -701,14 +728,16 @@ function stepsFor(flow: MobFlowKind): string[] {
     case "weigh":
       return ["averageKg", "weighedHead", "day", "review"];
     case "deaths":
+      return ["head", "tags", "day", "review"];
     case "births":
     case "count":
       return ["head", "day", "review"];
     case "sell":
+      return ["link", "head", "tags", "amount", "day", "review"];
     case "buy":
       return ["link", "head", "amount", "day", "review"];
     case "split":
-      return ["head", "name", "paddockOptional", "day", "review"];
+      return ["head", "tags", "name", "paddockOptional", "day", "review"];
     case "merge":
       return ["into", "day", "review"];
     case "reclass":
@@ -735,7 +764,12 @@ function MobFlow({ organisationId, farm, flow, mobs, onClose }: Pick<FarmContext
   const allSteps = stepsFor(flow);
   const [linkedOnly, setLinkedOnly] = useState(false);
   // No movements to link: the question isn't asked. Linking one gives its head and date, so only the check is left.
-  const steps = allSteps.filter((entry) => entry !== "link" || (linkable.data?.movements.length ?? 0) > 0).filter((entry) => !linkedOnly || entry === "link" || entry === "review");
+  // Tagged animals that went are chosen (decision 1484); a mob with none tagged skips the question.
+  const tagged = useApiData<{ animals: Animal[] }>(mob && mob.tagged > 0 ? `/api/farming/farms/${farm.id}/animals` : null, { organisationId, mobId: mob?.id });
+  const steps = allSteps
+    .filter((entry) => entry !== "link" || (linkable.data?.movements.length ?? 0) > 0)
+    .filter((entry) => entry !== "tags" || (mob?.tagged ?? 0) > 0)
+    .filter((entry) => !linkedOnly || entry === "link" || entry === "tags" || entry === "review");
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -755,6 +789,7 @@ function MobFlow({ organisationId, farm, flow, mobs, onClose }: Pick<FarmContext
     toClassCode: "",
     note: "",
     movementId: null,
+    animalIds: [],
   });
   const set = (patch: Partial<Answers>) => setAnswers((current) => ({ ...current, ...patch }));
   const step = steps[index];
@@ -785,6 +820,7 @@ function MobFlow({ organisationId, farm, flow, mobs, onClose }: Pick<FarmContext
       if (action === "move") body.toPaddockId = answers.paddockId;
       if (action === "weigh") Object.assign(body, { averageKg: answers.averageKg, weighedHead: answers.weighedHead || null });
       if (["deaths", "births", "count", "sell", "buy", "split"].includes(action)) body.head = head;
+      if (["deaths", "sell", "split"].includes(action) && answers.animalIds.length) body.animalIds = answers.animalIds;
       if (action === "sell" || action === "buy") Object.assign(body, { amount: answers.amount || null, movementId: answers.movementId });
       if (action === "split") Object.assign(body, { name: answers.name.trim() || null, toPaddockId: answers.paddockId });
       if (action === "merge") body.intoMobId = answers.intoMobId;
@@ -835,6 +871,36 @@ function MobFlow({ organisationId, farm, flow, mobs, onClose }: Pick<FarmContext
             }}
           />
           <p className={ui.muted}>A sale or purchase is only counted once: link the movement made from its invoice or bill.</p>
+        </Step>
+      );
+    }
+    case "tags": {
+      const headNow = Number(answers.head.replace(/,/g, "")) || 0;
+      const left = mob!.head - headNow;
+      const staying = mob!.tagged - answers.animalIds.length;
+      const short = Math.max(0, staying - left);
+      const list = [...(tagged.data?.animals ?? [])].sort((a, b) => NATURAL.compare(a.tag, b.tag));
+      const tooMany = answers.animalIds.length > headNow;
+      return (
+        <Step {...frame} question={flow.kind === "action" && flow.action === "split" ? "Which tagged animals go to the new mob?" : `Which tagged animals ${flow.kind === "action" && flow.action === "sell" ? "were sold" : "died"}?`} onNext={next} nextDisabled={short > 0 || tooMany}>
+          <p className={ui.muted} style={{ margin: 0 }}>
+            {mob!.name} has {mob!.tagged} tagged of {mob!.head} head. Choose the tags that went; untagged ones need nothing.{" "}
+            <InfoTip label="Tagged animals">The mob&apos;s head is the one count. Choosing the tags keeps the animal register right: they&apos;re marked {flow.kind === "action" && flow.action === "sell" ? "sold" : flow.kind === "action" && flow.action === "split" ? "in the new mob" : "dead"} by this step.</InfoTip>
+          </p>
+          {short > 0 ? <Notice tone="warning">{left} head would be left but {staying} tagged. Choose at least {short} more.</Notice> : null}
+          {tooMany ? <Notice tone="warning">That&apos;s more tags than the {headNow} head.</Notice> : null}
+          {tagged.error ? <Notice tone="error">{tagged.error}</Notice> : null}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 6 }}>
+            {list.map((animal) => {
+              const on = answers.animalIds.includes(animal.id);
+              return (
+                <label key={animal.id} className={styles.check} style={{ minHeight: 44 }}>
+                  <input type="checkbox" checked={on} onChange={() => set({ animalIds: on ? answers.animalIds.filter((id) => id !== animal.id) : [...answers.animalIds, animal.id] })} /> {animal.tag}
+                </label>
+              );
+            })}
+          </div>
+          <p className={ui.muted}>{answers.animalIds.length} chosen.</p>
         </Step>
       );
     }
@@ -961,6 +1027,7 @@ function MobFlow({ organisationId, farm, flow, mobs, onClose }: Pick<FarmContext
         if (["deaths", "births", "count", "sell", "buy", "split"].includes(flow.action)) lines.push([flow.action === "count" ? "Head now" : "Head", answers.head]);
         if ((flow.action === "sell" || flow.action === "buy") && answers.amount) lines.push(["Amount excl. GST", `$${answers.amount}`]);
         if (answers.movementId) lines.push(["Books", "Linked to the livestock movement chosen"]);
+        if (answers.animalIds.length) lines.push(["Tags", (tagged.data?.animals ?? []).filter((animal) => answers.animalIds.includes(animal.id)).map((animal) => animal.tag).join(", ")]);
         if (flow.action === "split") lines.push(["New mob", answers.name.trim() || mob!.className], ["Goes to", paddockName(answers.paddockId) ?? mob!.paddock?.name ?? "Not in a paddock"]);
         if (flow.action === "merge") lines.push(["Into", mobs.find((entry) => entry.id === answers.intoMobId)?.name ?? "–"]);
         if (flow.action === "reclass") lines.push(["New class", className(mob!.kind, answers.toClassCode)]);

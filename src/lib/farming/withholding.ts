@@ -28,7 +28,7 @@ export async function mobWithholdings(tx: OrgTx, farmId: string): Promise<Map<st
   // Where each mob's animals came from: split from (the parent), merged in (the other mob), on a date.
   const joins = await tx.query<{ mob_id: string; from_mob_id: string; on_date: string }>(
     `select e.mob_id::text, e.other_mob_id::text as from_mob_id, e.event_date::text as on_date
-       from mob_events e where e.farm_id = $1 and e.event_type in ('split_in', 'merged_in') and e.other_mob_id is not null`,
+       from mob_events e where e.farm_id = $1 and e.event_type in ('split_in', 'merged_in', 'animals_in') and e.other_mob_id is not null`,
     [farmId],
   );
   const byMob = new Map<string, typeof treatments.rows>();

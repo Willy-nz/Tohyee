@@ -3399,6 +3399,36 @@ that something happened.
   planned paddock shows on the mob, and the paddock list and card show
   days since grazed against the round and the next planned mob.
 
+- **Farm timeline, grazing history import and farm words** (decisions
+  1445-1450, TL1-TL5, tenant migration 0236; common NZ practice, not yet
+  reviewed): Farm › More › Farm timeline lists moves, sales and other mob
+  events, treatments, weights, breeding records and sprays in one list,
+  filtered by mob, paddock, kind and dates. Grazing history imports from
+  CSV or Excel (mob records' rows become their moves; no head count
+  changes). Admins can rename farm words (mob, actions, kinds and classes)
+  for the screens only. The AI reads mobs, treatments and the timeline
+  (list_mobs, list_animal_treatments, farm_timeline).
+
+- **Animals, weights and body condition** (decisions 1481-1495, AN1-AN9 and
+  BCS1-BCS8, tenant migrations 0237-0240; common NZ practice, not yet
+  reviewed): Farm › More › Animals is a register of animals by tag, with
+  EID or NAIT number (a field only), sex, breed, birth date, dam and sire,
+  and the mob each is in (with history). A mob shows "N of M head tagged";
+  tagging never changes its head or the books, and sales and deaths of
+  tagged animals are recorded on the mob, choosing the tags. Each animal's
+  page shows its weights with gain per day, body condition scores with the
+  trend and NZ targets, treatments by its tag or its mob, its mob's
+  breeding records and moves. BCS per animal (half points) or per mob (an
+  average, or a tally at each score), with photos; the scale is per kind
+  and a farm setting. Quick entry on a phone (tag, score and/or weight,
+  next) works offline, and a mob's weigh session can be worked out from
+  each tag. Animals, and scores and weights from other tools, import from
+  CSV or Excel; unmatched tags are listed, never added. The person's own
+  AI can suggest scores from photos, compared with the farm's own
+  reference photos; a person accepts, changes or declines each, and only
+  accepted ones count. Tohyee itself doesn't estimate a score or weight
+  from a photo. Analytics has animals, weights and scores.
+
 - **The AI reads farm data** (AIW10-AIW14, decision 560): a connected AI
   can read soil tests, fertiliser products and plans, pasture cover,
   readings, grazings and supplements fed, and work out a proposed
