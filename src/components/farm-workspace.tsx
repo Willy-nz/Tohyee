@@ -32,6 +32,8 @@ import { bandsFor, MAP_COLOURINGS, type MapColouring, paddockBand } from "@/lib/
 import type { PaddockStatus } from "@/lib/farming/paddock-status";
 import type { Farm, FarmingSettings, Paddock } from "@/lib/farming/paddocks";
 import type { Mob } from "@/lib/farming/mobs";
+import type { RotationPlan } from "@/lib/farming/planning";
+import { paddockPlanText, useRotation } from "@/components/farm-planning";
 import type { GrazingRecord, PastureReading } from "@/lib/farming/pasture";
 import { withholdingText } from "@/lib/farming/treatment-rules";
 import { PASTURE_METHOD_LABELS } from "@/lib/farming/pasture-rules";
@@ -305,6 +307,8 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
   const imageryKey = useImageryKey(organisationId);
   const noKey = useNoImageryKey(organisationId);
   const [colouring, setColouring] = useState<MapColouring>("grazed");
+  // Round length and the next planned move, beside days since grazed (decision 1444).
+  const rotation = useRotation(organisationId, farm.id, 0);
   const [selected, setSelected] = useState<string | null>(null);
   // Paddocks in the order people say them: 1, 2 … 10, not 1, 10, 2.
   const list = [...(statuses.data?.paddocks ?? [])].sort((a, b) => NATURAL.compare(a.name, b.name));
@@ -416,7 +420,7 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
       <div>
         <div id="paddock-card" style={{ scrollMarginTop: 64 }}>
           {status && vegetationOn && shownPicture !== "aerial" ? <PaddockGreenness organisationId={organisationId} paddockId={status.paddockId} observation={greenness} /> : null}
-          {status ? <PaddockCard organisationId={organisationId} farm={farm} status={status} hazards={activeHazards} onClose={() => setSelected(null)} /> : null}
+          {status ? <PaddockCard organisationId={organisationId} farm={farm} status={status} hazards={activeHazards} plan={rotation.data?.plan ?? null} onClose={() => setSelected(null)} /> : null}
         </div>
         <div id="people-card" style={{ scrollMarginTop: 64 }}>
           <FarmPeopleCard organisationId={organisationId} farm={farm} people={people} selected={person} onSelect={setPerson} />
@@ -434,7 +438,7 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
                     {entry.name}
                   </span>
                 ),
-                parts: [entry.cover ? `${entry.cover.cover.toLocaleString("en-NZ")} · ${shortDate(entry.cover.measuredOn, today)}` : "No cover", entry.inNow ? `${entry.inNow.mob} in` : entry.lastGrazedOn ? `grazed ${shortDate(entry.lastGrazedOn, today)}` : null, entry.notSafeUntil ? `not safe to graze until ${shortDate(entry.notSafeUntil.until, today)}` : null],
+                parts: [entry.cover ? `${entry.cover.cover.toLocaleString("en-NZ")} · ${shortDate(entry.cover.measuredOn, today)}` : "No cover", entry.inNow ? `${entry.inNow.mob} in` : entry.lastGrazedOn ? `grazed ${shortDate(entry.lastGrazedOn, today)}` : null, entry.notSafeUntil ? `not safe to graze until ${shortDate(entry.notSafeUntil.until, today)}` : null, paddockPlanText(entry, rotation.data?.plan ?? null, today) || null],
                 onOpen: () => {
                   setSelected(entry.paddockId);
                   // The card opens above the list: bring it into view.
@@ -474,7 +478,7 @@ function PaddockMobsWithholding({ organisationId, farmId, paddockId }: { organis
 }
 
 /** A paddock's card (decision 909): cover and how old it is, the mob, recent records and buttons to record. */
-export function PaddockCard({ organisationId, farm, status, hazards = [], onClose }: { organisationId: string; farm: Farm; status: PaddockStatus; hazards?: Array<CurrentRecord<HazardData>>; onClose: () => void }) {
+export function PaddockCard({ organisationId, farm, status, hazards = [], plan = null, onClose }: { organisationId: string; farm: Farm; status: PaddockStatus; hazards?: Array<CurrentRecord<HazardData>>; plan?: RotationPlan | null; onClose: () => void }) {
   const here = hazards.filter((hazard) => hazard.data.paddockIds.includes(status.paddockId));
   const today = todayInBrowser();
   const canRecord = useCanRecordFarmWork();
@@ -510,6 +514,12 @@ export function PaddockCard({ organisationId, farm, status, hazards = [], onClos
         </dd>
         <dt>Last grazed</dt>
         <dd>{status.inNow ? "Being grazed now" : status.lastGrazedOn ? `${shortDate(status.lastGrazedOn, today)} (${daysAgo(status.lastGrazedOn, today)})` : "No grazing recorded"}</dd>
+        {plan?.nextByPaddock[status.paddockId] || plan?.roundDays ? (
+          <>
+            <dt>Planned</dt>
+            <dd>{paddockPlanText(status, plan, today) || "Nothing planned"}</dd>
+          </>
+        ) : null}
         <dt>Hazards</dt>
         <dd>
           {here.length ? (

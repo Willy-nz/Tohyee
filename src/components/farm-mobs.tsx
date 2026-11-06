@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import { BigNumber, Choices, DayChoice, Step } from "@/components/farm-log";
 import { FarmRowList } from "@/components/farm-rows";
+import { BreedingFlow, breedingTypesFor, MobBreeding, PlanRoundFlow, RotationCard, useRotation } from "@/components/farm-planning";
 import { ProductStockCard, TreatFlow, TreatmentsCard } from "@/components/farm-treatments";
+import { BREEDING_LABELS, type BreedingType } from "@/lib/farming/planning-rules";
+import type { RotationPlan } from "@/lib/farming/planning";
 import { useCanRecordFarmWork } from "@/components/farm-selector";
 import type { FarmContext } from "@/components/farm-workspace";
 import { useApiData } from "@/components/hooks";
@@ -34,19 +37,22 @@ import styles from "./farm-workspace.module.css";
 
 const NATURAL = new Intl.Collator("en-NZ", { numeric: true, sensitivity: "base" });
 
-type Flow = { kind: "add" } | { kind: "action"; action: MobAction; mob: Mob } | { kind: "treat"; mob: Mob };
+type Flow = { kind: "add" } | { kind: "action"; action: MobAction; mob: Mob } | { kind: "treat"; mob: Mob } | { kind: "breeding"; mob: Mob; recordType: BreedingType } | { kind: "plan" };
+type MobFlowKind = Extract<Flow, { kind: "add" } | { kind: "action" }>;
 
 function useMobs(organisationId: string, farmId: string) {
   return useApiData<{ mobs: Mob[] }>(`/api/farming/farms/${farmId}/mobs`, { organisationId });
 }
 
-export function mobLine(mob: Mob, today: string): string[] {
+export function mobLine(mob: Mob, today: string, plan: RotationPlan | null = null): string[] {
+  const next = plan?.nextByMob[mob.id];
   return [
     `${mob.head.toLocaleString("en-NZ")} head`,
     mob.className,
     mob.paddock ? `${paddockLabel(mob.paddock.name)} since ${shortDate(mob.paddock.inOn, today)}` : "Not in a paddock",
     mob.lastWeight ? `${mob.lastWeight.averageKg} kg ${shortDate(mob.lastWeight.date, today)}` : "",
     withholdingText(mob.withholding, today, (iso) => shortDate(iso, today)) ?? "",
+    next ? `next: ${paddockLabel(next.paddockName)} ${shortDate(next.plannedOn, today)}` : "",
   ].filter(Boolean);
 }
 
@@ -66,10 +72,19 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
   const list = [...(mobs.data?.mobs ?? [])].sort((a, b) => NATURAL.compare(a.name, b.name));
   const mob = list.find((entry) => entry.id === selected) ?? null;
   const [version, setVersion] = useState(0);
+  const rotation = useRotation(organisationId, farm.id, version);
   const reload = () => {
     mobs.reload();
     setVersion((value) => value + 1);
   };
+  const closeFlow = (message: string | null) => {
+    setFlow(null);
+    if (message) setDone(message);
+    reload();
+  };
+
+  if (flow?.kind === "breeding") return <BreedingFlow organisationId={organisationId} farm={farm} mob={flow.mob} mobs={list} recordType={flow.recordType} onClose={closeFlow} />;
+  if (flow?.kind === "plan") return <PlanRoundFlow organisationId={organisationId} farm={farm} mobs={list} roundDays={rotation.data?.plan.roundDays ?? null} onClose={closeFlow} />;
 
   if (flow?.kind === "treat") {
     return (
@@ -135,7 +150,7 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
                     {entry.name}
                   </span>
                 ),
-                parts: mobLine(entry, today),
+                parts: mobLine(entry, today, rotation.data?.plan ?? null),
                 onOpen: () => {
                   setSelected(entry.id);
                   requestAnimationFrame(() => document.getElementById("mob-card")?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -159,7 +174,9 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
               }}
               onAction={(action) => {
                 setDone(null);
-                setFlow(action === "treat" ? { kind: "treat", mob } : { kind: "action", action, mob });
+                if (action === "treat") setFlow({ kind: "treat", mob });
+                else if (action.startsWith("breeding:")) setFlow({ kind: "breeding", mob, recordType: action.slice(9) as BreedingType });
+                else setFlow({ kind: "action", action: action as MobAction, mob });
               }}
               onClose={() => setSelected(null)}
             />
@@ -168,6 +185,7 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
       </div>
       <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
         <StockingCard organisationId={organisationId} farmId={farm.id} version={list.map((entry) => `${entry.id}:${entry.head}:${entry.classCode}:${entry.paddock?.id ?? ""}`).join(",")} canEdit={can("admin")} />
+        <RotationCard organisationId={organisationId} farmId={farm.id} plan={rotation.data?.plan ?? null} onChanged={reload} onPlan={() => (setDone(null), setFlow({ kind: "plan" }))} />
         <TreatmentsCard organisationId={organisationId} farmId={farm.id} version={version} />
         <ProductStockCard organisationId={organisationId} farmId={farm.id} version={version} />
         {can("bookkeeper") ? <TypedMobs organisationId={organisationId} farmId={farm.id} onMade={reload} /> : null}
@@ -177,7 +195,7 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
   );
 }
 
-function MobCard({ organisationId, mob, mobs, canRecord, canBooks, onAction, onChanged, onClose }: { organisationId: string; mob: Mob; mobs: Mob[]; canRecord: boolean; canBooks: boolean; onAction: (action: MobAction | "treat") => void; onChanged: (message: string) => void; onClose: () => void }) {
+function MobCard({ organisationId, mob, mobs, canRecord, canBooks, onAction, onChanged, onClose }: { organisationId: string; mob: Mob; mobs: Mob[]; canRecord: boolean; canBooks: boolean; onAction: (action: MobAction | "treat" | `breeding:${BreedingType}`) => void; onChanged: (message: string) => void; onClose: () => void }) {
   const today = todayInBrowser();
   const detail = useApiData<{ mob: Mob; events: MobEvent[]; weights: MobWeight[] }>(`/api/farming/mobs/${mob.id}`, { organisationId });
   const actions = MOB_ACTIONS.filter((action) => (BOOKKEEPER_ACTIONS.includes(action) ? canBooks : canRecord)).filter((action) => action !== "births" || isBirthClass(mob.kind, mob.classCode));
@@ -219,11 +237,19 @@ function MobCard({ organisationId, mob, mobs, canRecord, canBooks, onAction, onC
           ))}
         </div>
       ) : null}
-      {others.length ? (
+      {others.length || canRecord ? (
         <div className={styles.actions}>
-          <MoreMenu label={`More actions for ${mob.name}`} text="More actions" items={others.map((action) => ({ label: MOB_ACTION_LABELS[action], onSelect: () => onAction(action) }))} />
+          <MoreMenu
+            label={`More actions for ${mob.name}`}
+            text="More actions"
+            items={[
+              ...others.map((action) => ({ label: MOB_ACTION_LABELS[action], onSelect: () => onAction(action) })),
+              ...(canRecord ? breedingTypesFor(mob).map((type) => ({ label: `Record ${BREEDING_LABELS[type].toLowerCase()}`, onSelect: () => onAction(`breeding:${type}`) })) : []),
+            ]}
+          />
         </div>
       ) : null}
+      <MobBreeding organisationId={organisationId} mob={mob} version={`${mob.head}:${mob.classCode}`} />
       <h3>History</h3>
       {detail.error ? <Notice tone="error">{detail.error}</Notice> : null}
       {events.length ? (
@@ -667,7 +693,7 @@ type Answers = {
   movementId: string | null;
 };
 
-function stepsFor(flow: Exclude<Flow, { kind: "treat" }>): string[] {
+function stepsFor(flow: MobFlowKind): string[] {
   if (flow.kind === "add") return ["kind", "class", "head", "how", "paddockOptional", "name", "day", "review"];
   switch (flow.action) {
     case "move":
@@ -699,7 +725,7 @@ const QUESTION: Partial<Record<MobAction, string>> = {
   split: "How many go into the new mob?",
 };
 
-function MobFlow({ organisationId, farm, flow, mobs, onClose }: Pick<FarmContext, "organisationId" | "farm"> & { flow: Exclude<Flow, { kind: "treat" }>; mobs: Mob[]; onClose: (message: string | null) => void }) {
+function MobFlow({ organisationId, farm, flow, mobs, onClose }: Pick<FarmContext, "organisationId" | "farm"> & { flow: MobFlowKind; mobs: Mob[]; onClose: (message: string | null) => void }) {
   const today = todayInBrowser();
   const { queue } = useOfflineQueue(organisationId);
   const statuses = useApiData<{ paddocks: PaddockStatus[] }>(`/api/farming/farms/${farm.id}/paddock-status`, { organisationId, onDate: today });

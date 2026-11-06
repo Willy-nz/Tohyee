@@ -3390,6 +3390,14 @@ that something happened.
   treatments and spray jobs. The treatment register and the stock movement
   history download as CSV or PDF for farm assurance and processor audits.
 
+- **Breeding and rotation planning** (decisions 1439-1444, BR1-BR6, tenant
+  migration 0235; common NZ practice, not yet reviewed): per mob, mating
+  (with expected births), AI, scanning (scanning % per ewe scanned and per
+  ewe mated) and pregnancy tests (in-calf %). A farm's round length, and
+  planned rounds that share the days between paddocks by area. The next
+  planned paddock shows on the mob, and the paddock list and card show
+  days since grazed against the round and the next planned mob.
+
 - **The AI reads farm data** (AIW10-AIW14, decision 560): a connected AI
   can read soil tests, fertiliser products and plans, pasture cover,
   readings, grazings and supplements fed, and work out a proposed
