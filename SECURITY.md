@@ -85,7 +85,10 @@ or Cloudflare, Tailscale or connected service infrastructure.
 Keep Tohyee and its supporting software updated, review release notes, and
 maintain tested backups with the recovery key stored securely and separately.
 Protect administrator accounts, enable two-step sign-in and grant users only
-the access they need.
+the access they need. For someone you hire for a set time, give
+their membership an end date on People and roles: after it, Tohyee refuses
+everything they try in that organisation, their AI keys and app keys
+included, and you can check what they did. Remove them when the work is done.
 
 Public remote access exposes the application's sign-in page to the internet;
 a tunnel is not a replacement for application authentication. Tailscale

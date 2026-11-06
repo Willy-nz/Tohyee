@@ -13137,14 +13137,22 @@ reviewed; no other farm or accounting app was copied.
       Farm staff and up add and change gauges. A gauge isn't deleted: it's
       retired, keeps its readings and history, and takes no new readings
       until it's brought back.
-1452. **One reading a gauge a day, from the Log.** Farm › Log › **Rain
-      gauge** asks which gauge, which day (today, yesterday or another
-      past day) and the mm, with a **No rain (0 mm)** button. It goes
+1452. **One reading a gauge a day, from the Log, for the day before.**
+      A gauge read at 9 am holds the rain to 9 am, and the reading is
+      recorded for the day before, as official 9 am records are (Jess,
+      5 Nov 2026: "Day before"). Farm › Log › **Rain gauge** asks which
+      gauge, which morning it was read (this morning, yesterday morning or
+      another) and the mm, with a **No rain (0 mm)** button, and says
+      "Rain to 9 am today, recorded for Wednesday 4 Nov". Readings are kept
+      and shown by that rain day, so the latest there can be is yesterday.
+      Changing or adding a past reading under Rainfall asks for the rain day
+      itself. An imported file's dates are used as they are (they should be
+      rain days, as official records are). It goes
       through the device's one queue (decision 1008) with its own
       operation id, so it works with no signal and is never kept twice;
       the farm's gauges are in the offline farm pack's map section. A day
       already read for that gauge is refused with the reading it has
-      ("change that reading instead"), and so is a future day. Millimetres
+      ("change that reading instead"), and so is today or a later day. Millimetres
       are to one place, 0 to 2,000, kept as decimals (never floats).
 1453. **A day with no reading is unknown, not dry.** Totals add the days
       with a reading and always say "N of M days read", so a gap shows.
@@ -13185,9 +13193,11 @@ second reminder system.
       2 weeks, 4 weeks or month, the farm calendar's repeats), a paddock, a
       pin on the map and a note. "Who it's for" is someone who can record
       farm work and see that farm (farm staff, bookkeepers and up); viewers
-      can't tick a task off, so they aren't offered. Farm staff and up add,
-      change and cancel tasks on their farms; viewers see them. A cancelled
-      task is kept (Cancelled) and can be opened again; nothing is deleted.
+      can't tick a task off, so they aren't offered. Farm staff and up add
+      and change tasks on their farms and mark them done or undone; viewers
+      see them. Only bookkeepers and up cancel a task, or open a cancelled
+      one again: farm staff can't, even for a task they added (Jess, 5 Nov
+      2026). A cancelled task is kept (Cancelled); nothing is deleted.
 1458. **Pins show on the Map.** An open task with a pin is an amber "T" on
       the Map tab; tapping it opens Tasks.
 1459. **Reminders are the person's own, in the Android app.** The phone's
@@ -13209,6 +13219,88 @@ second reminder system.
       date after the one done: dates missed before it aren't owed. Undo
       takes back the latest Done, keeping who undid it and when. Every
       Done and Undo is listed on the task.
+### Time-limited access for members (5 Nov 2026; decisions 1466-1474)
+
+Jess asked for a way to give someone access "for a contracted amount of
+time" (for example a bookkeeper hired through a hiring site). There's no
+answer from Jess on the details, and Xero has no time-limited access, so
+these follow what NetSuite does with a user's access end date, kept to
+Tohyee's own roles. None of this is accounting behaviour, so there's no
+worked example.
+
+1466. **Access can have a start and an end.** When inviting someone, or
+      later from People and roles, an owner or admin can set "Access from"
+      and "Access until", each a date with an optional time. Empty means no
+      limit. Times are in the server's business time zone (Pacific/Auckland
+      unless `TOHYEE_TIME_ZONE` says otherwise): Tohyee has no
+      per-organisation time zone. "Until 12 Dec" with no time lasts the whole
+      of 12 Dec. They're stored on the membership (`organisation_members.
+      access_starts_at` and `access_ends_at`, core migration 0024) as
+      instants; the end is the first moment they can't get in.
+1467. **The check is in one place: getMembership.** A membership before its
+      start or after its end is treated as no membership by
+      `getMembership` and `listMembershipsForUser`
+      (`src/lib/organisations/registry.ts`, `memberAccessCurrentSql`). Every
+      route (`requireOrganisationRole`, so `withOrganisation` and the CRM,
+      farm and payroll wrappers), the PowerPoint add-in, AI keys, AI app
+      connections (and swapping an OAuth code for one), farm app keys and
+      calendar links already go through it, so all of them are refused at
+      the next request with nothing more to remember. The few places that
+      read `organisation_members` themselves to let someone in (private mail
+      owners, group reports, approvers) use the same SQL. Requests already
+      under way finish.
+1468. **Refusals say why.** A signed-in member gets 403 with "Your access to
+      <organisation> ended on <date>. Ask <owner> to extend it." (or "starts
+      on <date> … if you need it sooner"), naming the first owner with no
+      end date. Their organisation list leaves the organisation out and the
+      pages show the same sentence instead of "no organisation". The MCP
+      endpoint says the same for a real, unrevoked key or AI app token; other
+      key types (farm app keys) get their usual refusal. Only the member
+      gets this, and they already know the organisation.
+1469. **Keys aren't revoked when access ends.** Outside the dates they're
+      refused; if access is extended, the same keys and AI apps work again,
+      as NetSuite's do when an end date is moved. Remove (as before) still
+      revokes them for good. Ended members keep their payroll access record;
+      payroll is refused with everything else.
+1470. **Extend and End now are one click.** +1 week and +1 month count from
+      the current end, or from today when it has already ended; a time of
+      day is kept. "Dates" chooses any start and end. End now ends it at
+      once (and drops a start that hasn't come). Each change is in the
+      server's audit trail with the dates before and after.
+1471. **Reminders 3 days before.** The email job (every 10 minutes) queues an
+      email to the member and to each owner and admin with access now, 3
+      days before the end, through the organisation's own email (Settings ›
+      Email; nothing is queued when it isn't set up, or for the demo farm).
+      One each per end time (`access_emails`, tenant migration 0251), so an
+      Extend brings a new one. The top-bar notices show the same while it's
+      within 3 days: owners and admins see everyone's, linking to People and
+      roles filtered to ending access; the member sees their own.
+1472. **People and roles shows access, and what they did.** Each person
+      shows "Access until 12 Dec", "Ended 12 Dec", "Starts 1 Dec" or "No end
+      date", with a filter (everyone, ending in 3 days, with dates, ended).
+      Ended members stay listed, greyed, until someone presses Remove:
+      nothing is deleted. "What they did" lists one member's own actions in
+      this organisation (its audit trail and the server's audit trail for
+      it), newest first, for owners and admins. It shows what and when, not
+      details; private mail (decision 571) is never shown, and payroll
+      events only to someone with payroll access. Tohyee had no
+      organisation-wide audit log page before this.
+1473. **One owner always keeps lasting access.** An organisation always has
+      an owner whose access has started and has no end. Giving the last such
+      owner an end date (or End now) is refused, as are role changes and
+      removals that would leave none. Only owners change an owner's dates,
+      as with roles.
+1474. **Dates travel with the membership.** Restoring an organisation as a
+      copy, and recovering people from a server backup, keep each
+      membership's dates (backups made before this have none), so an ended
+      member doesn't come back by a restore.
+
+Not built: limiting a member to one area (for example only bank
+reconciliation). Tohyee's existing limits are the role, payroll access
+(PE9-PE13), the farms each member works on (decision 744), camera access and
+dashboards shared with report viewers. A narrower "areas" permission is a
+separate piece of work (proposed in the pull request).
+
 
 
 
@@ -13278,6 +13370,338 @@ NZ farm practice and Claude's, not yet reviewed (examples MOB1-MOB10).
       kind (or species), IRD class (code or name), head, and optionally
       name, paddock, tag colour and date. A preview shows each row's
       problem; a file is imported once. Imported mobs change no head count.
+### Hire help: a job brief from the books (5 Nov 2026; decisions 1475-1480)
+
+The second part of Jess's request: "make it easy to hire them". The link to
+a hiring site itself is #593, for later.
+
+1475. **Hire help is a page beside People and roles.** Settings › People and
+      access › Hire help (and a link on People and roles), for owners and
+      admins, who are the ones who invite people. Four guided steps: what
+      needs doing, access and how long, the brief, then invite.
+1476. **Facts come from the books, as counts and periods only.** Bank and
+      card lines not reconciled (how many, the first and last month, how
+      many months), how many active bank and card accounts, whether GST is
+      registered, how often it's filed and on which basis, the month the
+      year ends, which modules are on, and how many active employees (only
+      for someone with payroll access). Read when the page opens; nothing is
+      stored.
+1477. **The brief never has private details.** No organisation name,
+      customer or supplier names, payees, amounts or bank details: only the
+      counts and periods above, the tasks ticked, the access level and the
+      dates. The person sees it in an editable box and changes it before
+      copying; once they change it, later changes to their choices don't
+      overwrite it until they ask.
+1478. **No hiring site is named or linked.** The page says "post it on the
+      hiring site you use". Hiring sites' brand rules limit how their names
+      are used, and #593 is where a real link would be built.
+1479. **"Invite them" fills in People and roles.** It opens the invite with
+      the role (viewer, bookkeeper or admin) and the access dates already
+      set (time-limited access, decision 1466). The person still types the
+      name and email and presses Invite; nothing is sent from Hire help.
+1480. **Lengths are whole days.** 1 week, 2 weeks, 1 month or 3 months from
+      the start date, ending at the end of the day before the same date (10
+      Nov for 1 month is until 9 Dec), or a chosen end date.
+
+### Farm map assets and measuring (5 Nov 2026; decisions 1462-1465; MA1-MA6)
+
+Jess asked for the farm features Tohyee was missing against a mob-based
+livestock app (5 Nov 2026), map assets and measuring among them. Claude's
+calls, not yet reviewed. Built on the farm map and geometry.ts.
+
+1462. **Farm assets are points or lines on a farm's map.** Points: trough,
+      gate, water point, shed, bore, tank, yards, culvert or bridge, other.
+      Lines: fence, water pipe, race or track, drain, other (2 to 500
+      points; a point repeated straight after itself is dropped). Each has
+      a name and an optional note, and a line shows its length. They're
+      purple, with a letter (Tr, G, W, F, P…) so they're told apart without
+      colour. Farm staff and up add, change and remove them on their farms;
+      viewers see them. A point stays a point and a line stays a line.
+      Removing keeps the asset, marked removed with who and when. They're
+      in the offline farm pack's map section.
+1463. **Measuring saves nothing.** Map › Measure: Distance adds up the legs
+      tapped (and lists each); Area closes the shape tapped and gives its
+      area and the distance round it. Undo last point and Clear.
+1464. **Units.** Distances and areas are geodesic on WGS84 (GeographicLib),
+      as paddock areas are. Under 1 km a distance is in whole metres, then
+      km to two places; under a hectare an area is in m² with the hectares
+      beside it, then hectares to two places.
+1465. **Layers.** The Map tab has buttons to turn each kind of mark on or
+      off: hazards, effluent, farm assets, rain gauges, tasks and people
+      sharing their location, for the kinds the farm has. The choice is
+      remembered on that device only. Paddock colours aren't a layer: the
+      "Colour paddocks by" switch already chooses them.
+
+### Satellite vegetation: pipeline and data (#612; 5 Nov 2026; decisions 1520-1537)
+
+Jess's plan in #612: free Sentinel-2 imagery on the farm maps, paddock
+greenness over time, offline. Claude's calls where the plan leaves a choice,
+not yet reviewed. For analytics and maps, the plan itself is the reference.
+The Copernicus adapter was written from the public documentation and has
+not yet been tried against the live service (this build machine can't
+reach it). See docs/SATELLITE-VEGETATION.md.
+
+1520. **Optional, and per farm.** Off until an owner or admin connects an
+      imagery account and turns it on. Each farm is turned on by itself, and
+      turning it on confirms that farm's paddock boundaries as they are: they
+      (plus a 50 m margin) are the area sent to the provider. The boundary
+      versions confirmed are kept; the screen says when they've changed since.
+1521. **Greenness, not feed.** What's shown is NDVI, a greenness index. It's
+      never called pasture cover and never turned into kg DM/ha, anywhere
+      (screens, exports, Analytics, the AI). The note "This shows greenness,
+      not feed available" is beside it. Measured or modelled pasture cover is
+      a separate, later piece of work (#612 Phase 3), not built.
+1522. **Two providers behind one interface.** Copernicus: the public STAC
+      catalogue (`stac.dataspace.copernicus.eu/v1`, collection
+      `sentinel-2-l2a`) to find dates, and the Sentinel Hub Process API on
+      the Copernicus Data Space Ecosystem to clip just the farm's area and
+      bands, signed in with the organisation's own OAuth client (client
+      credentials). Clipping by the provider was chosen over downloading
+      whole products: a farm is a few hundred KB, a product is hundreds of
+      MB. "Made-up demo pictures" is the second provider: deterministic
+      pictures for tests, the demo farm and test servers
+      (`TOHYEE_VEGETATION_DEMO=on`), always labelled as made up. The demo
+      farm can't connect Copernicus (decision 858).
+1523. **The secret stays on the server, and no new software is needed.** The
+      client secret is encrypted with the server's key in a `_ciphertext`
+      column (so a restore re-keys it, decision 737). It goes only to the
+      provider's sign-in, and is never sent to browsers, logs, exports or the AI;
+      the screen shows only the end of the client ID and who connected it
+      and when. Only owners and admins connect, test or change it. Pictures
+      are 16-bit PNG, read and written by a small codec on Node's own zlib:
+      nothing to install on Windows or Linux, and no GDAL.
+1524. **One grid a farm.** Web Mercator (EPSG:3857), the projection the farm
+      map draws in, with pixels about 10 m on the ground (Sentinel-2's red
+      and near-infrared bands): 10 / cos(latitude) metres, rounded to 0.5 m,
+      and the grid snapped to multiples of it, so two dates of a farm line
+      up pixel for pixel even when its outline box changes. The provider
+      resamples onto it with nearest neighbour; that adds no detail. A
+      paddock's pixels are those whose centre is inside it; an edge pixel
+      has a corner outside. At most 1,000,000 pixels (about 100 km²) and
+      2,500 a side.
+1525. **Only a clear view counts.** The scene classification (SCL, 20 m, so
+      each of its pixels covers four of ours) keeps classes 4 (vegetation)
+      and 5 (not vegetated). Everything else is missing: no data,
+      saturated, dark or shadowed ground, cloud shadow, water, unclassified
+      (often haze at cloud edges), cloud, thin cirrus, snow.
+1526. **NDVI = (B08 − B04) / (B08 + B04) on reflectance.** Reflectance is
+      (DN + offset) / 10000. Tohyee asks for harmonised values
+      (`harmonizeValues: true`, the documented default), which have the
+      processing baseline 04.00 offset already taken off, so the offset is 0;
+      a raw product would pass −1000. The offset doesn't cancel, so it's
+      always applied before the ratio. Unit-tested on hand-made rasters.
+1527. **When it checks.** Each farm about once a day, at a random time up to
+      3 hours after it's due, so servers don't all ask at once. The first
+      check looks back 60 days (changeable, 7-365); later ones look back to
+      5 days before the last date seen. Dates more than 80% cloudy over the
+      whole satellite picture aren't fetched. "Check now" is allowed once
+      every 15 minutes a farm. A daily check doesn't mean a daily picture:
+      the satellites pass every few days and can't see through cloud.
+1528. **Boundaries and versions.** Each paddock's numbers are tied to the
+      boundary version they were worked out with, and the processor version
+      (`tohyee-ndvi-1`). Numbers are never changed or deleted. Editing a
+      boundary doesn't touch earlier numbers; "Work it out again" (owners and
+      admins) adds numbers for the new boundary while the picture is still
+      kept, and the screens show the newest boundary's numbers, marking
+      older ones "earlier boundary".
+1529. **One quiet worker.** One job at a time for the whole server, at most 3
+      a minute and 20 seconds of work a minute, pausing between paddocks so
+      other requests run. The picture-size cap bounds memory. Off with
+      `TOHYEE_VEGETATION_SCHEDULER=off`.
+1530. **Thresholds, careful to start.** A paddock date is "good" with at
+      least 20 clear pixels (about 0.2 ha) and 80% of it clear; both
+      changeable (5-10000 pixels, 50-100%). Fewer pixels than the minimum is
+      "too small"; no pixel centre inside (narrower than a pixel) is too
+      small too. A paddock under 3 × the minimum is flagged small; one
+      where half or more of its pixels touch the edge is flagged narrow.
+      Mean and median are kept with the clear pixel count and clear share.
+      Nothing clear is missing (null), never 0, and missing is never filled
+      in. Change since the previous mostly clear date is worked out only
+      over pixels clear on both dates, and only when that meets the same
+      thresholds.
+1531. **States, and the date shown.** Not set up, checking, ready (a mostly
+      clear date in the last 20 days), cloudy (recent dates, none clear),
+      out of date (nothing clear for 20 days), paused, reconnect. "Mostly
+      clear" means a paddock good enough to compare and at least half the
+      farm's paddock land clear; the map opens on the newest such date, and
+      the others can be chosen.
+1532. **Fixed colours.** Greenness on seven fixed steps from light brown
+      (under 0.2) to dark green (0.8 and over), and change on five
+      (down 0.15 or more to up 0.15 or more), the same on every date: never
+      stretched to the picture. Lightness changes step by step, so it reads
+      in grey too. Missing is grey stripes, never a colour that could be
+      read as poor pasture. Only paddock land is coloured.
+1533. **Attribution.** "Contains modified Copernicus Sentinel data [year]"
+      (greenness is worked out from the bands, so it's modified data) on
+      the map, the paddock chart, exports and offline packs, kept apart
+      from the LINZ basemap's own attribution. Spanning years:
+      "2025–2026". Made-up pictures say "Made-up demo pictures, not
+      satellite data." instead.
+1534. **Jobs that can't double up.** Each job has a unique key (a date for
+      a farm and processor version, a day's check), so asking twice is one
+      job. A fetch saves the picture and a checkpoint, then works it out:
+      a restart goes on from the checkpoint without fetching or counting it
+      again. A date and each paddock-boundary pair are unique, so recording
+      twice adds nothing. Failures retry after 5, 30, 120 and 720 minutes,
+      5 tries at most; "slow down" waits as long as the provider says. A
+      refused account stops everything until someone reconnects; a used-up
+      budget, the storage limit or a full disk pauses with the reason shown
+      and nothing lost. It never switches to a paid service.
+1535. **Budgets.** Before each fetch the month's use (calendar month, UTC)
+      plus the expected cost must fit the organisation's budget: 2,000
+      processing units and 1,000 requests a month to start (changeable).
+      The expected cost is the larger of the provider's published rule
+      (1 unit is a 512 × 512 picture of 3 bands at 16 bits) and the farm's
+      last real charge; the provider's own count (`x-processingunits-spent`)
+      is recorded when it sends one. The free Copernicus allowance was
+      10,000 units a month when this was written; check the account's own
+      page.
+1536. **Pictures on the data disk.** Pictures are files in
+      `TOHYEE_VEGETATION_DIR` (Docker: the `/vegetation` volume), never
+      database rows; the numbers stay in the organisation's database. They
+      can all be fetched again, so they're not in the database backups.
+      They're removed after 120 days (changeable, 14-3650), except each
+      farm's newest mostly clear one. A 500 MB storage limit pauses
+      fetching when reached. Deleting the demo farm deletes its pictures.
+1537. **Test one farm.** For the pilot on a real server: owners and admins
+      can fetch one date (the least cloudy of the last 30 days) for one
+      farm and see the bytes, the time to search, fetch and work it out,
+      the server's memory before and after, the processing units the
+      provider charged (or the estimate, labelled), and a preview. At most
+      once a minute; counted in the month's use; nothing is kept as an
+      observation. Tohyee's own measurements of a farm's cost weren't made
+      here (no access to the service), so none are given: this is how
+      they're made.
+
+### Satellite vegetation: guided setup and the map (#612; 5 Nov 2026; decision 1539)
+
+Jess asked (5 Nov 2026): "make it easy to guide me through setting up that
+pasture thing".
+
+1539. **Setup, one thing a screen.** Farm › Map › Satellite vegetation, for
+      owners and admins: what you'll need (about 10 minutes), what it shows,
+      making the free Copernicus account, making the OAuth client (numbered
+      steps with the page and button, and a note that the site's buttons
+      may be named slightly differently), pasting the client ID and secret
+      with a "Where do I find this?" (i) on each, **Test connection**
+      (wrong ID or secret, account not activated, allowance used up,
+      unreachable, each in plain words) before Save, choosing a farm and
+      confirming its boundaries on a map, **Test one farm** with a preview,
+      the budget, turning it on, and "Done: here's what happens next". The
+      step is remembered on the device and never runs ahead of what the
+      server says is done, so someone can stop and come back. The test
+      makes one tiny request (4 × 4 pixels) so a used-up allowance or an
+      account that can't process shows now. On the map, Aerial /
+      Vegetation / Change sit with the layer buttons, with the capture
+      date, the date picker, the fixed legend, the note and the
+      attribution; tapping a paddock shows its greenness, clear share,
+      change and a trend on a fixed 0-1 scale (clear dates joined, partly
+      hidden ones hollow, no clear view as grey ticks), with a table. Other
+      members see the farms' state and the map once it's on.
+
+### Satellite vegetation: farms, offline, Analytics and the AI (#612; 5 Nov 2026; decisions 1538 and 1540)
+
+1538. **Scoped like every farm record.** Every satellite read, picture,
+      export, trend, overview, offline pack, Analytics table and AI answer
+      goes through the farm access rules (decision 744): a farm a person
+      can't see is "not found", the same as one that doesn't exist, and
+      another organisation's are never reached (one database each).
+      Satellite vegetation › Your farms lists each farm the person can see
+      with its state, latest clear date and how many paddocks were clear
+      enough. The CSV export carries "Greenness (NDVI), not feed
+      available. Blank means no clear view, not zero." and the
+      attribution. Analytics gets `tohyee_farm_paddock_greenness` (a row a
+      paddock a date, with clear pixels, `valid_coverage_pct`, quality and
+      boundary), only for members who see every farm, like the other
+      `tohyee_farm_` tables. The AI's read-only `paddock_greenness` tool
+      gives acquisition time, clear share, quality, flags and an
+      uncertainty note per paddock; its description says NDVI must not be
+      converted to kg DM/ha, pasture cover or feed available. It never sees
+      the connection or its secret.
+1540. **Offline: small and dated.** A farm's offline map keeps the latest
+      clear picture and up to 3 earlier ones, at most 2 MB of them, with
+      their capture dates, quality, legend facts and attribution (the
+      pictures travel inside the answers), and each paddock's trend. A
+      date that doesn't fit is left out and named. Shown from the device,
+      the map says "Kept on this device since …: there may be newer
+      satellite pictures". Offline access follows the pack's own rules
+      (14-day offline session, sign-out clears it); a device that's offline
+      can't hear about a revoked access until it reconnects. Wi-Fi-only
+      downloads aren't built: browsers on iPhones can't tell Wi-Fi from
+      mobile data, so the 2 MB cap is the control.
+### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
+
+Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
+reviewed. No migration.
+
+1510. **"What they did" pages by a cursor, not a time.** The list has one
+      fixed order: time to the microsecond, newest first; then books events
+      before server events at the same instant; then the higher event id
+      first. "Older" sends back the last entry's place in that order (time,
+      stream and id), so events that share a time, in one stream or across
+      both, each show once. Before this, the next page started strictly
+      before the last time shown, so the rest of a batch written at one
+      instant was skipped. A cursor that isn't one Tohyee made is refused
+      with "Go back to Newest".
+1511. **Hidden events stay hidden on every page.** Private mail (decision
+      571), and payroll for someone without payroll access, are left out
+      before the page is cut, so they're never counted, shown or used as a
+      cursor. Pages are still 100 entries.
+1512. **A task can only be for someone whose access is current.** The
+      people offered for a task, and the server's check when a task is
+      added or its person is changed, use the same rule as signing in
+      (decision 1467): after their start, before their end, login on. Ended
+      and not-yet-started members aren't offered, and are refused with why
+      ("Hemi's access to this organisation has ended…", "Ana's access
+      starts on …"). The check runs when the person changes: other changes
+      to a task keep who it's for.
+1513. **Open tasks for someone who can't sign in are flagged, not changed.**
+      A task still to do whose person's access has ended or not started, or
+      whose login is off or who was removed, shows "Needs reassigning" on
+      Tasks, Today and the farm calendar. Nothing is deleted or moved: it
+      stays theirs until someone picks another person (the change is in
+      the task's history), and the flag goes if their access is extended.
+      Done and cancelled tasks aren't flagged, so their history is as it
+      was.
+1514. **No tasks ahead of someone's start, for now.** Tohyee has no rule for
+      giving work to someone before their access starts, so it's refused
+      with the date it starts and "give it to them once their access
+      starts". If that's wanted later, it would check the task's due day
+      against their access dates, not just the login.
+
+### Mob corrections (#609 items 1 and 2; 5 Nov 2026; decisions 1500-1505)
+
+Built by Claude from issue #609 with the coordinator's preferred design
+(examples MOB11-MOB14, common NZ practice, not yet reviewed).
+
+1500. **A mob's livestock movement isn't voided on its own.** Voiding a
+      livestock movement that's a mob's sale, death, birth, purchase or
+      class change (made by the mob, or linked from an invoice or bill) is
+      refused, naming the mob and the event and saying to reverse it on the
+      mob. An account sale's void comes through the same check. Otherwise
+      the books' head count and the mob's would differ.
+1501. **Reversing is one step on both.** On the mob's history, "Reverse
+      this" (bookkeepers and up, with a reason) adds a "reversed" event that
+      names the one it reverses (history is never edited) and voids the
+      movement, in one transaction, with an audit entry. If anything
+      refuses (a locked period, an approved valuation, a class going below
+      zero), nothing changes. An event is reversed once at most; its
+      invoice or bill line can then be linked again.
+1502. **No blind add-back.** If the mob has since moved, split, merged,
+      changed class or closed, the person chooses the mob the animals go
+      back into (or come out of). It must be active, on the same farm and of
+      the movement's class; a mob with fewer head than a birth or purchase
+      being reversed is refused.
+1503. **A class change is reversed only on an unchanged mob.** If the mob
+      has moved, split, merged or closed since, or isn't in the new class
+      now, it's refused: change its class again instead.
+1504. **A linked class change must be the same change.** Linking an existing
+      reclass movement checks its new class too, beside its type, kind,
+      class, head, date and void. A mismatch is refused before anything
+      changes: no mob, event or movement.
+1505. **Migration 0252** adds the "reversed" event type and the link to the
+      event reversed, once each.
+
 
 ### Farm treatments, withholding and product stock (5 Nov 2026; decisions 1431-1438)
 

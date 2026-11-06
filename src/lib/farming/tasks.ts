@@ -2,13 +2,15 @@ import { writeAuditEvent } from "@/lib/audit";
 import { roleAtLeast } from "@/lib/auth/roles";
 import { parseIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
-import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { canSeeFarm, requireFarmAccess, visibleFarmIds } from "@/lib/farming/access";
 import { REPEATS, type Repeat } from "@/lib/farming/calendar-shared";
 import type { Position } from "@/lib/farming/geometry";
 import { requireFarming } from "@/lib/farming/paddocks";
 import { nextDue, taskDates, taskState, type TaskState } from "@/lib/farming/tasks-rules";
+import { formatMoment } from "@/lib/organisations/access-window";
 import { listMembers } from "@/lib/organisations/members";
+import { currentMemberUserIds } from "@/lib/organisations/registry";
 import { optionalString, requireId, requireOneOf, requireString } from "@/lib/validation";
 
 /*
@@ -18,7 +20,12 @@ import { optionalString, requireId, requireOneOf, requireString } from "@/lib/va
  * and undone keep who and when. Reminders are the Android app's (the
  * assigned person's own, like safety actions), and the tasks show on
  * Today and the farm calendar. Farm staff and up add, change and tick
- * tasks on their farms; viewers see them.
+ * tasks on their farms; bookkeepers and up cancel them; viewers see them.
+ *
+ * Who a task can be for follows time-limited access (#609; decisions
+ * 1512-1514): only people whose access is current now. A task already for
+ * someone whose access has ended (or not started) keeps them, and is
+ * flagged "Needs reassigning" until someone changes it.
  */
 
 export type FarmTeamMember = { userId: string; name: string; role: string };
@@ -44,6 +51,12 @@ export type FarmTask = {
   state: TaskState;
   /** The latest time it was done (for "Undo"). */
   lastDone: TaskDone | null;
+  /**
+   * Still to do, and for someone who can't sign in now: their access ended
+   * or hasn't started, their login is off, or they were removed (decision
+   * 1513). Nothing is changed; someone picks a new person.
+   */
+  needsReassigning: boolean;
   createdByEmail: string;
   createdAt: string;
   updatedByEmail: string | null;
@@ -51,12 +64,14 @@ export type FarmTask = {
 };
 
 /**
- * The people a task on this farm can be for: active members who can record
- * farm work (farm staff, bookkeepers and up) and can see the farm. Read
- * from the core database (names and roles) and the farm's access lists.
+ * The people a task on this farm can be for: active members whose access
+ * is current now (decision 1512), who can record farm work (farm staff,
+ * bookkeepers and up) and can see the farm. Read from the core database
+ * (names, roles and access) and the farm's access lists.
  */
 export async function farmTeam(tx: OrgTx, farmId: string): Promise<FarmTeamMember[]> {
-  const members = (await listMembers(tx.organisationId)).filter((member) => member.isActive && (member.role === "farm_worker" || roleAtLeast(member.role, "bookkeeper")));
+  const current = await currentMemberUserIds(tx.organisationId);
+  const members = (await listMembers(tx.organisationId)).filter((member) => member.isActive && current.has(member.userId) && (member.role === "farm_worker" || roleAtLeast(member.role, "bookkeeper")));
   const farms = await tx.query<{ n: number }>("select count(*)::int as n from farms");
   const scoped = farms.rows[0].n >= 2;
   const all = new Set((await tx.query<{ user_id: string }>("select user_id::text from farm_member_scopes where all_farms")).rows.map((row) => row.user_id));
@@ -106,6 +121,7 @@ async function loadTasks(tx: OrgTx, where: string, params: unknown[], today: str
   );
   const team = new Map<string, string>();
   for (const member of await listMembers(tx.organisationId)) team.set(member.userId, member.displayName || member.email);
+  const current = rows.rows.some((row) => row.assigned_to_user_id) ? await currentMemberUserIds(tx.organisationId) : new Set<string>();
   return rows.rows.map((row) => {
     const next = row.status === "cancelled" ? null : nextDue({ dueOn: row.due_on, repeat: row.repeat }, row.done_for);
     return {
@@ -125,6 +141,7 @@ async function loadTasks(tx: OrgTx, where: string, params: unknown[], today: str
       next,
       state: taskState(next, today),
       lastDone: row.done_id && row.done_for && row.done_by_email && row.done_at ? { id: row.done_id, doneFor: row.done_for, doneByEmail: row.done_by_email, doneAt: row.done_at } : null,
+      needsReassigning: row.status === "open" && next !== null && row.assigned_to_user_id !== null && !current.has(row.assigned_to_user_id),
       createdByEmail: row.created_by_email,
       createdAt: row.created_at,
       updatedByEmail: row.updated_by_email,
@@ -168,9 +185,10 @@ async function parseFields(tx: OrgTx, farmId: string, input: Record<string, unkn
   let assignedTo = current?.assignedToUserId ?? null;
   if (has("assignedToUserId")) {
     assignedTo = input.assignedToUserId === null || input.assignedToUserId === "" ? null : String(input.assignedToUserId);
+    // Checked when the person changes; a task kept for someone whose access has since ended can still be edited (decision 1513).
     if (assignedTo && assignedTo !== current?.assignedToUserId) {
       const team = await farmTeam(tx, farmId);
-      if (!team.some((member) => member.userId === assignedTo)) throw new ValidationError("That person isn't on this farm's team. Choose someone who works on the farm.");
+      if (!team.some((member) => member.userId === assignedTo)) throw new ValidationError(await notOnTeamMessage(tx, assignedTo));
     }
   }
   let paddockId = current?.paddockId ?? null;
@@ -183,6 +201,18 @@ async function parseFields(tx: OrgTx, farmId: string, input: Record<string, unkn
   }
   const point = has("point") ? parsePoint(input.point) : current?.point ? { longitude: current.point[0].toFixed(6), latitude: current.point[1].toFixed(6) } : null;
   return { title, note, assignedTo, dueOn, repeat, paddockId, point };
+}
+
+/** Why someone can't be given a task (decisions 1512 and 1514). */
+async function notOnTeamMessage(tx: OrgTx, userId: string): Promise<string> {
+  const member = (await listMembers(tx.organisationId)).find((entry) => entry.userId === userId);
+  const name = member ? member.displayName || member.email : null;
+  if (member && member.accessState === "ended") return `${name}'s access to this organisation has ended, so they can't be given a task. Choose someone else, or extend their access in People and roles first.`;
+  if (member && member.accessState === "not_started") {
+    const starts = member.accessFrom ? ` on ${formatMoment(member.accessFrom)}` : " later";
+    return `${name}'s access starts${starts}. A task can only be for someone who can sign in now: leave it for anyone on the farm team, or give it to them once their access starts.`;
+  }
+  return "That person isn't on this farm's team. Choose someone who works on the farm.";
 }
 
 // Tasks (FT1-FT3) ---------------------------------------------------------------------------------------
@@ -205,6 +235,10 @@ export async function updateTask(tx: OrgTx, idInput: unknown, input: Record<stri
   const today = options.today ?? todayIsoDate();
   const task = await requireTask(tx, idInput, today);
   const status = input.status === undefined ? task.status : requireOneOf(input.status, "Status", ["open", "cancelled"] as const);
+  // Cancelling, and opening a cancelled task again, is for bookkeepers and up (Jess, 5 Nov 2026; decision 1457). Farm staff tick tasks done and undone.
+  if (status !== task.status && !(tx.actor.role && roleAtLeast(tx.actor.role, "bookkeeper"))) {
+    throw new ForbiddenError(status === "cancelled" ? "Cancelling a task needs the bookkeeper role or higher. Mark it done, or ask a bookkeeper or the owner." : "Opening a cancelled task again needs the bookkeeper role or higher.");
+  }
   const fields = await parseFields(tx, task.farmId, input, task);
   await tx.query(
     `update farm_tasks set title = $2, note = $3, assigned_to_user_id = $4, due_on = $5, repeat = $6, paddock_id = $7, latitude = $8, longitude = $9, status = $10, updated_by_email = $11, updated_at = now() where id = $1`,
@@ -270,7 +304,7 @@ export async function taskHistory(tx: OrgTx, idInput: unknown): Promise<Array<Ta
   return rows.rows.map((row) => ({ id: row.id, doneFor: row.done_for, doneByEmail: row.done_by_email, doneAt: row.done_at, undoneByEmail: row.undone_by_email, undoneAt: row.undone_at }));
 }
 
-export type TaskDueItem = { key: string; taskId: string; farmId: string; farmName: string; date: string; title: string; assignedToName: string | null; overdue: boolean };
+export type TaskDueItem = { key: string; taskId: string; farmId: string; farmName: string; date: string; title: string; assignedToName: string | null; overdue: boolean; needsReassigning: boolean };
 
 /**
  * Tasks on the farm calendar (FT6): each open task's dates from `from` to
@@ -294,7 +328,7 @@ export async function tasksDue(tx: OrgTx, input: { from: string; to: string; far
   }
   const items: TaskDueItem[] = [];
   for (const task of await loadTasks(tx, where, params, today)) {
-    const base = { taskId: task.id, farmId: task.farmId, farmName: task.farmName, title: task.title, assignedToName: task.assignedToName };
+    const base = { taskId: task.id, farmId: task.farmId, farmName: task.farmName, title: task.title, assignedToName: task.assignedToName, needsReassigning: task.needsReassigning };
     if (task.next && task.next < today && today >= input.from && today <= input.to) items.push({ ...base, key: `${task.id}-overdue`, date: today, overdue: true });
     for (const date of taskDates(task, task.next, input.from, input.to)) if (!(task.next && task.next < today && date === task.next)) items.push({ ...base, key: `${task.id}-${date}`, date, overdue: false });
   }

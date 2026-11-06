@@ -77,6 +77,7 @@ export const FARMING_TOOLS: readonly string[] = [
   "farm_timeline",
   "list_supplements_fed",
   "rainfall",
+  "paddock_greenness",
   "list_pasture_photos_awaiting_estimate",
   "get_pasture_photo",
   "propose_pasture_cover_estimate",

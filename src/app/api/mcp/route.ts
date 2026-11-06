@@ -13,6 +13,7 @@ import { aiKeyVia, authenticateAiToken, type AiTokenIdentity } from "@/lib/ai/to
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { keyCanReadMail } from "@/lib/private-mail/ai";
 import { sessionMetaFrom } from "@/lib/auth/sessions";
+import { accessRefusalForAiToken } from "@/lib/organisations/access";
 import { PayloadTooLargeError } from "@/lib/errors";
 
 /**
@@ -105,6 +106,9 @@ export const POST = route(async (request) => {
   const token = bearerToken(request.headers.get("authorization"));
   const identity = await identify(token);
   if (!identity) {
+    // A real key whose person's access dates have passed (decision 1468): say so, plainly.
+    const ended = token ? await accessRefusalForAiToken(token) : null;
+    if (ended) return reply(rpcError(null, JSON_RPC.UNAUTHORIZED, ended.message), 403);
     if (token && address && !failedKeys.take(address)) return tooManyFailures();
     return unauthorized(token !== null);
   }

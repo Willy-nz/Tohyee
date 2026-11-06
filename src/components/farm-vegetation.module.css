@@ -1,0 +1,333 @@
+/* Satellite vegetation (#612): the setup steps, the map's notes and the paddock chart. Colours come from globals.css. */
+
+.switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.notes {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: var(--text-sm);
+}
+
+.captured {
+  font-weight: 600;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+  color: var(--text-muted, var(--chart-text-secondary));
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  width: 18px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  flex: none;
+}
+
+.missing {
+  background: repeating-linear-gradient(45deg, #b0b0b0 0 3px, #808080 3px 6px);
+}
+
+.note {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-muted, #f3f5f8);
+  border: 1px solid var(--border);
+}
+
+.attribution {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted, var(--chart-text-muted));
+}
+
+.details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.details dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 8px 0 0;
+  font-size: var(--text-sm);
+}
+
+.details dt {
+  color: var(--text-muted, var(--chart-text-muted));
+}
+
+.details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.figure {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.figure strong {
+  display: block;
+  font-size: var(--text-lg, 1.15rem);
+}
+
+.figure span {
+  font-size: var(--text-xs);
+  color: var(--text-muted, var(--chart-text-muted));
+}
+
+/* Setup steps */
+
+.progress {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.progress li {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+}
+
+.progress li.done {
+  background: var(--accent);
+}
+
+.progress li.here {
+  background: var(--accent);
+  opacity: 0.55;
+}
+
+.stepLabel {
+  margin: 0 0 4px;
+  font-size: var(--text-sm);
+  color: var(--text-muted, var(--chart-text-muted));
+}
+
+.stepTitle {
+  margin: 0 0 12px;
+  font-size: 1.35rem;
+  line-height: 1.25;
+}
+
+.steps {
+  margin: 12px 0;
+  padding-left: 24px;
+  display: grid;
+  gap: 12px;
+}
+
+.steps li {
+  line-height: 1.5;
+}
+
+.need {
+  margin: 12px 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+/* Not flex: bold words and (i) buttons inside an item must stay in the sentence. */
+.need li {
+  position: relative;
+  padding-left: 32px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.need li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.nav > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
+}
+
+.form input {
+  width: 100%;
+  min-width: 0;
+}
+
+.choices {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.choice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.choice[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.choice input {
+  margin-top: 3px;
+}
+
+.choiceText {
+  display: grid;
+  gap: 2px;
+}
+
+.choiceText span {
+  font-size: var(--text-sm);
+  color: var(--text-muted, var(--chart-text-muted));
+}
+
+.externalLink {
+  display: inline-block;
+  margin-top: 6px;
+}
+
+.check {
+  margin-top: 12px;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* The paddock chart */
+
+.chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  touch-action: pan-y;
+}
+
+.chartReadout {
+  min-height: 1.4em;
+  margin: 4px 0 0;
+  font-size: var(--text-sm);
+}
+
+.trendList {
+  margin: 8px 0 0;
+  font-size: var(--text-sm);
+}
+
+.trendList summary {
+  cursor: pointer;
+}
+
+.trendList table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+}
+
+.trendList th,
+.trendList td {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.fact {
+  display: grid;
+  gap: 2px;
+}
+
+.fact span {
+  font-size: var(--text-xs);
+  color: var(--text-muted, var(--chart-text-muted));
+}
+
+.fact strong {
+  font-size: 1.05rem;
+}
+
+.preview {
+  margin: 12px 0;
+}

@@ -101,7 +101,45 @@ export type Membership = {
   role: Role;
 };
 
+/**
+ * SQL that's true while a membership (`alias`, on organisation_members) may
+ * be used now: after its start and before its end (time-limited access,
+ * decisions 1466-1468). Every way into an organisation goes through
+ * getMembership or listMembershipsForUser below, which use it; code that
+ * reads organisation_members itself to let someone in must use it too.
+ */
+export function memberAccessCurrentSql(alias = "m"): string {
+  return `((${alias}.access_starts_at is null or ${alias}.access_starts_at <= now()) and (${alias}.access_ends_at is null or now() < ${alias}.access_ends_at))`;
+}
+
+/**
+ * The member's role, while their access is current (decision 1467). A
+ * membership before its start or after its end is null here, the same as no
+ * membership, so every key, AI connection, farm app key and calendar link
+ * that looks the person up is refused with nothing more to do.
+ * `requireOrganisationRole` then tells a signed-in person why.
+ */
 export async function getMembership(
+  organisationId: string,
+  userId: string,
+): Promise<Membership | null> {
+  const result = await coreQuery<OrganisationRow & { role: Role }>(
+    `select ${organisationColumns("o")}, m.role
+       from organisations o
+       join organisation_members m on m.organisation_id = o.id
+      where o.id = $1 and m.user_id = $2 and ${memberAccessCurrentSql("m")}`,
+    [organisationId, userId],
+  );
+  const row = result.rows[0];
+  return row ? { organisation: toOrganisationRecord(row), role: row.role } : null;
+}
+
+/**
+ * Whether someone is a member at all, current or not (for admins choosing
+ * their farms before their access starts, for example). Never use this to
+ * let someone in: use getMembership.
+ */
+export async function getMembershipAnyTime(
   organisationId: string,
   userId: string,
 ): Promise<Membership | null> {
@@ -116,7 +154,7 @@ export async function getMembership(
   return row ? { organisation: toOrganisationRecord(row), role: row.role } : null;
 }
 
-/** Active organisations the user belongs to, for the organisation switcher. */
+/** Active organisations the user can use now, for the organisation switcher. */
 export async function listMembershipsForUser(userId: string): Promise<Membership[]> {
   const result = await coreQuery<OrganisationRow & { role: Role }>(
     `select ${organisationColumns("o")}, m.role
@@ -125,8 +163,27 @@ export async function listMembershipsForUser(userId: string): Promise<Membership
       where m.user_id = $1 and o.is_active
         -- A demo farm shows once it's made (#437).
         and (o.demo_status is null or o.demo_status = 'ready')
+        -- Time-limited access (decision 1467): only while it's current.
+        and ${memberAccessCurrentSql("m")}
       order by o.display_name, o.id`,
     [userId],
   );
   return result.rows.map((row) => ({ organisation: toOrganisationRecord(row), role: row.role }));
+}
+
+/**
+ * The members of an organisation whose access is current now (decision
+ * 1467's rule, memberAccessCurrentSql), with their login switched on. For
+ * lists of people to give work to (task assignees, decision 1512): someone
+ * before their start or after their end can't sign in to do it.
+ */
+export async function currentMemberUserIds(organisationId: string): Promise<Set<string>> {
+  const result = await coreQuery<{ user_id: string }>(
+    `select m.user_id::text as user_id
+       from organisation_members m
+       join users u on u.id = m.user_id
+      where m.organisation_id = $1 and u.is_active and ${memberAccessCurrentSql("m")}`,
+    [organisationId],
+  );
+  return new Set(result.rows.map((row) => row.user_id));
 }

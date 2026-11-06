@@ -1,4 +1,5 @@
 import { writeAuditEvent } from "@/lib/audit";
+import { memberAccessCurrentSql } from "@/lib/organisations/registry";
 import { type Role, roleAtLeast, ROLE_LABELS } from "@/lib/auth/roles";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
@@ -40,7 +41,7 @@ export async function organisationMembers(organisationId: string): Promise<Organ
   const result = await coreQuery<{ user_id: string; email: string; display_name: string; role: Role }>(
     `select m.user_id::text, u.email, u.display_name, m.role
        from organisation_members m join users u on u.id = m.user_id
-      where m.organisation_id = $1 and u.is_active`,
+      where m.organisation_id = $1 and u.is_active and ${memberAccessCurrentSql("m")}`,
     [organisationId],
   );
   return result.rows.map((row) => ({ userId: row.user_id, email: row.email, displayName: row.display_name, role: row.role }));

@@ -145,6 +145,30 @@ that something happened.
   email, the inviter is shown the link to pass on. Only owners invite
   owners. An organisation can add or invite 30 people an hour. Audited.
   The demo farm refuses it. Server › Users still manages every login.
+- **Time-limited access** (decisions 1466-1474): when inviting someone, or
+  later on People and roles, an owner or admin can choose **Access from**
+  and **Access until** (a date, and a time if wanted; New Zealand time).
+  Before the start and after the end Tohyee refuses everything they try
+  (pages, the API, AI keys and AI apps, farm app keys, calendar links) and
+  tells them "Your access to … ended on …. Ask … to extend it." Each person
+  shows "Access until 12 Dec", "Ended" or "Starts", with **+1 week**,
+  **+1 month**, **Dates** and **End now**, and a filter for access ending
+  soon. The member and the owners and admins get an email (when Settings ›
+  Email is set up) and a notice 3 days before it ends. Ended members stay
+  listed, greyed, with **What they did** (their actions in this
+  organisation, 100 at a time with **Older**; every action shows once,
+  even when many share a time, decisions 1510-1511); nothing is deleted. One owner always keeps access with no
+  end. There's no way yet to limit someone to one area (for example only
+  bank reconciliation): use the role, payroll access and farms.
+- **Hire help** (decisions 1475-1480): Settings › Hire help writes a job
+  brief for hiring a bookkeeper or other help. Tick what needs doing (bank
+  reconciliation, GST return, catch-up, year-end, payroll, set-up); Tohyee
+  adds facts from the books as counts and periods only (lines not
+  reconciled and which months, bank accounts, GST period and basis, modules
+  on). Choose the access and how long, check and edit the brief, copy it and
+  post it on the hiring site you use. **Invite them** opens the invite on
+  People and roles with the role and dates filled in. No names, amounts or
+  bank details go in the brief.
 - **Payroll employee records** (PE1-PE12; examples not yet approved by Jess):
   employee details, pay frequency, tax code, student loan and KiwiSaver
   settings (including a temporary rate reduction approved by IRD, with its
@@ -3255,7 +3279,8 @@ that something happened.
 - **Rainfall** (RF1-RF8, decisions 1451-1456, tenant migration 0246):
   Farm › More › **Rainfall**. A farm has rain gauges (named, with a note,
   optionally placed on the map as a blue "R"). Farm › Log › **Rain gauge**
-  records a day's mm from a phone, with **No rain (0 mm)**, through the
+  records the mm read that morning for the day before (the rain to 9 am,
+  as official records do), with **No rain (0 mm)**, through the
   device's queue, so it works with no signal and is kept once. Readings can
   be changed and backdated, with who and when kept; bookkeepers remove one
   entered by mistake (kept). Rainfall shows this month, this season and the
@@ -3273,7 +3298,11 @@ that something happened.
   moves to its next date. Today has a Tasks card with Done (works with no
   signal), the farm calendar shows the next 30 days, and the person it's
   for gets reminders in the Android app with their safety actions.
-  Cancelled tasks are kept.
+  Only bookkeepers and up cancel a task; cancelled tasks are kept.
+  A task can only be given to someone whose access is current (decisions
+  1512-1514); an open task for someone whose access has ended or not
+  started shows **Needs reassigning** on Tasks, Today and the calendar,
+  and stays theirs until someone changes it.
 
 - **Mobs** (decisions 1421-1430, MOB1-MOB10, tenant migration 0233; common
   NZ practice, not yet reviewed): Farm › More › Mobs lists each mob (one
@@ -3287,6 +3316,49 @@ that something happened.
   Mob names typed on grazings can be made mob records, and mobs can be
   imported from CSV or Excel. Moves, weights, deaths, births and counts
   work offline through the device's queue.
+
+- **Farm map assets and measuring** (MA1-MA6, decisions 1462-1465, tenant
+  migration 0248): on Farm › Map, **Farm assets** puts troughs, gates,
+  water points, sheds, bores, tanks, yards and culverts on the map as
+  points, and fences, pipes, races and drains as lines (with their length),
+  each with a name and note; removed ones are kept. **Measure** gives a
+  tapped distance (m, km) or a drawn area (m², ha), saving nothing. Layer
+  buttons turn hazards, effluent, assets, rain gauges, tasks and people on
+  or off, remembered on the device.
+
+- **Satellite vegetation: the pipeline** (#612, decisions 1520-1537, tenant
+  migration 0253; docs/SATELLITE-VEGETATION.md): optional, free Sentinel-2
+  pictures of a farm's paddocks from the organisation's own Copernicus
+  account, worked into greenness (NDVI) a paddock: mean and median, clear
+  pixels and clear share, tied to the paddock boundary version used. Cloud
+  and shadow are missing, never zero; small and narrow paddocks are
+  flagged. One quiet worker checks each farm about once a day, with
+  idempotent jobs, checkpoints, retries, and pauses at the monthly budget,
+  the storage limit or a full disk. Pictures are files on the data disk
+  with a retention; the numbers stay. A "Test one farm" measure for the
+  pilot. Greenness, not feed: no kg DM/ha. The Copernicus connection is
+  not yet tried against the live service; made-up demo pictures stand in
+  for tests and the demo farm.
+
+- **Satellite vegetation: setup and the map** (#612, decision 1539): Farm ›
+  Map › Satellite vegetation walks owners and admins through it one step a
+  screen (the free Copernicus account, the OAuth client, Test connection,
+  a farm and its boundaries, Test one farm with a preview, the budget,
+  turning it on), saving progress. The farm map gets Aerial / Vegetation /
+  Change, the capture date and other dates, a fixed legend with missing
+  coverage striped grey, the greenness note and the Copernicus
+  attribution; a tapped paddock shows its numbers and trend. The help is in
+  docs/SATELLITE-VEGETATION.md.
+
+- **Satellite vegetation: farms, offline, Analytics and the AI** (#612,
+  decisions 1538 and 1540): an overview of every farm you can see; the
+  latest clear picture and up to 3 earlier ones (2 MB at most) and each
+  paddock's trend in the offline map pack; `tohyee_farm_paddock_greenness`
+  in Analytics (members who see every farm); and a read-only
+  `paddock_greenness` AI tool with acquisition time, clear share and
+  uncertainty, which never converts greenness to kg DM/ha. Not built:
+  Wi-Fi-only downloads (browsers can't reliably tell) and pasture cover
+  estimates (#612 Phase 3, a separate piece of work).
 
 - **Treatments and withholding** (decisions 1431-1438, TRT1-TRT8, tenant
   migration 0234; common NZ practice, not yet reviewed): treat a mob from
