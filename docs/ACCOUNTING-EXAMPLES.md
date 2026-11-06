@@ -7745,6 +7745,21 @@ Kobe Ltd, 50.00 + GST = **57.50**, dated 30 Apr, voided 5 May.
   without restarting at 1 April; its closing balance is then not the trial
   balance's, and the report says so.
 
+- **CRS1** A custom report can start from every standard report (Jess asked
+  on 6 Nov 2026; not yet reviewed). Trial balance, stock valuation, bank
+  reconciliation, budget vs actual and changes in equity start as list
+  reports of that report's own figures, so they always match it: with the
+  journals 1,000.00 owner funds into the bank (1 Apr 2026) and a 230.00
+  expense (6010, 5 May 2026), the trial balance custom report at 31 May
+  2026 has 1000 debit **770.00**, 3000 credit **1,000.00**, 6010 debit
+  **230.00**, totals **1,000.00** each. Started from Reports › Custom, the
+  date is the end of this month and a bank reconciliation or budget vs
+  actual uses the first bank account or the latest budget; Save as custom
+  report on those reports keeps the account, budget and dates chosen.
+  General ledger starts as Account transactions for all accounts, titled
+  General ledger; Annual financial statements opens its report, whose
+  statements follow the layouts.
+
 ### Not supported yet (refused rather than guessed)
 
 - Filtering by contact or by source type, and exporting to CSV or Excel

@@ -7,6 +7,10 @@ import { accountTransactions } from "@/lib/reports/account-transactions";
 import { agedPayables } from "@/lib/reports/aged-payables";
 import { agedReceivables } from "@/lib/reports/aged-receivables";
 import { journalReport } from "@/lib/reports/journal-report";
+import { bankReconciliationReport } from "@/lib/reports/bank-reconciliation";
+import { budgetVsActual } from "@/lib/reports/budget-vs-actual";
+import { inventoryValuation, trialBalance } from "@/lib/reports/financial";
+import { changesInEquity } from "@/lib/reports/statements";
 import { salesBySalesperson } from "@/lib/reports/sales-by-salesperson";
 import { parseTrackingFilter } from "@/lib/reports/account-transactions";
 import { getTrackingSetup } from "@/lib/tracking/service";
@@ -85,7 +89,45 @@ const REPORT_COLUMNS: Record<TransactionReportBase, TransactionReportColumn[]> =
     { key: "debit", label: "Debit" },
     { key: "credit", label: "Credit" },
   ],
+  trial_balance: [
+    { key: "code", label: "Code" },
+    { key: "name", label: "Account" },
+    { key: "accountType", label: "Type" },
+    { key: "debit", label: "Debit" },
+    { key: "credit", label: "Credit" },
+  ],
+  inventory_valuation: [
+    { key: "itemCode", label: "Item" },
+    { key: "itemName", label: "Name" },
+    { key: "location", label: "Location" },
+    { key: "unit", label: "Unit" },
+    { key: "quantity", label: "Quantity" },
+    { key: "averageCost", label: "Average cost" },
+    { key: "value", label: "Value" },
+    { key: "lastMovementDate", label: "Last movement" },
+  ],
+  bank_reconciliation: [
+    { key: "date", label: "Date" },
+    { key: "description", label: "Description" },
+    { key: "reference", label: "Reference" },
+    { key: "amount", label: "Amount" },
+  ],
+  budget_vs_actual: [
+    { key: "code", label: "Code" },
+    { key: "name", label: "Account" },
+    { key: "actual", label: "Actual" },
+    { key: "budget", label: "Budget" },
+    { key: "variance", label: "Variance" },
+    { key: "variancePercent", label: "Variance %" },
+  ],
+  changes_in_equity: [
+    { key: "item", label: "Item" },
+    { key: "amount", label: "Amount" },
+  ],
 };
+
+/** Reports of accounts, items or statement lines, not documents: no contact, document or line columns (CRS1). */
+const FIGURES_ONLY_BASES: ReadonlySet<TransactionReportBase> = new Set(["trial_balance", "inventory_valuation", "bank_reconciliation", "budget_vs_actual", "changes_in_equity"]);
 
 /** Reports with a row per ledger line; the others have a row per document. */
 const LINE_LEVEL_BASES: ReadonlySet<TransactionReportBase> = new Set(["account_transactions", "journal_report"]);
@@ -100,6 +142,7 @@ function usesFor(base: TransactionReportBase): string[] {
 export async function transactionReportColumnOptions(tx: OrgTx, base: TransactionReportBase): Promise<TransactionReportColumn[]> {
   const customFields = await getCustomFieldSetup(tx);
   const tracking = await getTrackingSetup(tx);
+  if (FIGURES_ONLY_BASES.has(base)) return [...REPORT_COLUMNS[base]];
   const uses = usesFor(base);
   const options = [
     ...REPORT_COLUMNS[base],
@@ -203,7 +246,7 @@ function reportContexts(base: TransactionReportBase, data: Record<string, unknow
         });
       }
     }
-  } else {
+  } else if (base === "journal_report") {
     for (const journal of (data.journals ?? []) as Array<Record<string, unknown>>) {
       const header = sourceContext(journal);
       contexts.push(header);
@@ -317,7 +360,7 @@ function parseFilters(base: TransactionReportBase, input: unknown): TransactionR
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new ValidationError("The report filters are missing.");
   const raw = input as Record<string, unknown>;
   const filters: TransactionReportFilters = {};
-  if (base === "account_transactions" || base === "sales_by_salesperson" || base === "journal_report") {
+  if (base === "account_transactions" || base === "sales_by_salesperson" || base === "journal_report" || base === "budget_vs_actual" || base === "changes_in_equity") {
     filters.from = raw.from == null || raw.from === "" ? null : parseIsoDate(raw.from, "from");
     filters.to = raw.to == null || raw.to === "" ? null : parseIsoDate(raw.to, "to");
     if (filters.from && filters.to && filters.from > filters.to) throw new ValidationError("The start date must be on or before the end date.");
@@ -333,6 +376,8 @@ function parseFilters(base: TransactionReportBase, input: unknown): TransactionR
     }
     if (filters.trackingValueId && filters.trackingValueId !== "unassigned") requireId(filters.trackingValueId, "trackingValueId");
   }
+  if (base === "bank_reconciliation") filters.accountId = raw.accountId == null || raw.accountId === "" ? null : requireId(raw.accountId, "accountId");
+  if (base === "budget_vs_actual") filters.budgetId = raw.budgetId == null || raw.budgetId === "" ? null : requireId(raw.budgetId, "budgetId");
   if (base === "aged_receivables") {
     if (raw.rollUp != null && typeof raw.rollUp !== "boolean") throw new ValidationError("rollUp must be true or false.");
     filters.rollUp = raw.rollUp === true;
@@ -368,6 +413,12 @@ export function templateTransactionReportLayout(base: TransactionReportBase, per
       ? { asAt: period, ...(base === "aged_receivables" ? { rollUp: false } : {}) }
       : { from: null, to: period };
   if (base === "account_transactions") Object.assign(filters, { accountId: null, trackingCategoryId: null, trackingValueId: null });
+  // As at the period end; the first bank account and budget unless Save as custom report chose one (CRS1).
+  if (base === "trial_balance" || base === "bank_reconciliation") Object.assign(filters, { from: undefined, to: undefined, asAt: period });
+  if (base === "inventory_valuation") Object.assign(filters, { from: undefined, to: undefined, asAt: null });
+  if (base === "bank_reconciliation") filters.accountId = null;
+  if (base === "budget_vs_actual") filters.budgetId = null;
+  for (const key of Object.keys(filters) as Array<keyof TransactionReportFilters>) if (filters[key] === undefined) delete filters[key];
   return { title: CUSTOM_REPORT_BASES[base], filters, columns: [...TRANSACTION_REPORT_DEFAULT_COLUMNS[base]] };
 }
 
@@ -390,6 +441,13 @@ export async function computeTransactionCustomReport(
     aged_payables: () => agedPayables(tx, { asAt: filters.asAt }),
     sales_by_salesperson: () => salesBySalesperson(tx, { from: filters.from, to: filters.to }),
     journal_report: () => journalReport(tx, { from: filters.from, to: filters.to }),
+    trial_balance: () => trialBalance(tx, { asAt: filters.asAt }),
+    inventory_valuation: () => inventoryValuation(tx),
+    bank_reconciliation: async () => bankReconciliationReport(tx, { accountId: filters.accountId ?? (await firstOf(tx, "bank")), asAt: filters.asAt }),
+    // Budget vs actual works in whole months.
+    budget_vs_actual: async () =>
+      budgetVsActual(tx, { budgetId: filters.budgetId ?? (await firstOf(tx, "budget")), from: filters.from ? filters.from.slice(0, 7) : null, to: filters.to ? filters.to.slice(0, 7) : null }),
+    changes_in_equity: () => changesInEquity(tx, { from: filters.from, to: filters.to }),
   })[base]();
   await addTransactionColumnValues(tx, base, data as Record<string, unknown>, layout.columns);
   return {
@@ -405,6 +463,16 @@ export async function computeTransactionCustomReport(
     inSeveralGroups: [],
     computedAt: new Date().toISOString(),
   };
+}
+
+/** The first active bank account, or the latest budget, when a report started without one (CRS1). */
+async function firstOf(tx: OrgTx, what: "bank" | "budget"): Promise<string> {
+  const found =
+    what === "bank"
+      ? await tx.query<{ id: string }>("select id::text from accounts where account_type in ('bank', 'credit_card') and is_active order by code limit 1")
+      : await tx.query<{ id: string }>("select id::text from budgets order by id desc limit 1");
+  if (!found.rows[0]) throw new ValidationError(what === "bank" ? "There's no bank account yet." : "Make a budget first: Reports › Budgets.");
+  return found.rows[0].id;
 }
 
 export function transactionCustomFieldText(field: Parameters<typeof customValueText>[0], value: Parameters<typeof customValueText>[1]): string {

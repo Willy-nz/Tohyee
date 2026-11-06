@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReportExportName } from "@/lib/reports/export-types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -124,6 +125,45 @@ function reportRows(figures: TransactionCustomReportFigures): TableRow[] {
     }
     const total = data.total as Record<string, unknown> | undefined;
     if (total) push({ ...total, salesperson: "Total" }, "total");
+  } else if (figures.base === "trial_balance") {
+    for (const row of (data.rows ?? []) as Array<Record<string, unknown>>) push({ ...row, accountType: String(row.accountType ?? "").replace(/_/g, " ") });
+    push({ name: "Total", debit: data.totalDebit, credit: data.totalCredit }, "total");
+  } else if (figures.base === "inventory_valuation") {
+    for (const item of (data.items ?? []) as Array<Record<string, unknown>>) push({ ...item, location: item.locationName });
+    push({ itemCode: "Total", value: data.total }, "total");
+  } else if (figures.base === "bank_reconciliation") {
+    const account = data.account as Record<string, unknown>;
+    push({ description: `${account.code} · ${account.name}` }, "section");
+    push({ description: "Balance in Tohyee", amount: data.ledgerBalance });
+    const bank = data.bankNotInTohyee as { items: Array<Record<string, unknown>>; total: string };
+    push({ description: "In the bank, not in Tohyee" }, "section");
+    for (const item of bank.items) push(item);
+    push({ description: "Total in the bank, not in Tohyee", amount: bank.total }, "total");
+    const ours = data.tohyeeNotInBank as { items: Array<Record<string, unknown>>; total: string };
+    push({ description: "In Tohyee, not in the bank" }, "section");
+    for (const item of ours.items) push(item);
+    push({ description: "Total in Tohyee, not in the bank", amount: ours.total }, "total");
+    push({ description: "Expected statement balance", amount: data.expectedStatementBalance }, "total");
+    if (data.statementBalance != null) push({ description: "Statement balance", amount: data.statementBalance }, "total");
+  } else if (figures.base === "budget_vs_actual") {
+    const group = (key: string, label: string) => {
+      const entry = data[key] as { sections: Array<{ label: string; lines: Array<Record<string, unknown>>; total: Record<string, unknown> }>; total: Record<string, unknown> } | undefined;
+      if (!entry || entry.sections.every((section) => section.lines.length === 0)) return;
+      push({ name: label }, "section");
+      for (const section of entry.sections) for (const line of section.lines) push(line);
+      push({ ...entry.total, name: `Total ${label.toLowerCase()}` }, "total");
+    };
+    group("revenue", "Revenue");
+    group("costOfSales", "Cost of sales");
+    push({ ...(data.grossProfit as Record<string, unknown>), name: "Gross profit" }, "total");
+    group("otherIncome", "Other income");
+    group("expenses", "Expenses");
+    push({ ...(data.netProfit as Record<string, unknown>), name: "Net profit" }, "total");
+  } else if (figures.base === "changes_in_equity") {
+    push({ item: "Equity at the start", amount: data.openingEquity }, "total");
+    push({ item: "Net profit for the period", amount: data.profit });
+    for (const movement of (data.movements ?? []) as Array<Record<string, unknown>>) push({ item: movement.label, amount: movement.amount });
+    push({ item: "Equity at the end", amount: data.closingEquity }, "total");
   } else {
     const journals = (data.journals ?? []) as Array<Record<string, unknown>>;
     for (const journal of journals) {
@@ -206,15 +246,23 @@ export function TransactionCustomReportPage({ organisationId, loaded }: { organi
     aged_payables: "aged-payables",
     sales_by_salesperson: "sales-by-salesperson",
     journal_report: "journal-report",
-  }[report.base] as "account-transactions" | "aged-receivables" | "aged-payables" | "sales-by-salesperson" | "journal-report";
+    trial_balance: "trial-balance",
+    inventory_valuation: "inventory-valuation",
+    changes_in_equity: "changes-in-equity",
+    bank_reconciliation: "custom-report",
+    budget_vs_actual: "custom-report",
+  }[report.base] as ReportExportName;
   const options = figures.columnOptions;
   const selectedColumns = report.layout.columns
     .map((key) => options.find((option) => option.key === key))
     .filter((column): column is TransactionReportColumn => Boolean(column));
   const rows = reportRows(figures);
-  const period = report.base === "aged_receivables" || report.base === "aged_payables"
-    ? `As at ${formatDate(report.layout.filters.asAt)}`
-    : `${report.layout.filters.from ? formatDate(report.layout.filters.from) : "Start of financial year"} to ${formatDate(report.layout.filters.to)}`;
+  const period =
+    report.base === "inventory_valuation"
+      ? "Today"
+      : report.base === "aged_receivables" || report.base === "aged_payables" || report.base === "trial_balance" || report.base === "bank_reconciliation"
+        ? `As at ${formatDate(report.layout.filters.asAt)}`
+        : `${report.layout.filters.from ? formatDate(report.layout.filters.from) : "Start of financial year"} to ${formatDate(report.layout.filters.to)}`;
 
   return (
     <>

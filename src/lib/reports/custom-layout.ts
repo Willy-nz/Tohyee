@@ -11,11 +11,28 @@ export type TransactionReportBase =
   | "aged_receivables"
   | "aged_payables"
   | "sales_by_salesperson"
-  | "journal_report";
+  | "journal_report"
+  // CRS1 (7 Nov 2026): the rest of the standard reports, as lists of their own figures.
+  | "trial_balance"
+  | "inventory_valuation"
+  | "bank_reconciliation"
+  | "budget_vs_actual"
+  | "changes_in_equity";
 export type CustomReportBase = FinancialReportBase | TransactionReportBase;
 
 export function isTransactionReportBase(base: string): base is TransactionReportBase {
-  return ["account_transactions", "aged_receivables", "aged_payables", "sales_by_salesperson", "journal_report"].includes(base);
+  return [
+    "account_transactions",
+    "aged_receivables",
+    "aged_payables",
+    "sales_by_salesperson",
+    "journal_report",
+    "trial_balance",
+    "inventory_valuation",
+    "bank_reconciliation",
+    "budget_vs_actual",
+    "changes_in_equity",
+  ].includes(base);
 }
 export type PeriodLength = "month" | "quarter" | "year";
 
@@ -27,6 +44,11 @@ export const CUSTOM_REPORT_BASES: Record<CustomReportBase, string> = {
   aged_payables: "Aged payables",
   sales_by_salesperson: "Sales by salesperson",
   journal_report: "Journal report",
+  trial_balance: "Trial balance",
+  inventory_valuation: "Stock valuation",
+  bank_reconciliation: "Bank reconciliation",
+  budget_vs_actual: "Budget vs actual",
+  changes_in_equity: "Changes in equity",
 };
 
 export const TRANSACTION_REPORT_DEFAULT_COLUMNS: Record<TransactionReportBase, string[]> = {
@@ -35,6 +57,11 @@ export const TRANSACTION_REPORT_DEFAULT_COLUMNS: Record<TransactionReportBase, s
   aged_payables: ["contact.name", "current", "days1to30", "days31to60", "days61to90", "over90", "credit", "total"],
   sales_by_salesperson: ["salesperson", "invoices", "sales", "creditNotes", "netSales"],
   journal_report: ["date", "source", "account", "description", "debit", "credit"],
+  trial_balance: ["code", "name", "debit", "credit"],
+  inventory_valuation: ["itemCode", "itemName", "location", "quantity", "averageCost", "value"],
+  bank_reconciliation: ["date", "description", "reference", "amount"],
+  budget_vs_actual: ["code", "name", "actual", "budget", "variance", "variancePercent"],
+  changes_in_equity: ["item", "amount"],
 };
 
 export const PERIOD_LENGTHS: Record<PeriodLength, { label: string; months: number }> = {
@@ -151,6 +178,8 @@ export type TransactionReportFilters = {
   trackingCategoryId?: string | null;
   trackingValueId?: string | null;
   rollUp?: boolean;
+  /** Budget vs actual: which budget (CRS1). */
+  budgetId?: string | null;
 };
 
 export type TransactionReportLayout = {

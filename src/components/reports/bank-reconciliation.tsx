@@ -1,5 +1,6 @@
 "use client";
 
+import { useSaveAsCustomReport } from "@/components/reports/save-as-custom-report";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useState } from "react";
@@ -8,7 +9,7 @@ import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { PrintButton } from "@/components/reports/ledger-reports";
 import { ReportExport } from "@/components/reports/report-export";
-import { Badge, Card, Empty, Field, Notice, ui } from "@/components/ui";
+import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import type { BankAccount } from "@/lib/bank/accounts";
 import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
 import type { BankReconciliationReport as Report } from "@/lib/reports/bank-reconciliation";
@@ -46,6 +47,7 @@ export function BankReconciliationReportView({
   const [asAt, setAsAt] = useState(() => (initialAsAt && /^\d{4}-\d{2}-\d{2}$/.test(initialAsAt) ? initialAsAt : todayInBrowser()));
   const accountId = chosen || accounts.data?.bankAccounts[0]?.id || "";
   const report = useApiData<Report>(accountId ? "/api/reports/bank-reconciliation" : null, { organisationId, accountId, asAt });
+  const save = useSaveAsCustomReport(organisationId, "bank_reconciliation", { accountId: accountId || null, asAt });
   const data = report.data;
   return (
     <Card
@@ -65,9 +67,15 @@ export function BankReconciliationReportView({
             <DateInput value={asAt} onChange={(event) => setAsAt(event.target.value)} />
           </Field>
           <PrintButton />
+          {save.allowed && accountId ? (
+            <Button variant="secondary" size="small" disabled={save.busy} onClick={() => void save.save()}>
+              {save.busy ? "Saving…" : "Save as custom report"}
+            </Button>
+          ) : null}
         </div>
       }
     >
+      {save.error ? <Notice tone="error">{save.error}</Notice> : null}
       {accounts.error ? <Notice tone="error">{accounts.error}</Notice> : null}
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {accounts.data && accounts.data.bankAccounts.length === 0 ? <Empty>There are no bank or credit card accounts.</Empty> : null}
