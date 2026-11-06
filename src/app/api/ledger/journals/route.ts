@@ -4,7 +4,9 @@ import { listJournals, postJournal } from "@/lib/ledger/journals";
 /**
  * GET: newest first, 50 at a time. Filters: postingDateFrom, postingDateTo,
  * referenceQuery, kind (primary|reversal|replacement|manual|inventory|fx_revaluation|invoice|customer_payment|bill|supplier_payment|sales_credit_note|sales_credit_note_refund|supplier_credit_note|supplier_credit_note_refund|customer_overpayment_refund|bank_transaction|bank_transfer),
- * beforeId (for the next page), limit (max 200).
+ * beforeId (for the next page), limit (max 200). Or page (from 1) and pageSize
+ * (default 100, max 200), which also give page, pages and total (decision 1564).
+ * kind=journals is manual journals and their replacements, without reversals.
  */
 export const GET = route(async (request) => {
   const params = searchParams(request);
@@ -16,6 +18,8 @@ export const GET = route(async (request) => {
       kind: params.get("kind") ?? params.get("correctionKind"),
       beforeId: params.get("beforeId"),
       limit: params.get("limit") ?? undefined,
+      page: params.get("page") ?? undefined,
+      pageSize: params.get("pageSize") ?? undefined,
     }),
   );
   return json(result);
