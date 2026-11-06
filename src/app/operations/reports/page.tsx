@@ -15,13 +15,12 @@ import { ReportFrame, type ReportDates, ReportToolbar, StatementHeading, useYear
 import { CashFlowStatementReport, ChangesInEquityReport } from "@/components/reports/statements";
 import { CustomReportList, FavouriteToggle, ReportWarnings, StartCustomReport, useFavourite } from "@/components/reports/custom-report";
 import { CustomFiguresTable } from "@/components/reports/custom-report-table";
-import type { MoreMenuItem } from "@/components/more-menu";
-import { useWorkspace } from "@/components/workspace";
-import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { type CustomReportFigures, type FinancialReportBase, lastDayOfMonth } from "@/lib/reports/custom-layout";
+import { useReportLayout } from "@/components/reports/report-layout";
+import { AnnualStatementsReport } from "@/components/reports/annual-statements";
+import type { CustomReportFigures, FinancialReportBase } from "@/lib/reports/custom-layout";
 import { SalesBySalespersonReport, useSalespeople } from "@/components/salespeople";
 import { reportCategories, useTracking } from "@/components/tracking";
-import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
+import { Badge, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { formatDate, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
 import { accountTransactionsHref } from "@/lib/reports/drilldown";
 import type { ProfitAndLossSplit, SplitColumn, SplitGroup } from "@/lib/reports/financial";
@@ -31,8 +30,7 @@ import {
   type PeriodOrder,
   periodOrderStorageKey,
   rememberedPeriodOrder,
-  searchWithOrder,
-} from "@/lib/reports/compare-columns";
+  searchWithOrder } from "@/lib/reports/compare-columns";
 import type { PeriodLength } from "@/lib/reports/custom-layout";
 import { columnHeading, statementAsAt, statementPeriod } from "@/lib/reports/report-dates";
 import type { MultiColumnStatement } from "@/lib/reports/statement-compare";
@@ -41,8 +39,7 @@ import {
   parseTrackingChoice,
   type TrackingChoice,
   TrackingFilterField,
-  trackingQuery,
-} from "@/components/reports/statement-table";
+  trackingQuery } from "@/components/reports/statement-table";
 
 type Line = { accountId: string; code: string; name: string; amount: string };
 type Section = { key: string; label: string; lines: Line[]; total: string };
@@ -216,8 +213,7 @@ function SplitGroupRows({
   from,
   to,
   categoryId,
-  totalDrill,
-}: {
+  totalDrill }: {
   title: string;
   group: SplitGroup;
   columns: SplitColumn[];
@@ -258,8 +254,7 @@ function SplitGroupRows({
                         to,
                         trackingCategoryId: categoryId,
                         trackingValueId: column.valueId,
-                        trackingUnassigned: column.key === "none",
-                      }}
+                        trackingUnassigned: column.key === "none" }}
                     />
                   ) : column.key === "total" ? (
                     <AccountAmount accountId={line.accountId} value={line.amounts[column.key]} drilldown={{ from, to, ...totalDrill }} />
@@ -456,48 +451,6 @@ function TrialBalanceReport({ organisationId }: { organisationId: string }) {
   );
 }
 
-/**
- * The standard profit and loss or balance sheet's default layout (decision
- * 1359): whether it has one, "Edit layout" (opens it, or starts one from the
- * standard rows), and switching between it and the standard layout.
- */
-function useReportLayout(organisationId: string, base: FinancialReportBase) {
-  const router = useRouter();
-  const { can } = useWorkspace();
-  const defaults = useApiData<{ defaults: Array<{ base: string; reportId: string; title: string }> }>("/api/report-layouts", { organisationId });
-  const chosen = defaults.data?.defaults.find((entry) => entry.base === base) ?? null;
-  const [standard, setStandard] = useState(false);
-  const [key] = useState(() => newIdempotencyKey("edit-layout"));
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  async function edit(periodEnd: string) {
-    if (chosen) return router.push(`/operations/reports/custom/${chosen.reportId}`);
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await api<{ report: { id: string } }>("/api/custom-reports", {
-        method: "POST",
-        body: { organisationId, source: "ui", idempotencyKey: key, base, start: "standard", periodEnd: lastDayOfMonth(periodEnd) },
-      });
-      router.push(`/operations/reports/custom/${result.report.id}`);
-    } catch (caught) {
-      setError(errorMessage(caught));
-      setBusy(false);
-    }
-  }
-  const active = Boolean(chosen && !standard);
-  const more: MoreMenuItem[] = chosen
-    ? [standard ? { label: `Show in ${chosen.title}`, onSelect: () => setStandard(false) } : { label: "Show the standard layout", onSelect: () => setStandard(true) }]
-    : [];
-  const button = (periodEnd: string) =>
-    can("bookkeeper") ? (
-      <Button variant="secondary" disabled={busy || !defaults.data} onClick={() => void edit(periodEnd)}>
-        Edit layout
-      </Button>
-    ) : null;
-  return { chosen, active, more, button, error, loaded: Boolean(defaults.data) };
-}
-
 type LayoutRun = { layout: { report: { id: string; title: string }; figures: CustomReportFigures } | null };
 
 /** The report's figures in its default layout, as the custom report shows them. */
@@ -634,16 +587,14 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
     to: dates.to,
     ...trackingQuery(filter),
     ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy, order: applied.order } : {}),
-    ...(applied.ytd ? { ytd: true } : {}),
-  });
+    ...(applied.ytd ? { ytd: true } : {}) });
   const report = useApiData<ProfitAndLoss | ProfitAndLossSplit | MultiColumnStatement>(!layout.loaded || inLayout ? null : "/api/reports/profit-and-loss", {
     organisationId,
     from: dates.from,
     to: dates.to,
     ...trackingQuery(filter),
     ...(splitting ? { splitBy: splitting } : {}),
-    ...(multi ? { compare: applied.compare, compareBy: applied.compareBy, order: applied.order, total: applied.total, ytd: applied.ytd, percent: applied.percent } : {}),
-  });
+    ...(multi ? { compare: applied.compare, compareBy: applied.compareBy, order: applied.order, total: applied.total, ytd: applied.ytd, percent: applied.percent } : {}) });
   const data = inLayout ? null : report.data;
   const run = inLayout ? (layoutRun.data?.layout ?? null) : null;
   const runPeriods = run ? run.figures.columns.filter((column) => column.kind === "period") : [];
@@ -739,8 +690,7 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
                   period,
                   filters: lines,
                   style: "statement",
-                  tables: run ? layoutTables(run) : [{ id: "profit-and-loss-report" }],
-                }
+                  tables: run ? layoutTables(run) : [{ id: "profit-and-loss-report" }] }
               : null
           }
         />
@@ -809,15 +759,13 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
     base: "balance_sheet",
     asAt: dates.to,
     ...trackingQuery(filter),
-    ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy, order: applied.order } : {}),
-  });
+    ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy, order: applied.order } : {}) });
   const run = layout.active ? (layoutRun.data?.layout ?? null) : null;
   const report = useApiData<BalanceSheet | MultiColumnStatement>(!layout.loaded || layout.active ? null : "/api/reports/balance-sheet", {
     organisationId,
     asAt: dates.to,
     ...trackingQuery(filter),
-    ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy, order: applied.order } : {}),
-  });
+    ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy, order: applied.order } : {}) });
   const data = layout.active ? null : report.data;
   const asAt = data ? ("asAt" in data ? data.asAt : data.to) : ((run?.figures.columns.find((column) => column.key === "p0") ?? run?.figures.columns[0])?.to ?? "");
   const period = asAt ? statementAsAt(asAt) : "";
@@ -855,8 +803,7 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
                   period,
                   filters: lines,
                   style: "statement",
-                  tables: run ? layoutTables(run) : [{ id: "balance-sheet-report" }],
-                }
+                  tables: run ? layoutTables(run) : [{ id: "balance-sheet-report" }] }
               : null
           }
         />
@@ -1019,6 +966,7 @@ const TABS = [
   { key: "bs", label: "Balance sheet", group: "Financial statements" },
   { key: "equity", label: "Changes in equity", group: "Financial statements" },
   { key: "cashflow", label: "Cash flows", group: "Financial statements" },
+  { key: "statements", label: "Annual financial statements", group: "Financial statements" },
   { key: "aged", label: "Aged receivables", group: "Owed and owing" },
   { key: "payables", label: "Aged payables", group: "Owed and owing" },
   { key: "sales", label: "Sales by salesperson", group: "Owed and owing" },
@@ -1097,6 +1045,7 @@ function StandardReports({ organisationId }: { organisationId: string }) {
       {tab === "tb" ? <TrialBalanceReport organisationId={organisationId} /> : null}
       {tab === "equity" ? <ChangesInEquityReport organisationId={organisationId} /> : null}
       {tab === "cashflow" ? <CashFlowStatementReport organisationId={organisationId} /> : null}
+      {tab === "statements" ? <AnnualStatementsReport organisationId={organisationId} /> : null}
       {tab === "stock" ? <StockReport organisationId={organisationId} /> : null}
       {tab === "aged" ? <AgedReceivablesReport organisationId={organisationId} /> : null}
       {tab === "payables" ? <AgedPayablesReport organisationId={organisationId} /> : null}

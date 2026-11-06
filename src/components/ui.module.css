@@ -1424,6 +1424,17 @@
   overflow-x: auto;
 }
 
+/* Annual financial statements: one statement after another, each starting a new page on paper. */
+.annualStatement {
+  margin-top: 32px;
+}
+
+@media print {
+  .annualStatement {
+    break-before: page;
+  }
+}
+
 .table.statement {
   border-collapse: collapse;
 }
