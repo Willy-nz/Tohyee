@@ -218,8 +218,11 @@ export function AccountTransactionsReport({
   initialTo,
   initialTrackingCategoryId,
   initialTrackingValueId,
+  ledger = false,
 }: {
   organisationId: string;
+  /** The general ledger (GL1): every account with a balance or lines, no account to choose. */
+  ledger?: boolean;
   initialAccountId?: string | null;
   /** Several accounts, "12,15": a custom report group's total (decision 1356). */
   initialAccountIds?: string | null;
@@ -228,9 +231,9 @@ export function AccountTransactionsReport({
   initialTrackingCategoryId?: string | null;
   initialTrackingValueId?: string | null;
 }) {
-  const [accountIds] = useState(() => (initialAccountIds && /^\d+(,\d+)*$/.test(initialAccountIds) ? initialAccountIds : ""));
+  const [accountIds] = useState(() => (!ledger && initialAccountIds && /^\d+(,\d+)*$/.test(initialAccountIds) ? initialAccountIds : ""));
   // "several" while the report shows a group's accounts; choosing another account replaces them.
-  const [accountId, setAccountId] = useState(() => (accountIds ? "several" : initialAccountId && /^\d+$/.test(initialAccountId) ? initialAccountId : ""));
+  const [accountId, setAccountId] = useState(() => (ledger ? "" : accountIds ? "several" : initialAccountId && /^\d+$/.test(initialAccountId) ? initialAccountId : ""));
   const [from, setFrom] = useState<string | null>(() => (initialFrom && /^\d{4}-\d{2}-\d{2}$/.test(initialFrom) ? initialFrom : null));
   const [to, setTo] = useState(() => (initialTo && /^\d{4}-\d{2}-\d{2}$/.test(initialTo) ? initialTo : todayInBrowser()));
   const [filter, setFilter] = useState<{ categoryId: string; valueId: string }>(() => ({
@@ -274,7 +277,7 @@ export function AccountTransactionsReport({
     : [];
   return (
     <ReportFrame
-      label="Account transactions"
+      label={ledger ? "General ledger" : "Account transactions"}
       toolbar={
         <ReportToolbar
           mode="range"
@@ -290,6 +293,7 @@ export function AccountTransactionsReport({
           }}
           filters={
             <>
+              {ledger ? null : (
               <Field label="Account">
                 <select value={draft.accountId} onChange={(event) => setDraft({ ...draft, accountId: event.target.value })}>
                   <option value="">All accounts</option>
@@ -302,6 +306,7 @@ export function AccountTransactionsReport({
                   ))}
                 </select>
               </Field>
+              )}
               {categories.length > 0 ? (
                 <Field label="Tracking">
                   <select
@@ -350,7 +355,7 @@ export function AccountTransactionsReport({
       }
     >
       {save.error ? <Notice tone="error">{save.error}</Notice> : null}
-      {data ? <StatementHeading title="Account transactions" period={period} lines={lines} /> : null}
+      {data ? <StatementHeading title={ledger ? "General ledger" : "Account transactions"} period={period} lines={lines} /> : null}
       {data?.crossesYearEnd ? (
         <Notice tone="info">
           These dates cross a financial year end ({formatDate(data.financialYearStart)} starts the first year): income and expense balances run on

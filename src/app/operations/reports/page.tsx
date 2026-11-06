@@ -971,6 +971,7 @@ const TABS = [
   { key: "payables", label: "Aged payables", group: "Owed and owing" },
   { key: "sales", label: "Sales by salesperson", group: "Owed and owing" },
   { key: "tb", label: "Trial balance", group: "Ledger" },
+  { key: "ledger", label: "General ledger", group: "Ledger" },
   { key: "transactions", label: "Account transactions", group: "Ledger" },
   { key: "journals", label: "Journal report", group: "Ledger" },
   { key: "bankrec", label: "Bank reconciliation", group: "Ledger" },
@@ -1060,6 +1061,7 @@ function StandardReports({ organisationId }: { organisationId: string }) {
           initialTrackingValueId={params.get("trackingValueId")}
         />
       ) : null}
+      {tab === "ledger" ? <AccountTransactionsReport organisationId={organisationId} ledger initialFrom={params.get("from")} initialTo={params.get("to")} /> : null}
       {tab === "bankrec" ? (
         <BankReconciliationReportView organisationId={organisationId} initialAccountId={params.get("account")} initialAsAt={params.get("asAt")} />
       ) : null}

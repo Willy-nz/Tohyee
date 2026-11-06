@@ -14142,3 +14142,12 @@ The separate combining control is a feature choice labelled "Use records in
 comparisons, Analytics and AI", with external AI access explained. Both features
 remain off by default; existing admin/farm access and deletion controls remain.
 Tenant migration 0261 removes the old database requirement for permission details.
+
+### General ledger report (7 Nov 2026; decision 1566)
+
+1566. **General ledger is its own report.** Reports › General ledger (in
+      the Ledger group, first) is Account transactions for every account
+      with an opening balance or lines in the range, titled General ledger,
+      with no account to choose (GL1). It has the same tracking filter,
+      export, print and Save as custom report. Account transactions keeps
+      its account picker.
