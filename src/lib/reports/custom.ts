@@ -30,7 +30,10 @@ import {
   type StoredCustomReportLayout,
   type TransactionCustomReportFigures,
   type TransactionReportLayout,
+  isCashFlowBase,
   isTransactionReportBase,
+  standardCashFlowLayout,
+  type CashFlowLayout,
   standardLayout,
   templateLayout,
 } from "@/lib/reports/custom-layout";
@@ -38,6 +41,7 @@ import { accountTotals, type AccountTotalsRow, earningsOf, financialYearEndMonth
 import { budgetTotals } from "@/lib/budgets/service";
 import { valueWithDescendants } from "@/lib/tracking/service";
 import { optionalSource, requireId, requireIdempotencyKey } from "@/lib/validation";
+import { type CashFlowFigures, computeCashFlowLayout, parseCashFlowLayout } from "@/lib/reports/cash-flow-layout";
 import {
   computeTransactionCustomReport,
   parseTransactionReportLayout,
@@ -51,10 +55,10 @@ import {
  * reports; publishing stores a frozen copy. Nothing here posts to the ledger.
  */
 
-const ID_PATTERN = /^[A-Za-z0-9_-]{1,40}$/;
+export const ID_PATTERN = /^[A-Za-z0-9_-]{1,40}$/;
 const MAX_LAYOUT_BYTES = 200_000;
 
-function text(input: unknown, what: string, maxLength: number, options: { required: boolean }): string {
+export function text(input: unknown, what: string, maxLength: number, options: { required: boolean }): string {
   if (input == null) {
     if (options.required) throw new ValidationError(`${what} is required.`);
     return "";
@@ -72,19 +76,19 @@ function bool(input: unknown, what: string): boolean {
   return input;
 }
 
-function record(input: unknown, what: string): Record<string, unknown> {
+export function record(input: unknown, what: string): Record<string, unknown> {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new ValidationError(`${what} is missing.`);
   return input as Record<string, unknown>;
 }
 
-function list(input: unknown, what: string, max: number): unknown[] {
+export function list(input: unknown, what: string, max: number): unknown[] {
   if (input == null) return [];
   if (!Array.isArray(input)) throw new ValidationError(`${what} must be a list.`);
   if (input.length > max) throw new ValidationError(`${what} can have at most ${max} entries.`);
   return input;
 }
 
-function parseColumns(base: FinancialReportBase, input: unknown): ReportColumnsSetting {
+export function parseColumns(base: FinancialReportBase, input: unknown): ReportColumnsSetting {
   const raw = record(input, "The columns");
   const periodEnd = parseIsoDate(raw.periodEnd, "periodEnd");
   if (lastDayOfMonth(periodEnd) !== periodEnd) {
@@ -609,10 +613,11 @@ export async function listCustomReports(tx: OrgTx, viewInput: unknown): Promise<
 }
 
 /** A report and its figures: worked out now for a draft, as stored for a published copy (CR7). */
-export type AnyCustomReportFigures = CustomReportFigures | TransactionCustomReportFigures;
+export type AnyCustomReportFigures = CustomReportFigures | TransactionCustomReportFigures | CashFlowFigures;
 
 async function computeSavedReport(tx: OrgTx, base: CustomReportBase, layout: StoredCustomReportLayout): Promise<AnyCustomReportFigures> {
   if (isTransactionReportBase(base)) return computeTransactionCustomReport(tx, base, layout as TransactionReportLayout);
+  if (isCashFlowBase(base)) return computeCashFlowLayout(tx, layout as CashFlowLayout);
   return computeCustomReport(tx, base as FinancialReportBase, layout as CustomReportLayout);
 }
 
@@ -645,7 +650,11 @@ export async function createCustomReport(
   // A profit and loss or balance sheet starts from its template, the standard
   // report's rows (`start: "standard"`, Edit layout, decision 1359), or a
   // layout given ("Save as" from the editor).
-  const layout: StoredCustomReportLayout = isTransactionReportBase(base)
+  const layout: StoredCustomReportLayout = isCashFlowBase(base)
+    ? command.layout == null
+      ? standardCashFlowLayout(periodEnd)
+      : await parseCashFlowLayout(tx, command.layout)
+    : isTransactionReportBase(base)
     ? command.layout == null
       ? templateTransactionReportLayout(base, periodEnd)
       : await parseTransactionReportLayout(tx, base, command.layout)
@@ -687,7 +696,9 @@ export async function updateCustomReport(
   if (command.version !== current.version) {
     throw new ConflictError("Someone else has changed this report since you opened it. Reload it to see their changes.");
   }
-  const layout: StoredCustomReportLayout = isTransactionReportBase(current.base)
+  const layout: StoredCustomReportLayout = isCashFlowBase(current.base)
+    ? await parseCashFlowLayout(tx, command.layout)
+    : isTransactionReportBase(current.base)
     ? await parseTransactionReportLayout(tx, current.base, command.layout)
     : await parseLayout(tx, current.base as FinancialReportBase, command.layout);
   if (isTransactionReportBase(current.base)) await validateTransactionTrackingFilter(tx, (layout as TransactionReportLayout).filters);
@@ -706,6 +717,7 @@ export async function previewCustomReport(tx: OrgTx, idInput: unknown, layoutInp
   const report = await findReport(tx, id);
   if (report.kind === "published") throw new ConflictError("A published report can't be changed.");
   if (isTransactionReportBase(report.base)) return computeTransactionCustomReport(tx, report.base, await parseTransactionReportLayout(tx, report.base, layoutInput));
+  if (isCashFlowBase(report.base)) return computeCashFlowLayout(tx, await parseCashFlowLayout(tx, layoutInput));
   return computeCustomReport(tx, report.base as FinancialReportBase, await parseLayout(tx, report.base as FinancialReportBase, layoutInput));
 }
 

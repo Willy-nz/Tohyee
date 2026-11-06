@@ -43,6 +43,7 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { statementAsAt, statementPeriod } from "@/lib/reports/report-dates";
 import { InfoTip } from "@/components/info-tip";
 import { CustomFiguresTable, type RowEditor } from "@/components/reports/custom-report-table";
+import { CashFlowCustomReportPage } from "@/components/reports/cash-flow-custom-report";
 import { TransactionCustomReportPage } from "@/components/reports/transaction-custom-report";
 import { MoreMenu, type MoreMenuItem } from "@/components/more-menu";
 import { ExportMenu } from "@/components/reports/report-export";
@@ -96,7 +97,9 @@ export function StartCustomReport({ organisationId }: { organisationId: string }
                 ? "Revenue, cost of sales, gross profit, other income, expenses and net profit."
                 : base === "balance_sheet"
                   ? "Assets, liabilities, net assets, equity, earnings and total equity."
-                  : "Save the report's filters and columns as a new editable custom report."}
+                  : base === "cash_flows"
+                    ? "Operating, investing and financing, then the net change and cash at the start and end."
+                    : "Save the report's filters and columns as a new editable custom report."}
             </p>
             <Button onClick={() => void start(base)} disabled={busy !== null}>
               {busy === base ? "Starting…" : "Start from this"}
@@ -868,6 +871,9 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
   const currentLoaded = state ?? loaded.data;
   if (isTransactionReportBase(currentLoaded.report.base)) {
     return <TransactionCustomReportPage organisationId={organisationId} loaded={currentLoaded} />;
+  }
+  if (currentLoaded.report.base === "cash_flows") {
+    return <CashFlowCustomReportPage organisationId={organisationId} loaded={currentLoaded} />;
   }
   const report = currentLoaded.report as CustomReport & { base: FinancialReportBase; layout: CustomReportLayout };
   const layout = draft ?? report.layout;

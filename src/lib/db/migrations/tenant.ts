@@ -20382,4 +20382,17 @@ update weather_settings set key_tested = true
 alter table weather_settings drop constraint weather_settings_permission_details;
 `,
   },
+  {
+    version: "0262",
+    name: "cash_flow_layouts",
+    sql: `
+-- Cash flow layouts (examples CFL1-CFL5): a custom report can start from the
+-- statement of cash flows, and be the default layout for it.
+alter table custom_reports drop constraint custom_reports_base_check;
+alter table custom_reports add constraint custom_reports_base_check
+  check (base in ('profit_and_loss', 'balance_sheet', 'cash_flows', 'account_transactions', 'aged_receivables', 'aged_payables', 'sales_by_salesperson', 'journal_report'));
+alter table report_layout_defaults drop constraint report_layout_defaults_base_check;
+alter table report_layout_defaults add constraint report_layout_defaults_base_check check (base in ('profit_and_loss', 'balance_sheet', 'cash_flows'));
+`,
+  },
 ];

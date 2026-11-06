@@ -18751,6 +18751,41 @@ the year to 31 Mar 2027.
   drafts are marked "DRAFT" until saved (FS2). Viewers see them but can't
   edit. Nothing posts.
 
+### Cash flow layouts (CFL1-CFL5; Jess chose on 6 Nov 2026 to rename, group, move accounts between sections, reorder, hide and add notes; the details are Claude's calls, not yet reviewed)
+
+Tested in `tests/integration/cash-flow-layouts.test.ts`. In the year to 31
+Mar 2027 (no earlier activity): owner funds in **3,000.00** (bank),
+sales **8,000.00** (bank), accounting fees **1,500.00** on the credit card,
+a computer **2,000.00** (bank) and drawings **1,200.00** (bank). The
+standard statement: operating (net profit **6,500.00**, credit card
+**1,500.00**) **8,000.00**; investing (computer equipment **(2,000.00)**);
+financing (owner funds **3,000.00**, drawings **(1,200.00)**) **1,800.00**;
+net increase **7,800.00**; cash at the start **-**, at the end **7,800.00**.
+
+- **CFL1** A layout is sections in order, each with headings and groups.
+  A group holds lines (net profit, a non-cash adjustment such as
+  depreciation, an account's movement, or disposal proceeds), shown as one
+  line or with its lines under it, then the section's total. Example:
+  "Trading" with "Profit for the year" (net profit) **6,500.00**, total
+  **6,500.00**; "Buying equipment" with the computer **(2,000.00)**;
+  "Funding" with "Owner contributions (net)" (owner funds and drawings)
+  **1,800.00** and "Credit card" **1,500.00**, total **3,300.00**. The net
+  increase is still **7,800.00** and cash at the end **7,800.00**.
+- **CFL2** Nothing is lost: a line the layout doesn't place stays in its
+  usual section (operating, investing or financing) on its own line, and a
+  section the layout leaves out is added at the end with its usual name.
+  A layout with only "Trading" holding net profit still shows the credit
+  card in Trading, investing and financing as standard, and **7,800.00**.
+- **CFL3** A line can be placed once. Placing it twice, or an account
+  that doesn't exist, is refused when the layout is saved.
+- **CFL4** A hidden group isn't shown but still counts in its section's
+  total. A row's note shows under it; a text block prints where it is.
+  The last lines (net increase, cash at the start and end) can be renamed
+  but are always there and always add up.
+- **CFL5** Set as default layout makes Reports › Cash flows and the annual
+  financial statements' statement of cash flows use it, this year and last
+  year, with Edit layout beside it (decision 1560).
+
 Tier 3 and Tier 4 not-for-profit formats: see NPR1-NPR11.
 
 ## The AI's farm workspace (AIW1-AIW14; AIW1-AIW9 chosen with Jess on 14 Oct 2026, AIW10-AIW14 by Claude on 19 Oct 2026; not yet reviewed)
