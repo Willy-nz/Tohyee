@@ -252,6 +252,46 @@ export async function currentBoundaries(tx: OrgTx, farmId: string): Promise<Curr
   return rows.rows.map((row) => ({ paddockId: row.paddock_id, name: row.name, boundaryId: row.boundary_id, geometry: row.geometry, mappedHa: row.mapped_ha }));
 }
 
+/**
+ * The boundaries confirmed when the farm was turned on (decision 1520;
+ * issue #619): the area sent to the provider. A boundary edited or a
+ * paddock added since isn't sent until they're confirmed again. Paddocks
+ * no longer active are left out.
+ */
+export async function confirmedBoundaries(tx: OrgTx, farmId: string): Promise<CurrentBoundary[]> {
+  const rows = await tx.query<{ paddock_id: string; name: string; boundary_id: string; geometry: PaddockGeometry; mapped_ha: string }>(
+    `select p.id::text as paddock_id, p.name, b.id::text as boundary_id, b.geometry, round(b.mapped_ha, 2)::text as mapped_ha
+       from vegetation_farms vf
+       join paddock_boundaries b on b.id = any(vf.confirmed_boundary_ids)
+       join paddocks p on p.id = b.paddock_id and p.farm_id = vf.farm_id and p.status = 'active'
+      where vf.farm_id = $1
+      order by lower(p.name), p.id`,
+    [farmId],
+  );
+  return rows.rows.map((row) => ({ paddockId: row.paddock_id, name: row.name, boundaryId: row.boundary_id, geometry: row.geometry, mappedHa: row.mapped_ha }));
+}
+
+/** Whether a farm's pictures are on and the farm is active (issue #619): checked just before each request. */
+export async function farmPicturesOn(tx: OrgTx, farmId: string): Promise<boolean> {
+  const row = await tx.query("select 1 from vegetation_farms vf join farms f on f.id = vf.farm_id where vf.farm_id = $1 and vf.enabled and f.is_active", [farmId]);
+  return Boolean(row.rowCount);
+}
+
+/**
+ * A farm's waiting checks and downloads, when it's turned off (issue
+ * #619). Ones that haven't spent anything go (so they're queued afresh
+ * when it's on again); any that have are marked skipped, keeping what they
+ * spent in the month's count.
+ */
+async function cancelFarmJobs(tx: OrgTx, farmId: string): Promise<number> {
+  const gone = await tx.query(
+    "delete from vegetation_jobs where farm_id = $1 and status = 'queued' and kind in ('discover', 'fetch') and units_spent = 0 and requests = 0 and bytes_fetched = 0 and checkpoint = '{}'::jsonb",
+    [farmId],
+  );
+  const skipped = await tx.query("update vegetation_jobs set status = 'skipped', finished_at = now(), last_error = 'The farm was turned off.' where farm_id = $1 and status = 'queued' and kind in ('discover', 'fetch')", [farmId]);
+  return (gone.rowCount ?? 0) + (skipped.rowCount ?? 0);
+}
+
 async function requireFarm(tx: OrgTx, input: unknown): Promise<{ id: string; name: string }> {
   await requireFarming(tx);
   const farmId = requireId(input, "farmId");
@@ -307,7 +347,8 @@ export async function setFarmVegetation(tx: OrgTx, farmIdInput: unknown, input: 
        updated_by_email = excluded.updated_by_email, updated_at = now()`,
     [farm.id, input.enabled, boundaries.map((boundary) => boundary.boundaryId), tx.actor.email],
   );
-  await writeAuditEvent(tx, { eventType: input.enabled ? "farming.vegetation_farm_on" : "farming.vegetation_farm_off", entityType: "farm", entityId: farm.id, details: { boundaries: boundaries.length } });
+  const cancelled = input.enabled ? 0 : await cancelFarmJobs(tx, farm.id);
+  await writeAuditEvent(tx, { eventType: input.enabled ? "farming.vegetation_farm_on" : "farming.vegetation_farm_off", entityType: "farm", entityId: farm.id, details: input.enabled ? { boundaries: boundaries.length } : { boundaries: boundaries.length, jobsCancelled: cancelled } });
   return farmSetup(tx, farm.id);
 }
 

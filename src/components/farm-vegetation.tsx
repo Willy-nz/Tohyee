@@ -51,7 +51,7 @@ export function nzDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland", day: "numeric", month: "short", year: "numeric" });
 }
 
-export type FarmVegetationAnswer = { vegetation: FarmVegetation; pictures: { overlay: string | null; change: string | null } };
+export type FarmVegetationAnswer = { vegetation: FarmVegetation; pictures: { overlay: string | null; change: string | null; leftOut?: boolean } };
 
 export function useFarmVegetation(organisationId: string, farmId: string, sceneId: string | null) {
   return useApiData<FarmVegetationAnswer>(`/api/farming/farms/${farmId}/vegetation`, sceneId ? { organisationId, sceneId } : { organisationId });
@@ -168,6 +168,7 @@ export function VegetationMapNotes({ organisationId, answer, picture, onScene, c
             {scene.farmValidPct !== null ? ` · ${Math.round(Number(scene.farmValidPct))}% of the paddocks clear` : ""}
           </p>
           {picture === "change" && !answer.pictures.change ? <Notice tone="info">There&apos;s no clear earlier date to compare this one with yet, so Change has nothing to show.</Notice> : null}
+          {picture !== "aerial" && answer.pictures.leftOut ? <Notice tone="info">This date&apos;s picture was too big to keep on this device. Its numbers are, below and in each paddock.</Notice> : null}
           {picture !== "aerial" && !answer.pictures.overlay && !scene.hasPicture ? <Notice tone="info">This date&apos;s picture is no longer kept on the server. Its numbers are, below and in each paddock.</Notice> : null}
           {vegetation.scenes.length > 1 ? (
             <Field label="Date">

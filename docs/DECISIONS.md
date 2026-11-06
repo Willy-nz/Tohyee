@@ -13629,6 +13629,29 @@ pasture thing".
       can't hear about a revoked access until it reconnects. Wi-Fi-only
       downloads aren't built: browsers on iPhones can't tell Wi-Fi from
       mobile data, so the 2 MB cap is the control.
+
+### Satellite review fixes (6 Nov 2026; decisions 1553-1555)
+
+Fixes for findings 1, 4 and 5 of the review in #619. Claude's calls,
+common NZ practice, not yet reviewed. No migration.
+
+1553. **A farm turned off gets no more requests.** Turning a farm's
+      pictures off clears its waiting checks and downloads (any that had
+      spent something are marked skipped, so the month's count stays
+      right). The worker also checks the farm is on and active just before
+      each request, and drops the job if not.
+1554. **The area sent is the boundaries confirmed** (decision 1520). Checks
+      and downloads use the boundaries confirmed when the farm was turned
+      on, less any paddock no longer active. A boundary edited or a paddock
+      added since isn't sent, or worked out, until they're confirmed again,
+      as the setup already says. Earlier numbers keep their own boundary
+      versions. Test one farm still uses today's boundaries: an admin runs
+      it before confirming.
+1555. **The 2 MB device cap counts the latest date too** (decision 1540).
+      If the latest date's pictures alone are over it, they're left out
+      but its date, quality, legend and attribution are kept, and the map
+      says the picture was too big to keep on the device. Earlier dates
+      are then kept only while everything fits.
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

@@ -9,7 +9,9 @@ import { clearShare, farmGrid, type Grid, GridError, gridLonLatBox, ndviRaster, 
 import { estimateUnits, PROCESSOR_VERSION, SKIP_SCENE_CLOUD_PCT } from "@/lib/farming/vegetation/rules";
 import {
   addObservations,
+  confirmedBoundaries,
   currentBoundaries,
+  farmPicturesOn,
   enqueueFetch,
   enqueueJob,
   markReconnect,
@@ -73,7 +75,9 @@ type Outcome =
   | { kind: "skipped"; reason: string }
   | { kind: "retry"; error: string; waitSeconds?: number; requests?: number }
   | { kind: "failed"; error: string }
-  | { kind: "hold"; error: string };
+  | { kind: "hold"; error: string }
+  // The farm's pictures are off, or it's not active (#619): the job goes (or is skipped if it spent anything).
+  | { kind: "dropped"; reason: string };
 
 /** Jobs cut off by a restart go back in the queue; their checkpoint stays (decision 1534). */
 async function requeueStale(tx: OrgTx, now: Date): Promise<void> {
@@ -120,6 +124,11 @@ async function claim(tx: OrgTx, now: Date): Promise<ClaimedJob | null> {
 
 async function record(tx: OrgTx, job: ClaimedJob, outcome: Outcome, now: Date): Promise<void> {
   const counts = "units_spent = units_spent + $2, requests = requests + $3, bytes_fetched = bytes_fetched + $4";
+  if (outcome.kind === "dropped") {
+    const gone = await tx.query("delete from vegetation_jobs where id = $1 and units_spent = 0 and requests = 0 and bytes_fetched = 0 and checkpoint = '{}'::jsonb", [job.id]);
+    if (!gone.rowCount) await tx.query("update vegetation_jobs set status = 'skipped', finished_at = $2, last_error = $3 where id = $1", [job.id, now.toISOString(), outcome.reason]);
+    return;
+  }
   if (outcome.kind === "done") {
     await tx.query(`update vegetation_jobs set status = 'done', finished_at = $5, last_error = null, ${counts} where id = $1`, [job.id, outcome.units ?? 0, outcome.requests ?? 0, outcome.bytes ?? 0, now.toISOString()]);
   } else if (outcome.kind === "skipped") {
@@ -163,6 +172,10 @@ async function providerOutcome(organisation: OrganisationRecord, error: unknown)
 
 // Discover ---------------------------------------------------------------------------------------
 
+const FARM_OFF = "The farm's satellite pictures are off, or the farm isn't active.";
+const NOT_CONFIRMED = "No confirmed paddock boundaries are left on this farm. Confirm them again.";
+
+/** The current boundaries' grid: only for Test one farm, which an admin runs before confirming. Checks and downloads use the confirmed ones. */
 async function farmGridNow(tx: OrgTx, farmId: string): Promise<Grid> {
   const boundaries = await currentBoundaries(tx, farmId);
   return farmGrid(boundaries.map((boundary) => boundary.geometry));
@@ -171,10 +184,16 @@ async function farmGridNow(tx: OrgTx, farmId: string): Promise<Grid> {
 async function runDiscover(organisation: OrganisationRecord, provider: VegetationProvider, job: ClaimedJob, now: Date): Promise<Outcome> {
   const farmId = job.farm_id!;
   const prepared = await withOrganisationTransaction(organisation, ACTOR, async (tx) => {
+    // Checked just before asking (#619).
+    if (!(await farmPicturesOn(tx, farmId))) return { stop: { kind: "dropped", reason: FARM_OFF } as Outcome };
+    // The area sent is the boundaries confirmed (#619).
+    const confirmed = await confirmedBoundaries(tx, farmId);
+    if (!confirmed.length) return { stop: { kind: "skipped", reason: NOT_CONFIRMED } as Outcome };
     const settings = await settingsRow(tx);
     const farm = await tx.query<{ last: string | null }>("select to_char(max(acquired_at) at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') as last from vegetation_scenes where farm_id = $1", [farmId]);
-    return { grid: await farmGridNow(tx, farmId), historyDays: settings.history_days, last: farm.rows[0].last };
+    return { grid: farmGrid(confirmed.map((boundary) => boundary.geometry)), historyDays: settings.history_days, last: farm.rows[0].last };
   });
+  if ("stop" in prepared && prepared.stop) return prepared.stop;
   // From the history wanted, or a few days before the last date seen (the catalogue can be slow to list a date).
   const historyFrom = now.getTime() - prepared.historyDays * 86_400_000;
   const from = new Date(prepared.last ? Math.max(historyFrom, Date.parse(prepared.last) - 5 * 86_400_000) : historyFrom).toISOString();
@@ -231,6 +250,11 @@ async function runFetch(organisation: OrganisationRecord, provider: VegetationPr
   const candidate = job.payload.candidate as SceneCandidate;
   const checkpoint = job.checkpoint as Checkpoint;
   const prepared = await withOrganisationTransaction(organisation, ACTOR, async (tx) => {
+    // Checked just before asking (#619).
+    if (!(await farmPicturesOn(tx, farmId))) return { stop: { kind: "dropped", reason: FARM_OFF } as Outcome };
+    // The area sent, and worked out, is the boundaries confirmed (#619).
+    const confirmed = await confirmedBoundaries(tx, farmId);
+    if (!confirmed.length) return { stop: { kind: "skipped", reason: NOT_CONFIRMED } as Outcome };
     const settings = await settingsRow(tx);
     const done = await tx.query("select 1 from vegetation_scenes where farm_id = $1 and acquired_at = $2::timestamptz and processor_version = $3", [farmId, candidate.acquiredAt, PROCESSOR_VERSION]);
     const usage = await usageThisMonth(tx, now);
@@ -245,11 +269,12 @@ async function runFetch(organisation: OrganisationRecord, provider: VegetationPr
       lastCharge: lastCharge.rows[0].units === null ? 0 : Number(lastCharge.rows[0].units),
       done: Boolean(done.rowCount),
       usage,
-      grid: checkpoint.grid ?? (await farmGridNow(tx, farmId)),
-      boundaries: await currentBoundaries(tx, farmId),
+      grid: checkpoint.grid ?? farmGrid(confirmed.map((boundary) => boundary.geometry)),
+      boundaries: confirmed,
       earlier: earlier.rows[0] ? { id: earlier.rows[0].id, grid: earlier.rows[0].grid, rawPath: earlier.rows[0].raw_path, dnOffset: earlier.rows[0].dn_offset } : null,
     };
   });
+  if ("stop" in prepared && prepared.stop) return prepared.stop;
   if (prepared.done) return { kind: "skipped", reason: "Already worked out." };
   const estimate = estimateUnits(prepared.grid.width, prepared.grid.height);
   const expected = Math.max(estimate, prepared.lastCharge);
