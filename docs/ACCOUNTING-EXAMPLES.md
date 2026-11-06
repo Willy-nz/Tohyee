@@ -21304,6 +21304,73 @@ and `tests/integration/rainfall.test.ts`.
   `tohyee_farm_rainfall` (a row a reading, removed ones left out): RF1-RF7
   sum to 99.0 mm over 6 readings for Cowshed.
 
+## Farming: MetService weather forecast (WX1-WX11; built by Claude 5 Nov 2026 when Jess asked for MetService forecasts with each farm's own key, Claude's rules, not yet reviewed)
+
+Records only: nothing posts to the books. Decisions 1541-1550. MetService's
+API hasn't been tried live from Tohyee: these use the made-up forecast
+(`TOHYEE_WEATHER_PROVIDER=fake`). Tested in
+`tests/unit/weather-forecast-rules.test.ts` and
+`tests/integration/weather-forecast.test.ts`.
+
+- **WX1 Setup and credit.** Only admins see Settings › Farm › Weather
+  (MetService); a viewer or farm staff is refused, and so is anyone from
+  another organisation. The setup carries on at the step it was left on.
+  MetService's credit, "This data was provided by MetService Limited.",
+  sits right under each table of forecast numbers, in the same size type.
+- **WX2 Key and units.** Aroha pastes her key: it's kept encrypted, and no
+  answer, audit entry or browser page has it again. One farm with rain,
+  temperature and wind (speed and direction: 4 variables) refreshed every
+  3 hours: 4 units a refresh, 8 refreshes, 32 units a day, 960 in 30 days.
+  Two farms with rain only, every 12 hours: 4 a day. Frost risk needs no
+  extra variable. A test costs 1 unit.
+- **WX3 A refresh.** The next 7 days hour by hour from the hour now is in
+  (168 values a variable), for the farm's pin. 275.15 K is 2.0 °C, 5 m/s
+  is 18 km/h, 1.26 mm/h is 1.3 mm, a value flagged noData is shown as a
+  dash. Only the chosen things are kept, and only the latest forecast: a
+  second refresh replaces it (one row a farm).
+- **WX4 Days.** New Zealand days: 6 November starts 11:00 UTC on the 5th.
+  The day's rain is the hours' total; low, high and strongest wind and gust
+  are shown. The card shows the next 48 hours every 3 hours and 7 days; the
+  Weather page shows every hour.
+- **WX5 Warnings** (worked out from the numbers, said not to be
+  MetService's official warnings): frost risk when the air is forecast at
+  2.0 °C or below ("Frost risk: down to -0.5 °C."); heavy rain at 25 mm in
+  a day ("Heavy rain: 26.0 mm in the day.") or 10 mm in an hour. 2.1 °C
+  and 24 mm aren't flagged.
+- **WX6 Age.** Refreshing every 3 hours, a forecast fetched at 8:00 is
+  current at 12:00 and "Out of date" after 12:00. At 24 hours old it's no
+  longer shown and the clean-up deletes it. With no connection the page
+  shows what it loaded, with its age; nothing is saved on the device.
+  Refresh (bookkeepers and up) is refused within 15 minutes of the last.
+- **WX7 Problems.** 401 is a refused key ("MetService didn't accept the
+  key…"): the kept forecast is deleted and refreshing stops. No units left
+  (402, or 403/429 mentioning units, quota, limit or credit: not yet tried
+  against the live service) and "not allowed" stop refreshing too, so
+  nothing more is charged, until a test says Connected. A rate limit or an
+  outage is tried again at the next refresh. Removing the key deletes the
+  kept forecast.
+- **WX8 Records, with acknowledgement.** Off: two refreshes keep 0 records.
+  An admin acknowledges responsibility for complying with MetService's terms
+  and enables records without a permission date, reference or uploaded file.
+  Missing/false acknowledgements and non-admin requests are refused. The
+  acknowledgement, actor and time are audited; no permission evidence is
+  invented. Two more refreshes keep 2 records (and still 1 latest forecast).
+- **WX9 Combining** needs the feature switch, "Use records in comparisons,
+  Analytics and AI", which needs records enabled. Until then
+  Forecast vs your rain gauge, Analytics' `tohyee_farm_weather_forecasts`
+  and the AI's `weather_forecast_records` are refused or empty. With it:
+  a rain day (9 am to 9 am, as a gauge is read) compares the gauge's
+  reading with the forecast for it from the last record fetched before
+  9 am that day; 8.5 mm read against 5.0 mm forecast is "+3.5". A record
+  that doesn't cover all 24 hours gives no forecast for the day. Each
+  Analytics row and the AI's answer carry the credit.
+- **WX10 Turning records off** asks whether to delete them, and deletes
+  by default (2 records gone, in the audit log); combining goes off, the
+  Analytics table goes, and refreshes keep no more records. Keeping them
+  for now is a choice, with "Delete them now" offered after.
+- **WX11 Backups.** With 1 latest forecast and 2 records kept, a backup has
+  the forecast table empty and both records (Jess, 6 Nov 2026).
+
 ## Farming: farm team tasks (FT1-FT7; built by Claude 5 Nov 2026 when Jess asked for the missing farm features, Claude's rules, not yet reviewed)
 
 Records only: nothing posts to the books. Decisions 1457-1461. Tested in

@@ -80,6 +80,7 @@ export const FARMING_TOOLS: readonly string[] = [
   "mob_bcs",
   "list_supplements_fed",
   "rainfall",
+  "weather_forecast_records",
   "paddock_greenness",
   "list_pasture_photos_awaiting_estimate",
   "get_pasture_photo",

@@ -157,6 +157,40 @@ function entryBytes(entry: PackEntry | undefined): number {
   return entry ? JSON.stringify(entry.body).length : 0;
 }
 
+const OVER_CAP = "Left out: over the satellite pictures' size limit for a device.";
+
+/**
+ * Keeps a farm's satellite pictures within `cap` bytes of inline answer
+ * (decision 1540; issue #619): the latest date first, then earlier dates
+ * while they fit. The latest date always keeps its date, quality, legend
+ * and attribution; if its pictures alone are over the cap they're left
+ * out (pictures.leftOut says so) and no earlier date is kept either.
+ */
+export function fitVegetationPictures(
+  latest: PackEntry,
+  earlier: Array<{ sceneId: string; entry: PackEntry }>,
+  cap = OFFLINE_VEGETATION_BYTES,
+): { entries: PackEntry[]; skipped: Array<{ path: string; reason: string }> } {
+  const skipped: Array<{ path: string; reason: string }> = [];
+  let first = latest;
+  if (entryBytes(first) > cap && isRecord(first.body)) {
+    first = { ...first, body: { ...first.body, pictures: { overlay: null, change: null, leftOut: true } } };
+    skipped.push({ path: `${latest.path} (latest pictures)`, reason: OVER_CAP });
+  }
+  const entries = [first];
+  let bytes = entryBytes(first);
+  for (const [index, { entry }] of earlier.entries()) {
+    const size = entryBytes(entry);
+    if (first !== latest || bytes + size > cap) {
+      for (const rest of earlier.slice(index)) skipped.push({ path: `${rest.entry.path}?sceneId=${rest.sceneId}`, reason: OVER_CAP });
+      break;
+    }
+    entries.push(entry);
+    bytes += size;
+  }
+  return { entries, skipped };
+}
+
 /**
  * The satellite part of a farm's map section (decision 1540): only once
  * it's set up for the farm; the latest date (pictures inline, with its
@@ -171,21 +205,25 @@ async function readVegetation(r: Reader, farm: string, paddockIds: string[]): Pr
     // Not set up: keep the (small) answer so the map knows, nothing more.
     return;
   }
-  let bytes = entryBytes(r.entries[before]);
   const shownId = latest.vegetation.scene?.id;
-  const earlier = (latest.vegetation.scenes ?? []).filter((scene) => scene.usable && scene.hasPicture && scene.id !== shownId).slice(0, OFFLINE_VEGETATION_DATES);
-  for (const scene of earlier) {
+  const candidates = (latest.vegetation.scenes ?? []).filter((scene) => scene.usable && scene.hasPicture && scene.id !== shownId).slice(0, OFFLINE_VEGETATION_DATES);
+  const path = `/api/farming/farms/${farm}/vegetation`;
+  // The latest answer comes off the list, and goes back on as it fits.
+  const [latestEntry] = r.entries.splice(before, 1);
+  const earlier: Array<{ sceneId: string; entry: PackEntry }> = [];
+  let bytes = entryBytes(latestEntry);
+  for (const scene of candidates) {
+    // Not worth reading past the cap.
+    if (bytes > OFFLINE_VEGETATION_BYTES) break;
     const at = r.entries.length;
-    const path = `/api/farming/farms/${farm}/vegetation`;
     if ((await r.read(farmVegetationGet, path, { farmId: farm }, { sceneId: scene.id })) === null) continue;
-    const size = entryBytes(r.entries[at]);
-    if (bytes + size > OFFLINE_VEGETATION_BYTES) {
-      r.entries.splice(at, 1);
-      r.skipped.push({ path: `${path}?sceneId=${scene.id}`, reason: "Left out: over the satellite pictures' size limit for a device." });
-      break;
-    }
-    bytes += size;
+    const [entry] = r.entries.splice(at, 1);
+    earlier.push({ sceneId: scene.id, entry });
+    bytes += entryBytes(entry);
   }
+  const fitted = fitVegetationPictures(latestEntry, earlier);
+  r.entries.splice(before, 0, ...fitted.entries);
+  r.skipped.push(...fitted.skipped);
   for (const paddockId of paddockIds) await r.read(paddockVegetationGet, `/api/farming/paddocks/${paddockId}/vegetation`, { paddockId }, {});
 }
 

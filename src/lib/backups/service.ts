@@ -80,9 +80,12 @@ const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
  * Tables whose rows are never put in a backup, only their (empty) shape:
  * farm members' shared locations (#498, decision 1127), which last 12 hours
  * at most and would otherwise sit in backups for as long as those are kept.
- * A restored organisation simply has no one sharing.
+ * A restored organisation simply has no one sharing. And the latest
+ * MetService forecast (decision 1543): MetService's terms let it be kept
+ * only while it's needed, at most 24 hours here; the next refresh fetches
+ * it again. Forecast records kept with MetService's permission stay in.
  */
-export const BACKUP_EXCLUDED_DATA = ["farm_location_shares"] as const;
+export const BACKUP_EXCLUDED_DATA = ["farm_location_shares", "weather_forecast_cache"] as const;
 
 /** pg_dump's arguments for a backup ("plain" only for tests that read what would be kept). */
 export function pgDumpArgs(format: "custom" | "plain"): string[] {

@@ -29,6 +29,8 @@ const REFUSED: RegExp[] = [
   /^\/api\/farming\/safety\/weekly-copy\/send$/,
   // Camera upload logins (#508): the demo farm takes no uploads, so it makes no logins for them.
   /^\/api\/farming\/security\/cameras\/[^/]+\/upload-login$/,
+  // MetService forecasts (decision 1541): the demo farm saves, tests and fetches with no key.
+  /^\/api\/farming\/weather\/(key|test|refresh)$/,
   /^\/api\/sales-platforms\//,
   /^\/api\/organisations\/[^/]+\/analytics\/report-emails(\/|$)/,
   /^\/api\/organisations\/[^/]+\/(members|handover)(\/|$)/,

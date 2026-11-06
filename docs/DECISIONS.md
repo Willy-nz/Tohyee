@@ -13629,6 +13629,29 @@ pasture thing".
       can't hear about a revoked access until it reconnects. Wi-Fi-only
       downloads aren't built: browsers on iPhones can't tell Wi-Fi from
       mobile data, so the 2 MB cap is the control.
+
+### Satellite review fixes (6 Nov 2026; decisions 1553-1555)
+
+Fixes for findings 1, 4 and 5 of the review in #619. Claude's calls,
+common NZ practice, not yet reviewed. No migration.
+
+1553. **A farm turned off gets no more requests.** Turning a farm's
+      pictures off clears its waiting checks and downloads (any that had
+      spent something are marked skipped, so the month's count stays
+      right). The worker also checks the farm is on and active just before
+      each request, and drops the job if not.
+1554. **The area sent is the boundaries confirmed** (decision 1520). Checks
+      and downloads use the boundaries confirmed when the farm was turned
+      on, less any paddock no longer active. A boundary edited or a paddock
+      added since isn't sent, or worked out, until they're confirmed again,
+      as the setup already says. Earlier numbers keep their own boundary
+      versions. Test one farm still uses today's boundaries: an admin runs
+      it before confirming.
+1555. **The 2 MB device cap counts the latest date too** (decision 1540).
+      If the latest date's pictures alone are over it, they're left out
+      but its date, quality, legend and attribution are kept, and the map
+      says the picture was too big to keep on the device. Earlier dates
+      are then kept only while everything fits.
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
@@ -13701,6 +13724,92 @@ Built by Claude from issue #609 with the coordinator's preferred design
       changes: no mob, event or movement.
 1505. **Migration 0252** adds the "reversed" event type and the link to the
       event reversed, once each.
+
+### MetService weather forecast (5 Nov 2026; decisions 1541-1550; WX1-WX11)
+
+Built by Claude when Jess asked for MetService forecasts where each farm
+gets its own key ("Ok so can we make that and each farmer can get their own
+key?"), and an option for those with permission to keep records (Jess,
+5 Nov 2026). The rules come from MetService's developer docs and API terms
+of service (data.metservice.com/terms-service), read 5 Nov 2026. Nothing
+has been tried against the live API yet; Claude's rules, not yet reviewed.
+
+1541. **Each organisation's own key, set up in steps.** Settings › Farm ›
+      Weather (MetService), admins only: what it does and costs, how to get
+      a key (with a suggested purpose to give MetService), paste, test,
+      farms and pins, what to fetch with a units estimate, turn on. The
+      step reached is saved. Tohyee never ships or shares a key (terms
+      2.12(a)).
+1542. **The key stays on the server.** Encrypted with TOHYEE_SECRET_KEY in
+      `weather_settings.api_key_ciphertext` (re-wrapped on a restore like
+      every `_ciphertext` column). No API answer, audit entry, log, AI tool,
+      Analytics table or offline pack has it. Forecasts come through a
+      provider: the live one calls POST /point/time with `x-api-key` and a
+      User-Agent; `TOHYEE_WEATHER_PROVIDER=fake` gives a made-up forecast
+      for the demo and tests.
+1543. **Only the latest forecast is kept** (terms 2.13(b), 3.4-3.5, 6.1): a
+      row a farm, replaced at each refresh, and deleted when it's 24 hours
+      old, when the key is removed or refused, when the forecast is turned
+      off, when the farm's pin moves or when what's fetched changes. It
+      isn't put in offline packs or saved on devices: with no connection a
+      page shows what it loaded, with its age. Nightly backups leave it
+      out (backed up empty, like shared farm locations); records kept with
+      MetService's permission stay in (Jess, 6 Nov 2026, accepting the
+      suggested default; she also kept records when the key is removed,
+      and the frost and heavy-rain thresholds, as built).
+1544. **Refreshing.** Every 1, 3 (default), 6 or 12 hours, from a job that
+      looks every 10 minutes (off with TOHYEE_WEATHER_SCHEDULER=off). One
+      request a farm, so one farm's failure doesn't stop the others.
+      Refresh by hand is for bookkeepers and up, at most every 15 minutes.
+1545. **Spending guard and plain errors.** A refused key (401), no units
+      left and "not allowed" stop refreshing until a test says Connected;
+      a refused key also deletes the kept forecast. Which answer MetService
+      gives for "no units" isn't documented: 402, or 403/429 mentioning
+      units, quota, limit or credit, is taken to mean it (not yet tried
+      against the live service). A test costs one unit.
+1546. **Shown on its own, with the credit** (terms 1.3(e), 2.8, 2.9, 3.3):
+      a Weather forecast card on Today and a Weather page (under More,
+      for farm staff too), never blended into rainfall, pasture or
+      Analytics charts. "This data was provided by MetService Limited."
+      sits right under each table of numbers, the same size as them. No
+      MetService logo; the name appears only in the credit and the setup.
+      Frost (2 °C or below) and heavy rain (25 mm a day, or 10 mm an hour)
+      are worked out from the numbers and say they aren't MetService's
+      official warnings.
+1547. **Keeping records needs the organisation's word that it has
+      MetService's written permission**: an optional admin switch with the
+      permission's date, a reference and optionally the file (kept in the
+      organisation's database, opened by admins only). Who turned it on and
+      when is kept and audited. Tohyee can't check the permission; the
+      screen says it's the organisation's responsibility and what to ask
+      MetService for. With it on, every fetch is kept, by farm and pin.
+1548. **Turning records off deletes them by default** (terms 3.5, 6.1), with
+      "keep them for now" as a choice and "Delete them now" offered after.
+      Removing the key leaves records kept under the permission alone.
+1549. **Combining is a second switch** (terms 3.3 treat combining as its
+      own consent): "My permission covers combining with my other farm
+      data", which needs the first. Only then: Forecast vs your rain gauge
+      (rain day 9 am to 9 am, the last record fetched before the day), the
+      Analytics table `tohyee_farm_weather_forecasts` (an hour a row, with
+      the credit in each row; taken out of Analytics when combining stops)
+      and the AI's read-only `weather_forecast_records` (with the credit).
+      Turning records off turns this off too.
+1550. **No AI tool for the latest forecast.** Giving MetService's data to an
+      outside AI service, without the organisation having said its
+      permission covers combining, could be passing it to a third party
+      (terms 2.13(d), 3.4) and combining it with the books. So the AI gets
+      forecasts only through decision 1549. Tenant migrations 0257 (key,
+      farms, latest forecast) and 0258 (records and permission).
+1551. **An answer for old settings is thrown away** (issue #619). Each
+      change to the key, what's fetched or on/off adds one to the settings'
+      revision. A refresh or Test connection still waiting on MetService
+      checks the revision before it keeps a forecast or changes the status,
+      and a refresh stops asking for more farms once it's out of date.
+1552. **A key is used only once it passes Test connection** (issue #619).
+      Saving a key, even with the forecast on, stops refreshes (scheduled
+      and the Refresh button) until its test says Connected. A passing
+      glitch after that doesn't: it tries again at the next refresh.
+      Tenant migration 0260.
 
 
 ### Farm treatments, withholding and product stock (5 Nov 2026; decisions 1431-1438)
@@ -13983,3 +14092,18 @@ replaced by these.
       (#513), each animal's own mating or scanning result (the stack
       records those per mob), a camera barcode scanner, and BCS and weights
       on the farm timeline.
+
+### Weather records acknowledgement (6 Nov 2026; decision 1556)
+
+Jess's request.
+
+1556. Supersedes the permission-paperwork requirements of decisions 1547 and 1549.
+Enabling forecast records requires one acknowledgement: "I'm responsible for
+ensuring my use complies with MetService's terms." No date, reference or upload
+is required. This records responsibility, not a claim that written permission
+was obtained. MetService's terms still apply. Audit the actor, time and exact
+acknowledgement; preserve any previously supplied documents and details.
+The separate combining control is a feature choice labelled "Use records in
+comparisons, Analytics and AI", with external AI access explained. Both features
+remain off by default; existing admin/farm access and deletion controls remain.
+Tenant migration 0261 removes the old database requirement for permission details.

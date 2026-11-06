@@ -357,8 +357,14 @@ export const SETTINGS: MenuGroup[] = [
     links: [
       { href: "/operations/fixed-assets/types", label: "Fixed asset types", minRole: "admin" },
       { href: "/operations/livestock/settings", label: "Livestock", module: "livestock" },
+    ],
+  },
+  {
+    heading: "Farm",
+    links: [
       // Set up on the farm Map since decision 1324.
       { href: "/operations/farm/map?aerial=1", label: "Aerial photos for farm maps", minRole: "admin", module: "farming" },
+      { href: "/operations/settings/weather", label: "Weather (MetService)", minRole: "admin", module: "farming" },
     ],
   },
   {
@@ -574,7 +580,7 @@ export const FARM_MENUS: Menu[] = [
     module: "farming",
     // Its first link (Farms and paddocks) is drawn as a map; the menu is the whole farm.
     art: "farm",
-    area: ["/operations/farm/more", "/operations/farm/offline", "/operations/farm/security", "/operations/farm/mobs", "/operations/farm/animals", "/operations/farm/timeline", "/operations/farming"],
+    area: ["/operations/farm/more", "/operations/farm/offline", "/operations/farm/security", "/operations/farm/mobs", "/operations/farm/animals", "/operations/farm/timeline", "/operations/farm/weather", "/operations/farming"],
     groups: [
       {
         heading: "Paddocks and feed",
@@ -584,6 +590,7 @@ export const FARM_MENUS: Menu[] = [
           { href: "/operations/farm/animals", label: "Animals" },
           { href: "/operations/farming/pasture", label: "Pasture and feed" },
           { href: "/operations/farming/rainfall", label: "Rainfall" },
+          { href: "/operations/farm/weather", label: "Weather forecast" },
           { href: "/operations/farming/soil", label: "Soil tests" },
           { href: "/operations/farming/fertiliser", label: "Fertiliser plans" },
           { href: "/operations/farming/compare", label: "All farms compared" },

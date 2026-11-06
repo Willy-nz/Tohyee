@@ -34,6 +34,9 @@
  * customers and products every 15 minutes
  * (off with TOHYEE_SALES_PLATFORM_SYNC_SCHEDULER=off).
  *
+ * And the MetService weather forecast, which refreshes each organisation's
+ * forecast when due with its own key (off with TOHYEE_WEATHER_SCHEDULER=off).
+ *
  * And the repeating invoices and bills job, which makes due invoices and
  * bills every hour
  * (off with TOHYEE_REPEATING_INVOICES_SCHEDULER=off).
@@ -201,6 +204,12 @@ export async function register() {
   if (process.env.TOHYEE_SALES_PLATFORM_SYNC_SCHEDULER !== "off") {
     const { startSalesPlatformScheduler } = await import("@/lib/sales-platforms/service");
     startSalesPlatformScheduler();
+  }
+
+  // MetService forecasts with each organisation's own key (decision 1544): due refreshes every 10 minutes.
+  if (process.env.TOHYEE_WEATHER_SCHEDULER !== "off") {
+    const { startWeatherScheduler } = await import("@/lib/weather/scheduler");
+    startWeatherScheduler();
   }
 
   if (process.env.TOHYEE_REPEATING_INVOICES_SCHEDULER !== "off") {
