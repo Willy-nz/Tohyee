@@ -13777,6 +13777,16 @@ has been tried against the live API yet; Claude's rules, not yet reviewed.
       (terms 2.13(d), 3.4) and combining it with the books. So the AI gets
       forecasts only through decision 1549. Tenant migrations 0257 (key,
       farms, latest forecast) and 0258 (records and permission).
+1551. **An answer for old settings is thrown away** (issue #619). Each
+      change to the key, what's fetched or on/off adds one to the settings'
+      revision. A refresh or Test connection still waiting on MetService
+      checks the revision before it keeps a forecast or changes the status,
+      and a refresh stops asking for more farms once it's out of date.
+1552. **A key is used only once it passes Test connection** (issue #619).
+      Saving a key, even with the forecast on, stops refreshes (scheduled
+      and the Refresh button) until its test says Connected. A passing
+      glitch after that doesn't: it tries again at the next refresh.
+      Tenant migration 0260.
 
 
 ### Farm treatments, withholding and product stock (5 Nov 2026; decisions 1431-1438)

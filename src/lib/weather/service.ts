@@ -121,11 +121,13 @@ type SettingsRow = {
   combine: boolean;
   combine_set_at: string | null;
   combine_set_by_email: string | null;
+  revision: string;
+  key_tested: boolean;
 };
 
 const SETTINGS_COLUMNS = `api_key_ciphertext, key_saved_at::text, key_saved_by_email, setup_step, choices, refresh_hours, enabled, status,
   tested_at::text, paused_at::text, last_refresh_at::text, last_manual_refresh_at::text, keep_records, permission_granted_on::text,
-  permission_reference, keep_records_set_at::text, keep_records_set_by_email, combine, combine_set_at::text, combine_set_by_email`;
+  permission_reference, keep_records_set_at::text, keep_records_set_by_email, combine, combine_set_at::text, combine_set_by_email, revision::text, key_tested`;
 
 async function settingsRow(tx: OrgTx, lock = false): Promise<SettingsRow> {
   const row = await tx.query<SettingsRow>(`select ${SETTINGS_COLUMNS} from weather_settings where id = true${lock ? " for update" : ""}`);
@@ -227,7 +229,7 @@ export async function saveWeatherKey(tx: OrgTx, keyInput: unknown): Promise<Weat
   await settingsRow(tx, true);
   await tx.query(
     `update weather_settings set api_key_ciphertext = $1, key_saved_at = now(), key_saved_by_email = $2, status = 'not_tested', tested_at = null,
-       paused_at = null, last_refresh_at = null, updated_at = now() where id = true`,
+       key_tested = false, revision = revision + 1, paused_at = null, last_refresh_at = null, updated_at = now() where id = true`,
     [encryptSecret(key), tx.actor.email],
   );
   // Forecasts fetched with the old key go with it.
@@ -247,7 +249,7 @@ export async function removeWeatherKey(tx: OrgTx): Promise<WeatherSetup> {
   if (!row.api_key_ciphertext) throw new NotFoundError("There's no key saved.");
   await tx.query(
     `update weather_settings set api_key_ciphertext = null, key_saved_at = null, key_saved_by_email = null, enabled = false, status = 'not_tested',
-       tested_at = null, paused_at = null, updated_at = now() where id = true`,
+       tested_at = null, key_tested = false, revision = revision + 1, paused_at = null, updated_at = now() where id = true`,
   );
   const deleted = await tx.query("delete from weather_forecast_cache");
   await writeAuditEvent(tx, { eventType: "weather.key_removed", entityType: "weather_settings", entityId: "metservice", details: { forecastsDeleted: deleted.rowCount ?? 0 } });
@@ -306,7 +308,7 @@ export async function saveWeatherLocations(tx: OrgTx, input: unknown): Promise<W
   }
   await writeAuditEvent(tx, { eventType: "weather.farms_changed", entityType: "weather_settings", entityId: "metservice", details: { farms: [...wanted].map(([farmId, point]) => ({ farmId, placed: Boolean(point) })) } });
   const pinned = await tx.query<{ n: number }>("select count(*)::int as n from weather_locations");
-  if (pinned.rows[0].n === 0) await tx.query("update weather_settings set enabled = false where id = true");
+  if (pinned.rows[0].n === 0) await tx.query("update weather_settings set enabled = false, revision = revision + 1 where id = true");
   return getWeatherSetup(tx);
 }
 
@@ -329,7 +331,7 @@ export async function saveWeatherChoices(tx: OrgTx, input: { choices?: unknown; 
   }
   const changedChoices = choices.join() !== choicesOf(row).join();
   // Changed choices are fetched at the next check (within 10 minutes), not at the next scheduled refresh.
-  await tx.query("update weather_settings set choices = $1, refresh_hours = $2, last_refresh_at = case when $3 then null else last_refresh_at end, updated_at = now() where id = true", [choices, refreshHours, changedChoices]);
+  await tx.query("update weather_settings set choices = $1, refresh_hours = $2, last_refresh_at = case when $3 then null else last_refresh_at end, revision = revision + case when $3 then 1 else 0 end, updated_at = now() where id = true", [choices, refreshHours, changedChoices]);
   // A forecast fetched for other variables is replaced at the next refresh; nothing is kept that wasn't chosen.
   if (changedChoices) await tx.query("delete from weather_forecast_cache");
   await writeAuditEvent(tx, { eventType: "weather.choices_changed", entityType: "weather_settings", entityId: "metservice", details: { choices, refreshHours } });
@@ -347,7 +349,7 @@ export async function setWeatherEnabled(tx: OrgTx, enabledInput: unknown): Promi
     const pinned = await tx.query<{ n: number }>("select count(*)::int as n from weather_locations");
     if (!pinned.rows[0].n) throw new ConflictError("Choose at least one farm and place its pin first.");
   }
-  await tx.query("update weather_settings set enabled = $1, setup_step = case when $1 then 'turn_on' else setup_step end, updated_at = now() where id = true", [enabled]);
+  await tx.query("update weather_settings set enabled = $1, setup_step = case when $1 then 'turn_on' else setup_step end, revision = revision + 1, updated_at = now() where id = true", [enabled]);
   if (!enabled) await tx.query("delete from weather_forecast_cache");
   await writeAuditEvent(tx, { eventType: enabled ? "weather.turned_on" : "weather.turned_off", entityType: "weather_settings", entityId: "metservice", details: {} });
   return getWeatherSetup(tx);
@@ -355,7 +357,7 @@ export async function setWeatherEnabled(tx: OrgTx, enabledInput: unknown): Promi
 
 // Talking to MetService (no transaction is open while it answers) ----------------------------------------
 
-type FetchPlan = { apiKey: string; choices: WeatherChoice[]; refreshHours: number; keepRecords: boolean; locations: Array<{ farmId: string; latitude: string; longitude: string }> };
+type FetchPlan = { revision: string; apiKey: string; choices: WeatherChoice[]; refreshHours: number; keepRecords: boolean; locations: Array<{ farmId: string; latitude: string; longitude: string }> };
 
 async function readPlan(tx: OrgTx): Promise<FetchPlan | null> {
   const row = await settingsRow(tx);
@@ -364,6 +366,7 @@ async function readPlan(tx: OrgTx): Promise<FetchPlan | null> {
     "select l.farm_id::text, l.latitude::text, l.longitude::text from weather_locations l join farms f on f.id = l.farm_id where f.is_active order by l.farm_id",
   );
   return {
+    revision: row.revision,
     apiKey: decryptSecret(row.api_key_ciphertext),
     choices: choicesOf(row),
     refreshHours: row.refresh_hours,
@@ -372,10 +375,23 @@ async function readPlan(tx: OrgTx): Promise<FetchPlan | null> {
   };
 }
 
+/**
+ * Whether settings saved since `plan` was read make its answers obsolete
+ * (issue #619): a changed key, choices or on/off, or weather off. Locks the
+ * settings row, so a change can't land between this check and the write.
+ */
+async function planStillCurrent(tx: OrgTx, plan: FetchPlan, needsOn: boolean): Promise<boolean> {
+  const row = await tx.query<{ revision: string; enabled: boolean; has_key: boolean }>(
+    "select revision::text, enabled, api_key_ciphertext is not null as has_key from weather_settings where id = true for update",
+  );
+  const now = row.rows[0];
+  return Boolean(now) && now.revision === plan.revision && now.has_key && (!needsOn || now.enabled);
+}
+
 /** What a refusal does: a refused key deletes the kept forecast; a refused key, no units or no access stop refreshing (the spending guard). */
 async function recordProblem(tx: OrgTx, status: WeatherStatus): Promise<void> {
   await tx.query(
-    `update weather_settings set status = $1, tested_at = now(), paused_at = case when $2 then coalesce(paused_at, now()) else paused_at end, updated_at = now() where id = true`,
+    `update weather_settings set status = $1, tested_at = now(), key_tested = key_tested and $1 <> 'bad_key', paused_at = case when $2 then coalesce(paused_at, now()) else paused_at end, updated_at = now() where id = true`,
     [status, stopsRefreshing(status)],
   );
   if (status === "bad_key" || status === "not_allowed") await tx.query("delete from weather_forecast_cache");
@@ -406,8 +422,10 @@ export async function testWeatherConnection(organisation: OrganisationRecord, ac
     status = error instanceof WeatherProviderError ? error.status : "error";
   }
   await withOrganisationTransaction(organisation, actor, async (tx) => {
+    // The key or settings changed while MetService answered: this answer was for the old ones (#619).
+    if (!(await planStillCurrent(tx, plan, false))) return;
     if (status === "ok") {
-      await tx.query("update weather_settings set status = 'ok', tested_at = now(), paused_at = null, units_charged_last = $1, updated_at = now() where id = true", [unitsCharged]);
+      await tx.query("update weather_settings set status = 'ok', tested_at = now(), key_tested = true, paused_at = null, units_charged_last = $1, updated_at = now() where id = true", [unitsCharged]);
       await writeAuditEvent(tx, { eventType: "weather.connection_tested", entityType: "weather_settings", entityId: "metservice", details: { status } });
     } else {
       await recordProblem(tx, status);
@@ -416,7 +434,7 @@ export async function testWeatherConnection(organisation: OrganisationRecord, ac
   return { status, statusText: STATUS_TEXT[status], unitsCharged };
 }
 
-export type RefreshResult = { refreshed: number; failed: number; status: WeatherStatus; skipped?: "off" | "paused" | "not_due" };
+export type RefreshResult = { refreshed: number; failed: number; status: WeatherStatus; skipped?: "off" | "not_tested" | "paused" | "not_due" };
 
 /**
  * Fetches each farm's forecast and replaces the kept one (WX3). With the
@@ -429,6 +447,8 @@ export async function refreshWeather(organisation: OrganisationRecord, actor: Ac
   const ready = await withOrganisationTransaction(organisation, actor, async (tx) => {
     const row = await settingsRow(tx, true);
     if (!row.enabled || !row.api_key_ciphertext) return { skipped: "off" as const };
+    // A saved key isn't used until it passes Test connection (#619).
+    if (!row.key_tested) return { skipped: "not_tested" as const };
     if (row.paused_at) return { skipped: "paused" as const };
     if (options.manual) {
       const last = row.last_manual_refresh_at ? Date.parse(row.last_manual_refresh_at) : 0;
@@ -448,7 +468,13 @@ export async function refreshWeather(organisation: OrganisationRecord, actor: Ac
   let refreshed = 0;
   let failed = 0;
   let status: WeatherStatus = "ok";
-  for (const location of plan.locations) {
+  let obsolete = false;
+  for (const [index, location] of plan.locations.entries()) {
+    // Before asking for the next farm, check the plan's still current (#619).
+    if (index > 0 && !(await withOrganisationTransaction(organisation, actor, (tx) => planStillCurrent(tx, plan, true)))) {
+      obsolete = true;
+      break;
+    }
     let hours: ForecastHour[];
     try {
       const answer = await weatherProvider().fetchForecast({ apiKey: plan.apiKey, point: location, choices: plan.choices, now });
@@ -459,10 +485,15 @@ export async function refreshWeather(organisation: OrganisationRecord, actor: Ac
       if (stopsRefreshing(status)) break;
       continue;
     }
-    await withOrganisationTransaction(organisation, actor, async (tx) => {
+    const kept = await withOrganisationTransaction(organisation, actor, async (tx) => {
+      // Not if the key, choices or on/off changed while MetService answered (#619).
+      if (!(await planStillCurrent(tx, plan, true))) {
+        obsolete = true;
+        return false;
+      }
       // Only if the pin is still where it was fetched for.
       const still = await tx.query("select 1 from weather_locations where farm_id = $1 and latitude = $2 and longitude = $3", [location.farmId, location.latitude, location.longitude]);
-      if (!still.rowCount) return;
+      if (!still.rowCount) return false;
       await tx.query(
         `insert into weather_forecast_cache (farm_id, latitude, longitude, fetched_at, choices, hours) values ($1, $2, $3, $4, $5, $6::jsonb)
          on conflict (farm_id) do update set latitude = excluded.latitude, longitude = excluded.longitude, fetched_at = excluded.fetched_at, choices = excluded.choices, hours = excluded.hours`,
@@ -479,10 +510,15 @@ export async function refreshWeather(organisation: OrganisationRecord, actor: Ac
           JSON.stringify(hours),
         ]);
       }
+      return true;
     });
-    refreshed += 1;
+    // The plan is out of date: the farms after this one aren't asked for either.
+    if (obsolete) break;
+    if (kept) refreshed += 1;
   }
   await withOrganisationTransaction(organisation, actor, async (tx) => {
+    // An obsolete plan's answers say nothing about the settings saved now.
+    if (obsolete || !(await planStillCurrent(tx, plan, true))) return;
     if (status === "ok") await tx.query("update weather_settings set status = 'ok', updated_at = now() where id = true and status <> 'ok'");
     else await recordProblem(tx, status);
   });

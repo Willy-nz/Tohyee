@@ -222,7 +222,8 @@ function RefreshButton({ organisationId, onDone }: { organisationId: string; onD
           setMessage(null);
           try {
             const answer = await api<{ result: { refreshed: number; failed: number; skipped?: string } }>("/api/farming/weather/refresh", { method: "POST", body: { organisationId } });
-            if (answer.result.skipped === "paused") setMessage("Refreshing has stopped because of a problem with MetService. An admin can test the connection in Settings.");
+            if (answer.result.skipped === "not_tested") setMessage("The MetService key hasn't been tested yet. An admin can test the connection in Settings.");
+            else if (answer.result.skipped === "paused") setMessage("Refreshing has stopped because of a problem with MetService. An admin can test the connection in Settings.");
             else if (answer.result.failed) setMessage("Some farms couldn't be refreshed. It tries again at the next refresh.");
             onDone();
           } catch (caught) {
