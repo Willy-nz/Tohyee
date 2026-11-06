@@ -3380,6 +3380,16 @@ that something happened.
   planned paddock shows on the mob, and the paddock list and card show
   days since grazed against the round and the next planned mob.
 
+- **Farm timeline, grazing history import and farm words** (decisions
+  1445-1450, TL1-TL5, tenant migration 0236; common NZ practice, not yet
+  reviewed): Farm › More › Farm timeline lists moves, sales and other mob
+  events, treatments, weights, breeding records and sprays in one list,
+  filtered by mob, paddock, kind and dates. Grazing history imports from
+  CSV or Excel (mob records' rows become their moves; no head count
+  changes). Admins can rename farm words (mob, actions, kinds and classes)
+  for the screens only. The AI reads mobs, treatments and the timeline
+  (list_mobs, list_animal_treatments, farm_timeline).
+
 - **The AI reads farm data** (AIW10-AIW14, decision 560): a connected AI
   can read soil tests, fertiliser products and plans, pasture cover,
   readings, grazings and supplements fed, and work out a proposed

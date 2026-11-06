@@ -21506,3 +21506,29 @@ Records only: nothing posts or judges. Tested in
 - **BR6 Days since grazed against the round.** Last grazed 18 Oct, 25-day
   round, on 5 Nov: "18 of 25 days". Last grazed 1 Oct: "35 days since
   grazed (round 25)".
+
+## Farming: the farm timeline, grazing history import and farm words (TL1-TL5; built by Claude 5 Nov 2026, common NZ practice, not yet reviewed)
+
+Nothing here posts or changes a head count. Tested in
+`tests/integration/farm-timeline.test.ts`.
+
+- **TL1 One list.** Ewes added 1 Jun into A, moved to B 10 Jun, weighed
+  68.5 kg 11 Jun, drenched 12 Jun, scanned 140% 20 Jun, 10 sold 25 Jun; a
+  typed "Cattle" grazing in C 5-15 Jun; A sprayed 22 Jun with 7 days'
+  grazing withholding: nine lines, newest first, the spray saying "not
+  safe to graze for 7 days".
+- **TL2 Filters.** The Ewes alone: their six. Paddock A: the spray, the
+  move out of A and the Ewes added into A. Paddock B, treatments only: the
+  drench given while the Ewes were in B. The latest 3: three lines and
+  "more".
+- **TL3 Grazing history.** Steers (a mob record) A 1-10 Mar and B 10-20
+  Mar become two "moved" events; Steers in C 15-25 Mar overlaps B and is
+  refused. Typed "Heifers" in C 1-5 Mar is kept; a second Heifers row in
+  C 4-8 Mar overlaps it and is refused. A paddock not on the farm, or a
+  row with no day out, is refused with its reason.
+- **TL4 No head count change.** After the import Steers still have 50
+  head and aren't in a paddock now; the file can't be imported twice.
+- **TL5 Farm words.** "Herd" for mob, "Milkers" for mixed-age dairy cows
+  and "Shift" for move show on the screens only; the mob's class is still
+  mixed-age cows. An unknown word is refused; a blank goes back to the
+  standard word; only admins change them.

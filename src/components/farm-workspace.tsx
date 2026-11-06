@@ -571,7 +571,7 @@ export function PaddockCard({ organisationId, farm, status, hazards = [], plan =
         </div>
       ) : null}
       <p>
-        <Link href={`/operations/farming/pasture?farm=${farm.id}`}>Details: readings and grazings</Link>
+        <Link href={`/operations/farming/pasture?farm=${farm.id}`}>Details: readings and grazings</Link> · <Link href={`/operations/farm/timeline?farm=${farm.id}&paddock=${status.paddockId}`}>Timeline</Link>
       </p>
     </Card>
   );
@@ -593,6 +593,7 @@ const FARM_WORK: MoreLink[] = [
   { href: "/operations/farming/rainfall", icon: "effluent", label: "Rainfall", note: "Rain gauges, by month and season", staff: true },
   { href: "/operations/farming/calendar", icon: "calendar", label: "Farm calendar", note: "Jobs, due dates and reminders", staff: true },
   { href: "/operations/farming/tasks", icon: "checklist", label: "Tasks", note: "Jobs for the farm team, with reminders", staff: true },
+  { href: "/operations/farm/timeline", icon: "clock", label: "Farm timeline", note: "Moves, treatments, sales, weights and sprays", staff: true },
   { href: "/operations/farming/soil", icon: "flask", label: "Soil tests", staff: true },
   { href: "/operations/farming", icon: "maps", label: "Farms and paddocks", note: "Areas, boundaries, drawing paddocks", staff: true },
 ];
