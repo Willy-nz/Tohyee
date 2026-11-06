@@ -22,7 +22,8 @@ async function period(tx: OrgTx, input: { from?: unknown; to?: unknown }): Promi
   return { from, to };
 }
 
-export type StatementRow = { accountId: string | null; code: string | null; label: string; amount: string };
+/** `key` names a non-cash adjustment (its bucket, e.g. "depreciation") so a cash flow layout can place it (CFL1). */
+export type StatementRow = { accountId: string | null; code: string | null; label: string; amount: string; key?: string };
 
 /**
  * Statement of changes in equity, one column (SCE1): equity at the start,
@@ -191,7 +192,7 @@ export async function cashFlowStatement(tx: OrgTx, input: { from?: unknown; to?:
     currencyCode: tx.baseCurrency,
     operating: {
       profit: money(profit),
-      adjustments: adjustments.map(({ bucket, amount }): StatementRow => ({ accountId: null, code: null, label: NON_CASH_LABELS[bucket], amount: money(amount) })),
+      adjustments: adjustments.map(({ bucket, amount }): StatementRow => ({ accountId: null, code: null, label: NON_CASH_LABELS[bucket], amount: money(amount), key: bucket })),
       workingCapital: show(wc),
       total: money(operating),
     },

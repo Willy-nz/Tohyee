@@ -5,7 +5,10 @@ import { useState } from "react";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { ReportFrame, type ReportDates, ReportToolbar, StatementHeading, useYearEndMonth } from "@/components/reports/report-frame";
+import { CashFlowTable } from "@/components/reports/cash-flow-custom-report";
+import { useReportLayout } from "@/components/reports/report-layout";
 import { Notice, ui } from "@/components/ui";
+import type { CashFlowFigures } from "@/lib/reports/cash-flow-layout";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import { columnHeading, statementPeriod } from "@/lib/reports/report-dates";
 import type { cashFlowStatement, changesInEquity, StatementRow } from "@/lib/reports/statements";
@@ -115,8 +118,16 @@ export function ChangesInEquityReport({ organisationId }: { organisationId: stri
 export function CashFlowStatementReport({ organisationId }: { organisationId: string }) {
   const yearEndMonth = useYearEndMonth(organisationId);
   const [dates, setDates] = usePeriod();
-  const report = useApiData<CashFlowStatement>("/api/reports/cash-flow-statement", { organisationId, from: dates.from, to: dates.to });
+  const layout = useReportLayout(organisationId, "cash_flows");
+  const [standard, setStandard] = useState(false);
+  const report = useApiData<CashFlowStatement & { layout: { report: { id: string; title: string }; figures: CashFlowFigures } | null }>("/api/reports/cash-flow-statement", {
+    organisationId,
+    from: dates.from,
+    to: dates.to,
+    ...(standard ? { standard: "1" } : {}),
+  });
   const data = report.data;
+  const shownLayout = data?.layout ?? null;
   const title = "Statement of cash flows";
   const period = data ? statementPeriod(data.from, data.to, yearEndMonth) : "";
   return (
@@ -130,7 +141,11 @@ export function CashFlowStatementReport({ organisationId }: { organisationId: st
           yearEndMonth={yearEndMonth}
           onUpdate={setDates}
           busy={report.loading}
-          more={[print]}
+          more={[
+            print,
+            ...(layout.chosen ? [standard ? { label: `Show in ${layout.chosen.title}`, onSelect: () => setStandard(false) } : { label: "Show the standard layout", onSelect: () => setStandard(true) }] : []),
+          ]}
+          actions={data ? layout.button(data.to) : null}
           info={
             <>
               Cash is the bank accounts. Interest paid and received are in operating activities. Depreciation, livestock revaluations and unrealised
@@ -143,13 +158,15 @@ export function CashFlowStatementReport({ organisationId }: { organisationId: st
     >
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
-      {data ? <StatementHeading title={title} period={period} /> : null}
+      {layout.error ? <Notice tone="error">{layout.error}</Notice> : null}
+      {data ? <StatementHeading title={title} period={period} lines={shownLayout ? [`In the layout ${shownLayout.report.title}`] : []} /> : null}
+      {shownLayout ? <CashFlowTable figures={shownLayout.figures} showHidden={false} /> : null}
       {data && !data.reconciles ? (
         <Notice tone="warning">
           Cash at {formatDate(data.to)} doesn&apos;t match the bank accounts.
         </Notice>
       ) : null}
-      {data ? (
+      {data && !shownLayout ? (
         <div className={ui.statementWrap}>
           <table id="cash-flow-statement-report" className={`${ui.table} ${ui.statement}`}>
             <Head from={data.from} to={data.to} />

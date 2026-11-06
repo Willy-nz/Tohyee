@@ -90,7 +90,7 @@ describeWithDatabase("statement of changes in equity and statement of cash flows
       const { as } = await books(slug, origin);
       const cf = await as((tx) => cashFlowStatement(tx, year));
       expect(cf.operating.profit).toBe("1250.00");
-      expect(cf.operating.adjustments).toEqual([{ accountId: null, code: null, label: "Depreciation", amount: "400.00" }]);
+      expect(cf.operating.adjustments).toEqual([{ accountId: null, code: null, label: "Depreciation", amount: "400.00", key: "depreciation" }]);
       expect(cf.operating.workingCapital.map((row) => [row.code, row.amount])).toEqual([
         ["1100", "-800.00"],
         ["2000", "300.00"],

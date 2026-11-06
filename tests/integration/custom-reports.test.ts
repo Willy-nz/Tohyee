@@ -1,3 +1,4 @@
+import type { AnyCustomReportFigures } from "@/lib/reports/custom";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import * as reportRoute from "@/app/api/custom-reports/[reportId]/route";
 import * as reportsRoute from "@/app/api/custom-reports/route";
@@ -114,9 +115,9 @@ describeWithDatabase("custom reports", () => {
     return { org, as, journal, create, save };
   }
 
-  const firstTable = (figures: CustomReportFigures) => figures.blocks.find((block) => block.kind === "table") as Extract<ComputedBlock, { kind: "table" }>;
+  const firstTable = (figures: CustomReportFigures | AnyCustomReportFigures) => (figures as CustomReportFigures).blocks.find((block) => block.kind === "table") as Extract<ComputedBlock, { kind: "table" }>;
   /** label -> values in the column order shown. */
-  const rowsOf = (figures: CustomReportFigures, block = firstTable(figures)) =>
+  const rowsOf = (figures: CustomReportFigures | AnyCustomReportFigures, block = firstTable(figures)) =>
     Object.fromEntries(block.rows.filter((row) => row.kind !== "heading").map((row) => [row.label, figures.columns.map((column) => row.values[column.key])]));
   const mainRows = (layout: CustomReportLayout) => (layout.blocks[0] as { rows: ReportRow[] }).rows;
 

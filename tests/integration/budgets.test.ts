@@ -1,3 +1,4 @@
+import type { AnyCustomReportFigures } from "@/lib/reports/custom";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import * as budgetAmountsRoute from "@/app/api/budgets/[budgetId]/amounts/route";
 import * as budgetArchiveRoute from "@/app/api/budgets/[budgetId]/archive/route";
@@ -323,7 +324,7 @@ describeWithDatabase("budgets", () => {
     const report = (await w.as((tx) => createCustomReport(tx, { idempotencyKey: key("cr"), base: "profit_and_loss", periodEnd: "2026-06-30" }))).report;
     const save = (columns: Record<string, unknown>, version: number, base = report) =>
       w.as((tx) => updateCustomReport(tx, base.id, { layout: { ...base.layout, columns: { ...base.layout.columns, ...columns } }, version }));
-    const rowsOf = (figures: CustomReportFigures) => {
+    const rowsOf = (figures: CustomReportFigures | AnyCustomReportFigures) => {
       const table = figures.blocks[0] as Extract<CustomReportFigures["blocks"][number], { kind: "table" }>;
       return Object.fromEntries(table.rows.map((row) => [row.label, figures.columns.map((column) => row.values[column.key])]));
     };

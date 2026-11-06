@@ -161,7 +161,7 @@ export const REPORT_WRITE_TOOLS: readonly AiTool[] = [
     async run(tx, args, context) {
       const key = args.idempotencyKey == null || args.idempotencyKey === "" ? `ai-${randomBytes(12).toString("hex")}` : requireIdempotencyKey(args.idempotencyKey);
       const base = String(args.base ?? "");
-      const financial = !isTransactionReportBase(base);
+      const financial = !isTransactionReportBase(base) && base !== "cash_flows";
       let layout = args.layout;
       if (layout == null && args.title != null && financial && Object.hasOwn(CUSTOM_REPORT_BASES, base)) {
         // A title on a standard start: the same rows, named.

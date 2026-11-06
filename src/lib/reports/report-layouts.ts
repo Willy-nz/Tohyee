@@ -2,8 +2,9 @@ import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { compareAmountColumns } from "@/lib/reports/compare-columns";
+import { type CashFlowFigures, computeCashFlowLayout } from "@/lib/reports/cash-flow-layout";
 import { computeCustomReport, type CustomReport, getCustomReport } from "@/lib/reports/custom";
-import type { CustomReportFigures, CustomReportLayout, FinancialReportBase, ReportColumn } from "@/lib/reports/custom-layout";
+import type { CashFlowLayout, CustomReportFigures, CustomReportLayout, FinancialReportBase, LayoutBase, ReportColumn } from "@/lib/reports/custom-layout";
 import { balanceSheet, financialYearEndMonth, profitAndLoss, totalsFilter } from "@/lib/reports/financial";
 import { parseCompare } from "@/lib/reports/statement-compare";
 import { parseTrackingFilter } from "@/lib/reports/tracking-filter";
@@ -19,17 +20,18 @@ import { requireId } from "@/lib/validation";
  * versions), named versions stay as drafts and one is the default.
  */
 
-const BASES: readonly FinancialReportBase[] = ["profit_and_loss", "balance_sheet"];
+export type { LayoutBase };
+const BASES: readonly LayoutBase[] = ["profit_and_loss", "balance_sheet", "cash_flows"];
 
-function parseBase(input: unknown): FinancialReportBase {
-  if (typeof input !== "string" || !BASES.includes(input as FinancialReportBase)) throw new ValidationError("Choose the profit and loss or the balance sheet.");
-  return input as FinancialReportBase;
+function parseBase(input: unknown): LayoutBase {
+  if (typeof input !== "string" || !BASES.includes(input as LayoutBase)) throw new ValidationError("Choose the profit and loss, the balance sheet or cash flows.");
+  return input as LayoutBase;
 }
 
-export type LayoutDefault = { base: FinancialReportBase; reportId: string; title: string; setByEmail: string | null; setAt: string };
+export type LayoutDefault = { base: LayoutBase; reportId: string; title: string; setByEmail: string | null; setAt: string };
 
 export async function listLayoutDefaults(tx: OrgTx): Promise<LayoutDefault[]> {
-  const found = await tx.query<{ base: FinancialReportBase; report_id: string; title: string; set_by_email: string | null; set_at: string }>(
+  const found = await tx.query<{ base: LayoutBase; report_id: string; title: string; set_by_email: string | null; set_at: string }>(
     `select d.base, d.custom_report_id::text as report_id, r.title, d.set_by_email, d.set_at
        from report_layout_defaults d join custom_reports r on r.id = d.custom_report_id
       order by d.base`,
@@ -89,7 +91,9 @@ export async function runDefaultLayout(
     trackingValueId?: unknown;
   },
 ): Promise<{ report: CustomReport; figures: CustomReportFigures } | null> {
-  const base = parseBase(input.base);
+  const parsed = parseBase(input.base);
+  if (parsed === "cash_flows") throw new ValidationError("Use the cash flows layout.");
+  const base: FinancialReportBase = parsed;
   const defaults = await listLayoutDefaults(tx);
   const chosen = defaults.find((entry) => entry.base === base);
   if (!chosen) return null;
@@ -112,6 +116,24 @@ export async function runDefaultLayout(
     filter: filter ? { ...totalsFilter(filter)!, label: filter.label } : null,
   });
   return { report, figures };
+}
+
+/**
+ * The default cash flows layout for a period, with earlier periods to
+ * compare (CFL5), or null when there's none (the standard statement shows).
+ */
+export async function runDefaultCashFlowLayout(
+  tx: OrgTx,
+  input: { from: string; to: string; compare?: unknown; compareBy?: unknown; order?: unknown },
+): Promise<{ report: CustomReport; figures: CashFlowFigures } | null> {
+  const chosen = (await listLayoutDefaults(tx)).find((entry) => entry.base === "cash_flows");
+  if (!chosen) return null;
+  const { report } = await getCustomReport(tx, chosen.reportId);
+  const compare = parseCompare({ compare: input.compare, compareBy: input.compareBy, order: input.order }) ?? { periods: 0, periodLength: "month" as const };
+  const columns: ReportColumn[] = compareAmountColumns("profit_and_loss", { from: input.from, to: input.to }, { ...compare, total: false, percentOfIncome: false }, await financialYearEndMonth(tx))
+    .filter((column) => column.kind === "period")
+    .map((column) => ({ key: column.key, kind: "period", label: column.label, from: column.from, to: column.to }));
+  return { report, figures: await computeCashFlowLayout(tx, report.layout as CashFlowLayout, { columns }) };
 }
 
 const FAVOURITE_KEY = /^(std:[a-z]{2,20}|custom:[1-9][0-9]{0,17})$/;

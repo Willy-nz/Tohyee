@@ -98,9 +98,10 @@ export function AnnualStatementsReport({ organisationId }: { organisationId: str
   const report = useApiData<FinancialStatements>("/api/reports/annual-statements", { organisationId, yearEnd });
   const plLayout = useReportLayout(organisationId, "profit_and_loss");
   const bsLayout = useReportLayout(organisationId, "balance_sheet");
+  const cfLayout = useReportLayout(organisationId, "cash_flows");
   const data = report.data;
   const pdf = `/api/reports/financial-statements?organisationId=${encodeURIComponent(organisationId)}&yearEnd=${encodeURIComponent(yearEnd)}&kind=statements`;
-  const layoutFor = (statement: FinancialStatement) => (statement.base === "profit_and_loss" ? plLayout : statement.base === "balance_sheet" ? bsLayout : null);
+  const layoutFor = (statement: FinancialStatement) => (statement.base === "profit_and_loss" ? plLayout : statement.base === "balance_sheet" ? bsLayout : statement.base === "cash_flows" ? cfLayout : null);
   return (
     <section className={ui.reportFrame} aria-label="Annual financial statements">
       <div className={ui.reportToolbar} data-print="hide" role="group" aria-label="Report options">
@@ -124,6 +125,7 @@ export function AnnualStatementsReport({ organisationId }: { organisationId: str
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {plLayout.error ? <Notice tone="error">{plLayout.error}</Notice> : null}
       {bsLayout.error ? <Notice tone="error">{bsLayout.error}</Notice> : null}
+      {cfLayout.error ? <Notice tone="error">{cfLayout.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {data ? (
         <>

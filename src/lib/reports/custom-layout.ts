@@ -18,7 +18,16 @@ export type TransactionReportBase =
   | "bank_reconciliation"
   | "budget_vs_actual"
   | "changes_in_equity";
-export type CustomReportBase = FinancialReportBase | TransactionReportBase;
+
+export type CustomReportBase = FinancialReportBase | TransactionReportBase | "cash_flows";
+
+/** The standard reports that can have a default layout: profit and loss, balance sheet and (CFL5) cash flows. */
+export type LayoutBase = FinancialReportBase | "cash_flows";
+
+/** A cash flows layout (CFL1-CFL5). */
+export function isCashFlowBase(base: string): base is "cash_flows" {
+  return base === "cash_flows";
+}
 
 export function isTransactionReportBase(base: string): base is TransactionReportBase {
   return [
@@ -39,6 +48,7 @@ export type PeriodLength = "month" | "quarter" | "year";
 export const CUSTOM_REPORT_BASES: Record<CustomReportBase, string> = {
   profit_and_loss: "Profit and loss",
   balance_sheet: "Balance sheet",
+  cash_flows: "Cash flows",
   account_transactions: "Account transactions",
   aged_receivables: "Aged receivables",
   aged_payables: "Aged payables",
@@ -156,6 +166,49 @@ export type ReportRow = RowExtras &
     | { id: string; kind: "earnings"; label: string; which: "previous" | "current" }
   );
 
+/** Cash flow layouts (CFL1-CFL5): the sections a line usually sits in. */
+export type CashFlowSectionKind = "operating" | "investing" | "financing";
+export const CASH_FLOW_SECTIONS: Record<CashFlowSectionKind, string> = {
+  operating: "Operating activities",
+  investing: "Investing activities",
+  financing: "Financing activities",
+};
+/**
+ * A line a cash flow group can hold: "profit"; "adjust:<bucket>" for a
+ * non-cash adjustment (depreciation, livestock, rations, fx, disposal,
+ * opening); "account:<code>" for an account's movement; "disposal_proceeds".
+ */
+export type CashFlowLineRef = string;
+export type CashFlowRow = RowExtras &
+  ({ id: string; kind: "heading"; label: string } | { id: string; kind: "group"; label: string; lines: CashFlowLineRef[]; showLines: boolean });
+export type CashFlowSection = { id: string; kind: "section"; usual: CashFlowSectionKind; title: string; totalLabel: string; rows: CashFlowRow[] };
+export type CashFlowBlock = CashFlowSection | { id: string; kind: "text"; text: string };
+export type CashFlowEndLabels = { netChange: string; exchange: string; openingCash: string; closingCash: string };
+export const CASH_FLOW_END_LABELS: CashFlowEndLabels = {
+  netChange: "Net increase (decrease) in cash",
+  exchange: "Effect of exchange rates on cash",
+  openingCash: "Cash at the start of the period",
+  closingCash: "Cash at the end of the period",
+};
+export type CashFlowLayout = { title: string; columns: ReportColumnsSetting; blocks: CashFlowBlock[]; endLabels?: Partial<CashFlowEndLabels> };
+
+/** The standard statement as a layout: each section takes its usual lines, one by one (CFL2). */
+export function standardCashFlowLayout(periodEnd: string): CashFlowLayout {
+  const section = (usual: CashFlowSectionKind): CashFlowSection => ({
+    id: usual,
+    kind: "section",
+    usual,
+    title: CASH_FLOW_SECTIONS[usual],
+    totalLabel: `Net cash from ${usual} activities`,
+    rows: usual === "operating" ? [{ id: "profit", kind: "group", label: "Net profit", lines: ["profit"], showLines: false }] : [],
+  });
+  return {
+    title: "Cash flows",
+    columns: { periodEnd, periodLength: "year", periodCount: 1, difference: false, percent: false, yearToDate: false },
+    blocks: [section("operating"), section("investing"), section("financing")],
+  };
+}
+
 export type ReportBlock =
   | { id: string; kind: "table"; title: string; rows: ReportRow[] }
   | { id: string; kind: "text"; text: string };
@@ -188,7 +241,7 @@ export type TransactionReportLayout = {
   columns: string[];
 };
 
-export type StoredCustomReportLayout = CustomReportLayout | TransactionReportLayout;
+export type StoredCustomReportLayout = CustomReportLayout | TransactionReportLayout | CashFlowLayout;
 
 export type TransactionReportColumn = { key: string; label: string };
 
