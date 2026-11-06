@@ -469,8 +469,8 @@ export async function computeTransactionCustomReport(
 async function firstOf(tx: OrgTx, what: "bank" | "budget"): Promise<string> {
   const found =
     what === "bank"
-      ? await tx.query<{ id: string }>("select id::text from accounts where account_type in ('bank', 'credit_card') and is_active order by code limit 1")
-      : await tx.query<{ id: string }>("select id::text from budgets order by id desc limit 1");
+      ? await tx.query<{ id: string }>("select a.id::text as id from accounts a where a.account_type in ('bank', 'credit_card') and a.is_active order by a.code limit 1")
+      : await tx.query<{ id: string }>("select b.id::text as id from budgets b order by b.id desc limit 1");
   if (!found.rows[0]) throw new ValidationError(what === "bank" ? "There's no bank account yet." : "Make a budget first: Reports › Budgets.");
   return found.rows[0].id;
 }
