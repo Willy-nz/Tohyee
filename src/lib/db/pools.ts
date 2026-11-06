@@ -50,6 +50,14 @@ function createPool(connectionString: string, max: number): pg.Pool {
   pool.on("error", (error) => {
     console.error("[tohyee] idle database connection error:", error.message);
   });
+  // The pool only listens to idle clients. One in use whose session is ended
+  // (a database dropped WITH (FORCE), or a restart) mustn't crash the server
+  // either: its next query fails instead.
+  pool.on("connect", (client) => {
+    client.on("error", (error) => {
+      console.error("[tohyee] database connection error:", error.message);
+    });
+  });
   return pool;
 }
 
@@ -106,13 +114,42 @@ export function getOrganisationPool(databaseName: string): pg.Pool {
   return pool;
 }
 
+/** How long closing a pool waits for connections still out (TOHYEE_POOL_CLOSE_WAIT_MS, default 10 seconds). */
+function closeWaitMs(): number {
+  return positiveInt(process.env.TOHYEE_POOL_CLOSE_WAIT_MS, 10_000);
+}
+
+/**
+ * Ends a pool, waiting at most `waitMs` for connections still out (a job,
+ * or a query stuck behind a lock). pg's end() otherwise waits for every one
+ * to come back, which can be forever. What's left is said in the log; a
+ * DROP DATABASE ... WITH (FORCE) after this ends those sessions.
+ */
+async function endPool(pool: pg.Pool, name: string, waitMs: number): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  const ended = pool.end().then(
+    () => true,
+    () => true,
+  );
+  const waited = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), waitMs);
+    timer.unref?.();
+  });
+  const done = await Promise.race([ended, waited]);
+  if (timer) clearTimeout(timer);
+  if (!done) {
+    const out = pool.totalCount - pool.idleCount;
+    console.warn(`[tohyee] Closing the ${name} pool: ${out} connection${out === 1 ? "" : "s"} still in use after ${waitMs} ms. Going on without them.`);
+  }
+}
+
 /** Closes and forgets a single organisation pool (e.g. before dropping it). */
-export async function closeOrganisationPool(databaseName: string): Promise<void> {
+export async function closeOrganisationPool(databaseName: string, options: { waitMs?: number } = {}): Promise<void> {
   const pools = registry();
   const entry = pools.organisations.get(databaseName);
   if (entry) {
     pools.organisations.delete(databaseName);
-    await entry.pool.end();
+    await endPool(entry.pool, databaseName, options.waitMs ?? closeWaitMs());
   }
 }
 
@@ -127,14 +164,15 @@ export async function connectAsAdmin(databaseName: string): Promise<pg.Client> {
   return client;
 }
 
-export async function closeAllPools(): Promise<void> {
+export async function closeAllPools(options: { waitMs?: number } = {}): Promise<void> {
   const pools = registry();
-  const all: pg.Pool[] = [];
-  if (pools.core) all.push(pools.core);
-  if (pools.admin) all.push(pools.admin);
-  for (const entry of pools.organisations.values()) all.push(entry.pool);
+  const all: Array<[string, pg.Pool]> = [];
+  if (pools.core) all.push(["core", pools.core]);
+  if (pools.admin) all.push(["admin", pools.admin]);
+  for (const [name, entry] of pools.organisations.entries()) all.push([name, entry.pool]);
   pools.core = null;
   pools.admin = null;
   pools.organisations.clear();
-  await Promise.all(all.map((pool) => pool.end().catch(() => undefined)));
+  const waitMs = options.waitMs ?? closeWaitMs();
+  await Promise.all(all.map(([name, pool]) => endPool(pool, name, waitMs)));
 }
