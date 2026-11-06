@@ -25,6 +25,8 @@ export const POST = route<Context>(async (request, context) => {
     email: body.email,
     displayName: body.displayName,
     role: body.role,
+    // Time-limited access (decision 1466).
+    access: { accessFrom: body.accessFrom, accessFromTime: body.accessFromTime, accessUntil: body.accessUntil, accessUntilTime: body.accessUntilTime },
   });
   return json(result, { status: 201 });
 });

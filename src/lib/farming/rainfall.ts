@@ -7,15 +7,16 @@ import { requireFarmAccess, visibleFarmIds } from "@/lib/farming/access";
 import type { Position } from "@/lib/farming/geometry";
 import { requireFarming } from "@/lib/farming/paddocks";
 import { optionalOperationId } from "@/lib/farming/pasture";
-import { type DayReading, monthTotals, parseMm, type Period, rainTotals, type RainTotals, seasonTotals, summaryFrom } from "@/lib/farming/rainfall-rules";
+import { type DayReading, latestRainDay, monthTotals, parseMm, type Period, rainTotals, type RainTotals, seasonTotals, summaryFrom } from "@/lib/farming/rainfall-rules";
 import { fileRows, importSource } from "@/lib/farming/soil";
 import { requestHash } from "@/lib/idempotency";
 import { optionalString, requireId, requireString } from "@/lib/validation";
 
 /*
  * Rainfall (decisions 1451-1456; examples RF1-RF8, not yet reviewed): rain
- * gauges on a farm and a reading a gauge a day. Records only: Tohyee
- * fetches no weather from anywhere, and judges nothing. Farm staff and up
+ * gauges on a farm and a reading a gauge a day, for the rain day (the day
+ * before the 9 am reading; dates in imported files are used as they are).
+ * Records only: Tohyee fetches no weather from anywhere, and judges nothing. Farm staff and up
  * add gauges and readings and edit readings (who and when is kept);
  * bookkeepers and up remove a reading entered by mistake (it's kept) and
  * import files.
@@ -189,9 +190,10 @@ async function loadReadings(tx: OrgTx, where: string, params: unknown[]): Promis
   }));
 }
 
+/** A rain day (decision 1452): yesterday at the latest, as today's rain is read tomorrow morning. */
 function readDate(input: unknown, today: string): string {
-  const readOn = parseIsoDate(input, "Date");
-  if (readOn > today) throw new ValidationError("A rain reading can't be for a day that hasn't happened yet.");
+  const readOn = parseIsoDate(input, "Rain day");
+  if (readOn > latestRainDay(today)) throw new ValidationError(`A rain reading is for the day before the gauge is read, so the latest is ${latestRainDay(today)}. Today's rain is read tomorrow morning.`);
   return readOn;
 }
 
@@ -381,7 +383,7 @@ async function readImport(tx: OrgTx, gauge: RainGauge, input: ImportInput, today
         mm = null;
       }
       if (!readOn) error = dateText ? `"${dateText}" isn't a date.` : "No date.";
-      else if (readOn > today) error = "A day that hasn't happened yet.";
+      else if (readOn > latestRainDay(today)) error = "Today or later: a rain day is over only when it's read the next morning.";
       else if (mm === null) error = mmText ? `"${mmText}" isn't millimetres from 0 to 2,000 (one decimal place at most).` : "No rain figure. Type 0 for a dry day.";
       else if (seen.has(readOn)) error = "This day is in the file twice.";
       else if (kept.has(readOn)) error = `${gauge.name} already has ${kept.get(readOn)} mm on this day.`;

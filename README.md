@@ -48,8 +48,8 @@ before connecting an assistant.
 > organisation and review accounting outputs. Tohyee is provided as is, without
 > warranty; see the [licence](LICENSE).
 
-Latest release: [v0.27.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.27.0)
-([notes](docs/releases/0.27.0.md)). Get the installer and what each download
+Latest release: [v0.28.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.28.0)
+([notes](docs/releases/0.28.0.md)). Get the installer and what each download
 includes from the [latest release](https://github.com/Willy-nz/Tohyee/releases/latest).
 The [feature register](docs/FEATURES.md) records implemented features and limits;
 [release notes](docs/releases) describe packaged versions.
@@ -130,6 +130,7 @@ real phone or in a paddock yet.
 | Release | What's new |
 | --- | --- |
 | **Next** (on `main`) | Effluent management; aerial photos on farm maps with your own LINZ key. |
+| [**0.28.0**](docs/releases/0.28.0.md) | E-signatures, AI-built Analytics reports with history, time-limited access and Hire help, farm mobs and treatments, satellite paddock greenness, rainfall, team tasks and map extras. |
 | [**0.27.0**](docs/releases/0.27.0.md) | Oldest month first, Shopify reconnect and payouts listed once, cleaner bank suggestions, GST for unregistered periods, consistent AI answers, and a new website. |
 | [**0.26.0**](docs/releases/0.26.0.md) | Reports like Xero (heading, compare, tracking, edit layout), Shopify payouts and payment methods posting, Shopify import fixes, and AI fixed asset and report tools. |
 | [**0.25.0**](docs/releases/0.25.0.md) | Confirmed GST registration, guided Akahu feeds, Unreconcile selected and bank batches, AI coding to review, Shopify payouts matched, mixed-use cards, and simpler screens (includes 0.24.0). |

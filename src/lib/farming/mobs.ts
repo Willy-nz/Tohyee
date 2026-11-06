@@ -29,7 +29,7 @@ import { type Withholding, withholdingText } from "@/lib/farming/treatment-rules
 import { mobWithholdings, paddockWithholdings } from "@/lib/farming/withholding";
 import { requestHash } from "@/lib/idempotency";
 import { className, findClass, KIND_NAMES, LIVESTOCK_KINDS, type LivestockKind } from "@/lib/livestock/classes";
-import { getLivestockSettings, getMovement, recordMovement } from "@/lib/livestock/movements";
+import { getLivestockSettings, getMovement, recordMovement, voidMovement } from "@/lib/livestock/movements";
 import { add, cmp, dec, divide, parseDecimalInput, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { asRecord, optionalId, optionalString, requireArray, requireId, requireOneOf } from "@/lib/validation";
 
@@ -91,6 +91,8 @@ export type MobEvent = {
   toPaddockName: string | null;
   grazingId: string | null;
   livestockMovementId: string | null;
+  /** A reversal: the event it reverses (#609). */
+  reversesEventId: string | null;
   amount: string | null;
   averageKg: string | null;
   weighedHead: number | null;
@@ -99,7 +101,7 @@ export type MobEvent = {
   createdAt: string;
 };
 
-export type ActionResult = { mob: Mob; events: MobEvent[]; livestock: "recorded" | "linked" | "off" | "none"; message: string };
+export type ActionResult = { mob: Mob; events: MobEvent[]; livestock: "recorded" | "linked" | "reversed" | "off" | "none"; message: string };
 
 function optionalOperationId(input: unknown): string | null {
   if (input === undefined || input === null || input === "") return null;
@@ -250,6 +252,7 @@ type EventRow = {
   to_paddock: string | null;
   grazing_id: string | null;
   livestock_movement_id: string | null;
+  reverses_event_id: string | null;
   amount: string | null;
   average_kg: string | null;
   weighed_head: number | null;
@@ -262,7 +265,7 @@ export async function loadEvents(tx: OrgTx, where: string, params: unknown[], li
   const rows = await tx.query<EventRow>(
     `select e.id::text, e.mob_id::text, m.name as mob_name, m.kind, m.class_code, e.event_type, e.event_date::text, e.head_change, e.head_after,
             e.created_how, e.from_class_code, e.to_class_code, e.other_mob_id::text, o.name as other_name, o.kind as other_kind, o.class_code as other_class,
-            fp.name as from_paddock, tp.name as to_paddock, e.grazing_id::text, e.livestock_movement_id::text, e.amount::text, e.average_kg::text,
+            fp.name as from_paddock, tp.name as to_paddock, e.grazing_id::text, e.livestock_movement_id::text, e.reverses_event_id::text, e.amount::text, e.average_kg::text,
             e.weighed_head, e.note, e.created_by_email, e.created_at::text
        from mob_events e join mobs m on m.id = e.mob_id
        left join mobs o on o.id = e.other_mob_id
@@ -290,6 +293,7 @@ export async function loadEvents(tx: OrgTx, where: string, params: unknown[], li
     toPaddockName: row.to_paddock,
     grazingId: row.grazing_id,
     livestockMovementId: row.livestock_movement_id,
+    reversesEventId: row.reverses_event_id,
     amount: row.amount,
     averageKg: row.average_kg,
     weighedHead: row.weighed_head,
@@ -354,14 +358,15 @@ type EventInput = {
   note?: string | null;
   operationId?: string | null;
   requestHash?: string | null;
+  reversesEventId?: string | null;
 };
 
 export async function addEvent(tx: OrgTx, input: EventInput): Promise<string> {
   try {
     const row = await tx.query<{ id: string }>(
       `insert into mob_events (mob_id, farm_id, event_type, event_date, head_change, head_after, created_how, from_class_code, to_class_code, other_mob_id,
-         from_paddock_id, to_paddock_id, grazing_id, livestock_movement_id, amount, average_kg, weighed_head, note, operation_id, request_hash, created_by_email)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::numeric, $16::numeric, $17, $18, $19, $20, $21) returning id::text`,
+         from_paddock_id, to_paddock_id, grazing_id, livestock_movement_id, amount, average_kg, weighed_head, note, operation_id, request_hash, created_by_email, reverses_event_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::numeric, $16::numeric, $17, $18, $19, $20, $21, $22) returning id::text`,
       [
         input.mobId,
         input.farmId,
@@ -384,6 +389,7 @@ export async function addEvent(tx: OrgTx, input: EventInput): Promise<string> {
         input.operationId ?? null,
         input.requestHash ?? null,
         tx.actor.email,
+        input.reversesEventId ?? null,
       ],
     );
     return row.rows[0].id;
@@ -463,6 +469,10 @@ async function movementFor(
     if (movement.kind !== input.mob.kind || movement.classCode !== input.mob.classCode) throw new ValidationError(`That livestock movement is for ${className(movement.kind, movement.classCode)}, not ${input.mob.className}.`);
     if (movement.head !== input.head) throw new ValidationError(`That livestock movement is for ${movement.head} head, not ${input.head}.`);
     if (movement.movementDate !== input.date) throw new ValidationError(`That livestock movement is dated ${movement.movementDate}. Use the same date.`);
+    // A linked class change is the same change: its new class too (#609, decision 1504).
+    if (input.type === "reclass" && movement.toClassCode !== input.toClassCode) {
+      throw new ValidationError(`That livestock movement is to ${className(movement.kind, movement.toClassCode ?? "").toLowerCase()}, not ${className(input.mob.kind, input.toClassCode ?? "").toLowerCase()}. Nothing was changed.`);
+    }
     return { movementId: movement.id, livestock: "linked" };
   }
   const { movement } = await recordMovement(tx, {
@@ -483,6 +493,7 @@ async function movementFor(
 const LIVESTOCK_WORDS: Record<ActionResult["livestock"], string> = {
   recorded: " The livestock head count was updated too.",
   linked: " It's linked to the livestock movement you chose.",
+  reversed: " Its livestock movement is voided, so the books' head count matches.",
   off: " Livestock is off, so the books' head count wasn't changed.",
   none: "",
 };
@@ -546,6 +557,7 @@ export async function createMob(tx: OrgTx, input: Record<string, unknown>): Prom
  * find the first (decision 912).
  */
 export async function mobAction(tx: OrgTx, mobIdInput: unknown, input: Record<string, unknown>): Promise<ActionResult> {
+  if (input.action === "reverse") return reverseMobEvent(tx, mobIdInput, input);
   const action = requireOneOf(input.action, "action", MOB_ACTIONS) as MobAction;
   if (BOOKKEEPER_ACTIONS.includes(action)) requireBooksRole(tx, action === "sell" ? "Selling" : action === "buy" ? "Adding bought stock" : "Changing class");
   const operationId = optionalOperationId(input.operationId);
@@ -1027,4 +1039,91 @@ export async function linkableMovements(tx: OrgTx, mobIdInput: unknown, input: {
     [type, mob.kind, mob.classCode, todayIsoDate()],
   );
   return rows.rows.map((row) => ({ id: row.id, movementDate: row.movement_date, head: row.head, amount: row.amount, invoiceNumber: row.invoice_number, billReference: row.bill_reference }));
+}
+
+// Reversing an event (#609, decisions 1500-1503) -------------------------------------------------------
+
+const REVERSIBLE = ["sold", "died", "born", "bought", "reclass", "created"] as const;
+const REVERSE_WORDS: Record<string, string> = { sold: "sale", died: "death", born: "birth", bought: "purchase", reclass: "class change", created: "addition" };
+/** Later events after which the animals can't simply be put back into the same mob. */
+const RESHAPING: Record<string, string> = { moved: "moved", split_out: "split", split_in: "split", merged_in: "merged", merged_out: "merged", reclass: "had its class changed", closed: "closed" };
+
+/**
+ * Reverses a mob's sale, death, birth, purchase or class change (MOB11-
+ * MOB13): a new "reversed" event (history isn't edited) and, in the same
+ * transaction, the event's livestock movement voided, made by the mob or
+ * linked from an invoice or bill. Once at most. If the mob has since moved,
+ * split, merged, changed class or closed, the person says which mob the
+ * animals go back into (`intoMobId`, of the movement's class); a class
+ * change is only reversed on an unchanged mob. Bookkeepers and up.
+ */
+export async function reverseMobEvent(tx: OrgTx, mobIdInput: unknown, input: Record<string, unknown>): Promise<ActionResult> {
+  requireBooksRole(tx, "Reversing a mob's event");
+  const mob = await mobRow(tx, mobIdInput, true);
+  const eventId = requireId(input.eventId, "eventId");
+  const reason = optionalString(input.reason, "Why", { maxLength: 300 });
+  if (!reason) throw new ValidationError("Say why it's being reversed.");
+  const found = await tx.query<{ id: string; event_type: string; event_date: string; head_change: number; from_class_code: string | null; to_class_code: string | null; created_how: string | null; livestock_movement_id: string | null }>(
+    "select id::text, event_type, event_date::text, head_change, from_class_code, to_class_code, created_how, livestock_movement_id::text from mob_events where id = $1 and mob_id = $2",
+    [eventId, mob.id],
+  );
+  const event = found.rows[0];
+  if (!event) throw new NotFoundError(`That event isn't ${mob.name}'s.`);
+  if (!(REVERSIBLE as readonly string[]).includes(event.event_type) || (event.event_type === "created" && event.created_how !== "bought" && event.created_how !== "born")) {
+    throw new ValidationError("Only a sale, death, birth, purchase or class change can be reversed. Correct the count for anything else.");
+  }
+  const again = await tx.query("select 1 from mob_events where reverses_event_id = $1", [event.id]);
+  if (again.rowCount) throw new ConflictError("That event is already reversed.");
+  const what = event.event_type === "created" ? (event.created_how === "born" ? "birth" : "purchase") : REVERSE_WORDS[event.event_type];
+  const later = await tx.query<{ event_type: string }>(
+    "select event_type from mob_events where mob_id = $1 and (event_date, id) > ($2::date, $3::bigint) and event_type = any($4::text[]) order by event_date, id limit 1",
+    [mob.id, event.event_date, event.id, Object.keys(RESHAPING)],
+  );
+  const reshaped = later.rows[0] ? RESHAPING[later.rows[0].event_type] : mob.status === "closed" ? "closed" : null;
+  const date = eventDate(input.onDate);
+  if (date < event.event_date) throw new ValidationError(`The ${what} was on ${event.event_date}; a reversal can't be before it.`);
+  const movement = event.livestock_movement_id ? await getMovement(tx, event.livestock_movement_id) : null;
+  const voidReason = `Mob ${what} reversed: ${reason}`;
+  let target: Mob;
+  let message: string;
+
+  if (event.event_type === "reclass") {
+    if (reshaped || mob.status !== "active") throw new ConflictError(`${mob.name} has ${reshaped ?? "closed"} since the class change, so it can't simply be put back. Change its class again instead.`);
+    if (input.intoMobId) throw new ValidationError("A class change is reversed on its own mob.");
+    if (mob.classCode !== event.to_class_code) throw new ConflictError(`${mob.name} isn't ${className(mob.kind, event.to_class_code ?? "").toLowerCase()} now. Nothing was changed.`);
+    if (movement && !movement.voided) await voidMovement(tx, movement.id, { reason: voidReason, fromMobReversal: true });
+    await tx.query("update mobs set class_code = $2 where id = $1", [mob.id, event.from_class_code]);
+    await addEvent(tx, { mobId: mob.id, farmId: mob.farmId, eventType: "reversed", eventDate: date, headAfter: mob.head, fromClassCode: event.to_class_code, note: reason, reversesEventId: event.id });
+    target = mob;
+    message = `${mob.name}'s class change is reversed: it's ${className(mob.kind, event.from_class_code ?? "").toLowerCase()} again.`;
+  } else {
+    const head = Math.abs(event.head_change);
+    const intoId = optionalId(input.intoMobId, "intoMobId");
+    if (!intoId && reshaped) {
+      throw new ConflictError(
+        reshaped === "closed"
+          ? `${mob.name} is closed. Choose the mob the ${head} go back into.`
+          : `${mob.name} has been ${reshaped} since the ${what}. Choose the mob the ${head} ${what === "sale" || what === "death" ? "go back into" : "come out of"}.`,
+      );
+    }
+    target = intoId && intoId !== mob.id ? await mobRow(tx, intoId, true) : mob;
+    if (target.farmId !== mob.farmId) throw new ValidationError("That mob is on another farm.");
+    if (target.status !== "active") throw new ValidationError(`${target.name} is closed. Choose an active mob.`);
+    // The animals' class: the movement's, or (Livestock off) the mob's as it was.
+    const classCode = movement?.classCode ?? mob.classCode;
+    if (target.kind !== mob.kind || target.classCode !== classCode) {
+      throw new ValidationError(`The ${head} are ${className(mob.kind, classCode).toLowerCase()}; ${target.name} is ${target.className.toLowerCase()}. Choose a mob of ${className(mob.kind, classCode).toLowerCase()}.`);
+    }
+    const addBack = event.head_change < 0;
+    if (!addBack && target.head < head) throw new ValidationError(`${target.name} has ${target.head} head; ${head} can't come out of it.`);
+    if (addBack && target.head + head > 100000) throw new ValidationError("A mob can have at most 100,000 head.");
+    if (movement && !movement.voided) await voidMovement(tx, movement.id, { reason: voidReason, fromMobReversal: true });
+    const after = addBack ? target.head + head : target.head - head;
+    await addEvent(tx, { mobId: target.id, farmId: mob.farmId, eventType: "reversed", eventDate: date, headChange: addBack ? head : -head, headAfter: after, otherMobId: target.id === mob.id ? null : mob.id, note: reason, reversesEventId: event.id });
+    await setHead(tx, target, after, date);
+    message = `${mob.name}'s ${what} of ${head} on ${event.event_date} is reversed: ${head} ${addBack ? "back into" : "out of"} ${target.name}.`;
+  }
+  await writeAuditEvent(tx, { eventType: "farming.mob_event_reversed", entityType: "mob", entityId: mob.id, details: { eventId: event.id, what, reason, intoMobId: target.id, movementId: movement?.id ?? null } });
+  const livestock: ActionResult["livestock"] = movement ? "reversed" : "none";
+  return { mob: await mobRow(tx, mob.id), events: await loadEvents(tx, "e.mob_id = $1", [mob.id], 5), livestock, message: `${message}${LIVESTOCK_WORDS[livestock]}` };
 }

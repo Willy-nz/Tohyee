@@ -337,6 +337,7 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "mob_bcs",
         "list_supplements_fed",
         "rainfall",
+        "paddock_greenness",
         "list_pasture_photos_awaiting_estimate",
         "get_pasture_photo",
         "list_bcs_photos_to_score",

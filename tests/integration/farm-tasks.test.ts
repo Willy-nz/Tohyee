@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import * as remindersRoute from "@/app/api/app/reminders/route";
+import * as accessRoute from "@/app/api/organisations/[organisationId]/members/[userId]/access/route";
 import * as tasksRoute from "@/app/api/farming/farms/[farmId]/tasks/route";
 import * as teamRoute from "@/app/api/farming/farms/[farmId]/team/route";
 import * as doneRoute from "@/app/api/farming/tasks/[taskId]/done/route";
 import * as dueRoute from "@/app/api/farming/tasks/due/route";
+import * as taskRoute from "@/app/api/farming/tasks/[taskId]/route";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { coreQuery } from "@/lib/db/transactions";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -103,10 +105,16 @@ describeWithDatabase("farm team tasks", () => {
     await run((tx) => markTaskDone(tx, w.trough, {}, today));
   });
 
-  it("FT2 cancelling keeps a task, out of the to-do list", async () => {
+  it("FT2 only bookkeepers and up cancel; cancelling keeps a task, out of the to-do list", async () => {
     const run = as(owner);
-    const spare = await run((tx) => addTask(tx, { farmId: w.home, title: "Spray thistles", dueOn: "2026-11-20" }));
+    // Farm staff can't cancel a task, even one they added (Jess, 5 Nov 2026), but can still change it.
+    const theirs = await call(worker, tasksRoute.POST as Handler, `/api/farming/farms/${w.home}/tasks`, { farmId: w.home }, "POST", { title: "Spray thistles", dueOn: "2026-11-20" });
+    const spare = theirs.body.task as { id: string };
+    const refused = await call(worker, taskRoute.PATCH as Handler, `/api/farming/tasks/${spare.id}`, { taskId: spare.id }, "PATCH", { status: "cancelled" });
+    expect([refused.status, refused.body.error]).toEqual([403, "Cancelling a task needs the bookkeeper role or higher. Mark it done, or ask a bookkeeper or the owner."]);
+    expect((await call(worker, taskRoute.PATCH as Handler, `/api/farming/tasks/${spare.id}`, { taskId: spare.id }, "PATCH", { note: "Ragwort too" })).status).toBe(200);
     await run((tx) => updateTask(tx, spare.id, { status: "cancelled" }));
+    await expect(as(worker)((tx) => updateTask(tx, spare.id, { status: "open" }))).rejects.toThrow("Opening a cancelled task again needs the bookkeeper role");
     expect((await run((tx) => listTasks(tx, { farmId: w.home }))).map((task) => task.title)).not.toContain("Spray thistles");
     expect((await run((tx) => listTasks(tx, { farmId: w.home, view: "cancelled" }))).map((task) => task.title)).toEqual(["Spray thistles"]);
     await expect(run((tx) => markTaskDone(tx, spare.id, {}))).rejects.toThrow("cancelled");
@@ -139,5 +147,70 @@ describeWithDatabase("farm team tasks", () => {
     expect(reminders[0].date >= "2026-11-05").toBe(true);
     const workers = await call(worker, remindersRoute.GET as Handler, "/api/app/reminders", {});
     expect((workers.body.reminders as Array<{ kind: string; title: string }>).filter((reminder) => reminder.kind === "task").map((reminder) => reminder.title)).toEqual(["Task: Check the trough"]);
+  });
+  it("#609 only people whose access is current can be given a task; open tasks for others are flagged, not changed", async () => {
+    const run = as(owner);
+    const temp = await createTestUser("tasks-temp@example.com", { displayName: "Hemi" });
+    const starter = await createTestUser("tasks-starter@example.com", { displayName: "Ana" });
+    const inHours = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
+    const setWindow = (userId: string, starts: string | null, ends: string | null) => coreQuery("update organisation_members set access_starts_at = $3, access_ends_at = $4 where organisation_id = $1 and user_id = $2", [ORG, userId, starts, ends]);
+    await coreQuery("insert into organisation_members (organisation_id, user_id, role, access_ends_at) values ($1, $2, 'farm_worker', $4), ($1, $3, 'farm_worker', null)", [ORG, temp.id, starter.id, inHours(48)]);
+    await run((tx) => setMemberFarmAccess(tx, { userId: temp.id, role: "farm_worker", access: "farms", farmIds: [w.home] }));
+    await run((tx) => setMemberFarmAccess(tx, { userId: starter.id, role: "farm_worker", access: "farms", farmIds: [w.home] }));
+    await setWindow(starter.id, inHours(24), null);
+    const team = async () => ((await call(owner, teamRoute.GET as Handler, `/api/farming/farms/${w.home}/team`, { farmId: w.home })).body.people as Array<{ name: string }>).map((person) => person.name).sort();
+    const add = (assignedToUserId: string, title: string) => call(owner, tasksRoute.POST as Handler, `/api/farming/farms/${w.home}/tasks`, { farmId: w.home }, "POST", { title, dueOn: "2026-11-20", assignedToUserId });
+
+    // Current, with an end date: on the team, and can be given a task.
+    expect(await team()).toEqual(["Aroha", "Hemi", "Tama"]);
+    const calves = await add(temp.id, "Feed the calves");
+    expect(calves.status).toBe(201);
+    const calvesId = (calves.body.task as { id: string }).id;
+    expect((calves.body.task as { needsReassigning: boolean }).needsReassigning).toBe(false);
+    const fence = (await add(temp.id, "Check the boundary fence")).body.task as { id: string };
+    await run((tx) => markTaskDone(tx, fence.id, {}));
+
+    // Expired (login still on): off the team, refused through the API with why.
+    await setWindow(temp.id, null, inHours(-1));
+    expect(await team()).toEqual(["Aroha", "Tama"]);
+    const ended = await add(temp.id, "Shift the break fence");
+    expect([ended.status, ended.body.error]).toEqual([400, "Hemi's access to this organisation has ended, so they can't be given a task. Choose someone else, or extend their access in People and roles first."]);
+    const moved = await call(owner, taskRoute.PATCH as Handler, `/api/farming/tasks/${w.trough}`, { taskId: w.trough }, "PATCH", { assignedToUserId: temp.id });
+    expect(moved.status).toBe(400);
+    expect((await run((tx) => listTasks(tx, { farmId: w.home }))).find((task) => task.id === w.trough)?.assignedToUserId).toBe(worker.id);
+
+    // Not started yet: refused too (tasks aren't given ahead of someone's start).
+    const early = await add(starter.id, "Shift the break fence");
+    expect(early.status).toBe(400);
+    expect(early.body.error).toMatch(/^Ana's access starts on \d{1,2} [A-Z][a-z]{2} \d{4}(, \d{1,2}:\d{2}(am|pm))?\. A task can only be for someone who can sign in now/);
+
+    // The open task stays Hemi's and is flagged on Tasks, Today and the calendar; a done one isn't.
+    const open = (await call(worker, tasksRoute.GET as Handler, `/api/farming/farms/${w.home}/tasks`, { farmId: w.home })).body.tasks as Array<{ id: string; assignedToName: string; needsReassigning: boolean }>;
+    expect(open.find((task) => task.id === calvesId)).toMatchObject({ assignedToName: "Hemi", needsReassigning: true });
+    expect(open.filter((task) => task.needsReassigning).map((task) => task.id)).toEqual([calvesId]);
+    const done = (await run((tx) => listTasks(tx, { farmId: w.home, view: "done" }))).find((task) => task.id === fence.id);
+    expect([done?.assignedToUserId, done?.needsReassigning]).toEqual([temp.id, false]);
+    const due = await run((tx) => tasksDue(tx, { from: "2026-11-20", to: "2026-11-20", farmId: w.home }));
+    expect(due.find((item) => item.taskId === calvesId)?.needsReassigning).toBe(true);
+    // Changing something else keeps who it's for; nothing is deleted.
+    const noted = await call(owner, taskRoute.PATCH as Handler, `/api/farming/tasks/${calvesId}`, { taskId: calvesId }, "PATCH", { note: "Two pens" });
+    expect([noted.status, (noted.body.task as { assignedToUserId: string }).assignedToUserId]).toEqual([200, temp.id]);
+
+    // Extended: back on the team, and the flag goes.
+    const extended = await accessRoute.POST(apiRequest(`/api/organisations/${ORG}/members/${temp.id}/access`, { method: "POST", cookie: await sessionCookieFor(owner), body: { action: "extend_week" } }), params({ organisationId: ORG, userId: temp.id }));
+    expect(extended.status).toBe(200);
+    expect(await team()).toEqual(["Aroha", "Hemi", "Tama"]);
+    expect((await run((tx) => listTasks(tx, { farmId: w.home }))).find((task) => task.id === calvesId)?.needsReassigning).toBe(false);
+
+    // Ended again, then given to someone current: the flag goes, and the history keeps who it was for.
+    await setWindow(temp.id, null, inHours(-1));
+    const reassigned = await call(owner, taskRoute.PATCH as Handler, `/api/farming/tasks/${calvesId}`, { taskId: calvesId }, "PATCH", { assignedToUserId: worker.id });
+    expect([reassigned.status, (reassigned.body.task as { needsReassigning: boolean }).needsReassigning]).toEqual([200, false]);
+    const audit = await run((tx) => tx.query<{ details: { before: { assignedTo: string }; after: { assignedTo: string } } }>("select details from audit_events where entity_type = 'farm_task' and entity_id = $1 and event_type = 'farming.task_changed' order by audit_events.id desc limit 1", [calvesId]));
+    expect([audit.rows[0].details.before.assignedTo, audit.rows[0].details.after.assignedTo]).toEqual([temp.id, worker.id]);
+
+    // Started: Ana can be given one.
+    await setWindow(starter.id, inHours(-1), null);
+    expect((await add(starter.id, "Shift the break fence")).status).toBe(201);
   });
 });

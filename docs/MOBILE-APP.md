@@ -110,7 +110,7 @@ this device** shows each farm's parts, when each was kept and its size.
 |---|---|
 | Farms and settings | The farms you can see, which farm you were on, map settings, farm app tiles |
 | Safety | Emergency details, hazards and no-go zones, reports and actions (never injury or medical details), what needs doing |
-| Map and paddocks | Paddocks with boundaries and areas, and each paddock's own page; each paddock's last known cover, mob and grazing |
+| Map and paddocks | Paddocks with boundaries and areas, and each paddock's own page; each paddock's last known cover, mob and grazing; farm assets; satellite greenness where it's on: the latest clear picture and up to 3 earlier ones (2 MB at most), with their dates, quality, legend and attribution, and each paddock's greenness trend |
 | Pasture, grazing and feed | Farm cover and wedge; every cover reading, grazing and feed record for the last 12 months (up to 20,000 each); mobs in now; the farm's mobs, each mob's card (with its withholding) and the stocking rate; treatments and product stock; each mob's breeding records, the rotation plan and the farm timeline |
 | Calendar and jobs | Your farm calendar, 12 months back to 3 months ahead (no email text); safety dates for the next 3 months |
 | Equipment and checklists | Machines, checklists, last known status and recent checks; chemicals; tractor mode's machines and the farm's tractor jobs |

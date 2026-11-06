@@ -4,6 +4,7 @@ import { listFailedCollections } from "@/lib/payments/gocardless";
 import { accountingEnabled } from "@/lib/organisations/accounting-switch";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { STALE_FEED_HOURS } from "@/lib/bank/accounts";
+import { accessEndingNotices } from "@/lib/organisations/access";
 
 export type TopBarNotice = {
   id: string;
@@ -18,7 +19,9 @@ export async function listTopBarNotices(tx: OrgTx, role: Role | null = null): Pr
   const handoverNotice: TopBarNotice[] = handover
     ? [{ id: "organisation-handover", message: `A server admin is making ${handover.toEmail} an owner. Check or cancel it.`, href: "/operations/members" }]
     : [];
-  return [...handoverNotice, ...(await accountingNotices(tx))];
+  // Time-limited access ending within 3 days (decision 1471): admins see everyone's, a member their own.
+  const accessNotices = await accessEndingNotices(tx, role);
+  return [...handoverNotice, ...accessNotices, ...(await accountingNotices(tx))];
 }
 
 async function accountingNotices(tx: OrgTx): Promise<TopBarNotice[]> {

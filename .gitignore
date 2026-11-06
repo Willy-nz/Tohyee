@@ -35,3 +35,4 @@ installer/windows/tray/obj/
 
 # Farm security camera media written by a development server (#508).
 /camera-media/
+/vegetation-imagery/

@@ -109,6 +109,7 @@ function TaskLine({ organisationId, farm, task, canRecord, onChanged, onOpen, op
           </span>
         </span>
         <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {task.needsReassigning ? <Badge tone="amber">Needs reassigning</Badge> : null}
           <Badge tone={STATE_TONE[task.state]}>{TASK_STATE_LABELS[task.state]}</Badge>
           {pending ? <Badge>Waiting to send</Badge> : canRecord ? <DoneButton organisationId={organisationId} farm={farm} task={task} onDone={(message) => onChanged(message)} /> : null}
         </span>
@@ -173,7 +174,7 @@ export function FarmTasksDue({ organisationId }: { organisationId: string }) {
       <ul style={{ margin: 0, paddingLeft: 18 }}>
         {data.data.items.map((item) => (
           <li key={item.key}>
-            <strong>{formatDate(item.date)}</strong> {item.overdue ? <Badge tone="red">Overdue</Badge> : null} {item.title}
+            <strong>{formatDate(item.date)}</strong> {item.overdue ? <Badge tone="red">Overdue</Badge> : null} {item.needsReassigning ? <Badge tone="amber">Needs reassigning</Badge> : null} {item.title}
             <span className={ui.muted}>
               {" "}
               · {item.farmName}
@@ -271,6 +272,8 @@ export function FarmTasks({ organisationId, farm, startNew = false }: FarmContex
 type History = { history: Array<{ id: string; doneFor: string; doneByEmail: string; doneByName?: string; doneAt: string; undoneByEmail: string | null; undoneByName?: string; undoneAt: string | null }> };
 
 function TaskDetail({ organisationId, farm, task, canRecord, onChanged, onClose }: { organisationId: string; farm: Farm; task: FarmTask; canRecord: boolean; onChanged: (message?: string) => void; onClose: () => void }) {
+  // Cancelling (and opening again) is for bookkeepers and up (decision 1457).
+  const canCancel = useWorkspace().can("bookkeeper");
   const history = useApiData<History>(`/api/farming/tasks/${task.id}/done`, { organisationId, n: task.lastDone?.id ?? "" });
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -300,7 +303,10 @@ function TaskDetail({ organisationId, farm, task, canRecord, onChanged, onClose 
           {task.repeat ? `, from ${formatDate(task.dueOn)}` : ""})
         </dd>
         <dt>For</dt>
-        <dd>{task.assignedToName ?? "Anyone on the farm team"}</dd>
+        <dd>
+          {task.assignedToName ?? "Anyone on the farm team"}
+          {task.needsReassigning ? <span className={ui.muted}> (can&apos;t sign in now: their access has ended or hasn&apos;t started. Change the task to give it to someone else.)</span> : null}
+        </dd>
         {task.paddockName ? (
           <>
             <dt>Paddock</dt>
@@ -343,9 +349,11 @@ function TaskDetail({ organisationId, farm, task, canRecord, onChanged, onClose 
               Undo done for {shortDate(task.lastDone.doneFor, today)}
             </Button>
           ) : null}
-          <Button variant="secondary" disabled={busy} onClick={() => void act(() => api(`/api/farming/tasks/${task.id}`, { method: "PATCH", body: { organisationId, status: task.status === "open" ? "cancelled" : "open" } }), task.status === "open" ? "Task cancelled. It's kept under Cancelled." : "Task opened again.")}>
-            {task.status === "open" ? "Cancel task" : "Open again"}
-          </Button>
+          {canCancel ? (
+            <Button variant="secondary" disabled={busy} onClick={() => void act(() => api(`/api/farming/tasks/${task.id}`, { method: "PATCH", body: { organisationId, status: task.status === "open" ? "cancelled" : "open" } }), task.status === "open" ? "Task cancelled. It's kept under Cancelled." : "Task opened again.")}>
+              {task.status === "open" ? "Cancel task" : "Open again"}
+            </Button>
+          ) : null}
           <Button variant="secondary" onClick={onClose}>
             Close
           </Button>
@@ -398,6 +406,10 @@ function TaskForm({ organisationId, farm, task, onClose, onSaved }: { organisati
           <Field label="For">
             <select value={form.assignedToUserId} onChange={(event) => setForm({ ...form, assignedToUserId: event.target.value })}>
               <option value="">Anyone on the farm team</option>
+              {/* Kept as it is until someone picks another person (decision 1513). */}
+              {task?.assignedToUserId && team.data && !team.data.people.some((person) => person.userId === task.assignedToUserId) ? (
+                <option value={task.assignedToUserId}>{task.assignedToName ?? "A former member"} (can&apos;t sign in now)</option>
+              ) : null}
               {(team.data?.people ?? []).map((person) => (
                 <option key={person.userId} value={person.userId}>
                   {person.name}
