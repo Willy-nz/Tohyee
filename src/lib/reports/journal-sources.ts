@@ -83,7 +83,7 @@ sources (journal_id, source_type, link_id, number, contact_id) as (
     from supplier_credit_note_refunds r join supplier_credit_notes n on n.id = r.credit_note_id
     cross join lateral (values (r.journal_id), (r.void_journal_id)) v(j) where j is not null
   union all
-  select j, 'bank_transaction', t.account_id, t.reference, t.contact_id
+  select j, 'bank_transaction', t.id, t.reference, t.contact_id
     from bank_transactions t cross join lateral (values (t.journal_id), (t.void_journal_id)) v(j) where j is not null
   union all
   select j, 'bank_transfer', t.from_account_id, t.reference, null::bigint
@@ -131,7 +131,8 @@ const NAMES: Record<Exclude<JournalSourceType, "journal">, { label: string; href
   supplier_payment_batch: { label: "payment for several bills", href: (id) => `/operations/supplier-payments/${id}` },
   supplier_credit_note: { label: "supplier credit note", href: (id) => `/operations/supplier-credit-notes/${id}` },
   supplier_credit_note_refund: { label: "refund of supplier credit note", href: (id) => `/operations/supplier-credit-notes/${id}` },
-  bank_transaction: { label: "bank transaction", href: (id) => `/operations/bank-accounts/${id}` },
+  // The transaction itself, to recode it (decision 1565), not its account's reconcile screen.
+  bank_transaction: { label: "bank transaction", href: (id) => `/operations/bank-transactions/${id}` },
   bank_transfer: { label: "transfer", href: (id) => `/operations/bank-accounts/${id}` },
   expense_claim: { label: "expense claim", href: (id) => `/operations/expense-claims/${id}` },
   expense_claim_payment: { label: "payment of expense claim", href: (id) => `/operations/expense-claims/${id}` },

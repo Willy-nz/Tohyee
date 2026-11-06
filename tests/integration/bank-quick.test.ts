@@ -11,6 +11,7 @@ import { confidentMatches, okConfidentMatches, okStatementLine } from "@/lib/ban
 import { reconcileStatementLine, unreconcileStatementLine } from "@/lib/bank/reconcile";
 import { createBankRule } from "@/lib/bank/rules";
 import { createBankTransaction, getBankTransaction, voidBankTransaction } from "@/lib/bank/transactions";
+import { accountTransactions } from "@/lib/reports/account-transactions";
 import { recordSupplierPayment } from "@/lib/bills/payments";
 import { approveBill, createBill, getBill } from "@/lib/bills/service";
 import { type Contact, createContact } from "@/lib/contacts/service";
@@ -216,6 +217,12 @@ describeWithDatabase("quicker bank reconciliation", () => {
     );
     const fuel = await world.lineOn("-46.00");
     expect(await world.confidentFor(fuel.id)).toMatchObject({ candidateCount: 1, suggestion: { kind: "match", journalId: bankTransaction.journalId } });
+    // Account transactions opens the transaction itself, to recode it, not the reconcile screen (decision 1565).
+    const report = await world.asUser(bookkeeper, async (tx) => {
+      const fuelAccount = (await tx.query<{ id: string }>("select id::text from accounts where code = '6120'")).rows[0].id;
+      return accountTransactions(tx, { accountId: fuelAccount, from: "2026-05-01", to: "2026-05-31" });
+    });
+    expect(report.accounts[0].lines.map((line) => [line.source.type, line.source.href])).toEqual([["bank_transaction", `/operations/bank-transactions/${bankTransaction.id}`]]);
     const before = await world.journalCount();
     await world.asUser(bookkeeper, (tx) => okStatementLine(tx, fuel.id, { idempotencyKey: key("ok") }));
     expect(await world.journalCount()).toBe(before);
