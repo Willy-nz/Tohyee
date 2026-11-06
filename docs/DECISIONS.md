@@ -13652,6 +13652,28 @@ common NZ practice, not yet reviewed. No migration.
       but its date, quality, legend and attribution are kept, and the map
       says the picture was too big to keep on the device. Earlier dates
       are then kept only while everything fits.
+### Annual financial statements as a report (6 Nov 2026; decisions 1559-1561)
+
+Jess asked for the statements to be "an option like P&L or balance sheet",
+not only a PDF from the year-end page. Examples FS4-FS7. Claude's calls on
+the details, not yet reviewed.
+
+1559. **A report in the picker.** "Annual financial statements" is a
+      standard report in the Financial statements group. One function
+      builds the statements for both the screen and the PDF, so they can't
+      differ.
+1560. **The statements use the default layouts.** The statements of
+      financial performance and position follow the default profit and
+      loss and balance sheet layouts when there are ones (decision 1359),
+      with Edit layout beside them. So one layout edits the report, the
+      statements and the PDF. Changes in equity and cash flows keep their
+      fixed lines.
+1561. **The year-end page keeps the rest.** Financial statements (Accounting
+      › Year end) still has the report format, signing, service performance
+      and categories. For special purpose statements it opens the report
+      instead of having its own download and notes. Tier 3 and Tier 4
+      performance reports are still a PDF from that page.
+
 ### Tests that hung on CI (6 Nov 2026; decisions 1557-1558)
 
 Claude's calls, not yet reviewed. No migration.

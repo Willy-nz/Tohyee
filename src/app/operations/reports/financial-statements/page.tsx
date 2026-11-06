@@ -4,14 +4,13 @@ import { type ReactNode, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { DateInput } from "@/components/date-input";
 import { useApiData } from "@/components/hooks";
-import { Button, Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
-import { useWorkspace } from "@/components/workspace";
-import { api, errorMessage } from "@/lib/client/api";
+import { Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { todayInBrowser } from "@/lib/format";
 import { CategoriesCard, ReportFormatCard, ServicePerformanceCard } from "@/components/performance-report";
-import type { StatementNote, StatementNotes } from "@/lib/reports/financial-statements";
 import type { ReportFormat } from "@/lib/reports/performance-categories";
 import { YearEndSigning } from "@/components/signing/year-end-signing";
+import { StatementNotesCard } from "@/components/reports/statement-notes";
+import Link from "next/link";
 
 /** The end of the last financial year that has finished, for a year ending in `endMonth`. */
 function lastYearEnd(endMonth: number, today: string): string {
@@ -22,8 +21,7 @@ function lastYearEnd(endMonth: number, today: string): string {
 }
 
 const DOWNLOAD_TEXT: Record<ReportFormat, string> = {
-  special_purpose:
-    "Special purpose financial statements for the year, with last year beside it: financial performance, financial position, changes in equity, cash flows, and the notes below. The figures are the same as the reports on screen.",
+  special_purpose: "Special purpose financial statements for the year, with last year beside it.",
   tier3:
     "The Tier 3 performance report for the year, with last year beside it: entity information, service performance, financial performance, financial position, cash flows, and the notes below.",
   tier4: "The Tier 4 performance report for the year, with last year beside it: entity information, service performance, cash received and cash paid, and the notes below.",
@@ -31,8 +29,26 @@ const DOWNLOAD_TEXT: Record<ReportFormat, string> = {
 
 function Download({ organisationId, format, chosen, setYearEnd }: { organisationId: string; format: ReportFormat; chosen: string; setYearEnd: (value: string | null) => void }) {
   const href = `/api/reports/financial-statements?organisationId=${encodeURIComponent(organisationId)}&yearEnd=${chosen}`;
+  if (format === "special_purpose") {
+    // The statements are a report now (decision 1561): see them, edit their layout and notes, and download them there.
+    return (
+      <Card
+        title="The statements"
+        description="The annual financial statements are in Reports, beside the profit and loss and balance sheet. Edit their layout and notes, and download the PDF, there."
+      >
+        <div className={ui.inlineForm}>
+          <Field label="Financial year ending" hint="The last day of the year">
+            <DateInput value={chosen} onChange={(event) => setYearEnd(event.target.value || null)} />
+          </Field>
+          <Link className={`${ui.button} ${ui.primary}`} href={`/operations/reports?report=statements&yearEnd=${encodeURIComponent(chosen)}`} style={{ alignSelf: "center" }}>
+            Open the statements
+          </Link>
+        </div>
+      </Card>
+    );
+  }
   return (
-    <Card title={format === "special_purpose" ? "Download the statements" : "Download the performance report"} description={DOWNLOAD_TEXT[format]}>
+    <Card title="Download the performance report" description={DOWNLOAD_TEXT[format]}>
       <div className={ui.inlineForm}>
         <Field label="Financial year ending" hint="The last day of the year">
           <DateInput value={chosen} onChange={(event) => setYearEnd(event.target.value || null)} />
@@ -43,86 +59,6 @@ function Download({ organisationId, format, chosen, setYearEnd }: { organisation
       </div>
     </Card>
   );
-}
-
-function NotesEditor({ organisationId, loaded }: { organisationId: string; loaded: StatementNotes }) {
-  const { can } = useWorkspace();
-  const [notes, setNotes] = useState<StatementNote[]>(loaded.notes);
-  const [saved, setSaved] = useState(loaded.saved);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const edit = (index: number, change: Partial<StatementNote>) => setNotes(notes.map((note, at) => (at === index ? { ...note, ...change } : note)));
-  async function save(list: StatementNote[]) {
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const result = await api<StatementNotes>("/api/reports/financial-statement-notes", { method: "PUT", body: { organisationId, notes: list } });
-      setNotes(result.notes);
-      setSaved(result.saved);
-      setMessage(result.saved ? "Notes saved." : "Back to the drafts.");
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
-  const editable = can("bookkeeper");
-  return (
-    <Card
-      title="Notes"
-      description={
-        saved
-          ? "Your notes, printed after the statements."
-          : "Drafts to start from: fill in the parts in [square brackets] and have them checked. Until you save them, the PDF marks the notes as drafts."
-      }
-    >
-      {error ? <Notice tone="error">{error}</Notice> : null}
-      {message ? <Notice tone="success">{message}</Notice> : null}
-      <div style={{ display: "grid", gap: 16 }}>
-        {notes.map((note, index) => (
-          <div key={index} style={{ display: "grid", gap: 6 }}>
-            <Field label={`Note ${index + 1} title`}>
-              <input value={note.title} disabled={!editable} maxLength={150} onChange={(event) => edit(index, { title: event.target.value })} />
-            </Field>
-            <Field label={`Note ${index + 1} text`}>
-              <textarea rows={4} value={note.body} disabled={!editable} maxLength={10000} onChange={(event) => edit(index, { body: event.target.value })} />
-            </Field>
-            {editable ? (
-              <div>
-                <Button variant="secondary" size="small" onClick={() => setNotes(notes.filter((_, at) => at !== index))}>
-                  Remove note {index + 1}
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        ))}
-      </div>
-      {editable ? (
-        <div className={ui.rowButtons} style={{ marginTop: 16 }}>
-          <Button variant="secondary" onClick={() => setNotes([...notes, { title: "", body: "" }])}>
-            Add a note
-          </Button>
-          <Button disabled={busy} onClick={() => void save(notes)}>
-            {busy ? "Saving…" : "Save notes"}
-          </Button>
-          {saved ? (
-            <Button variant="secondary" disabled={busy} onClick={() => void save([])}>
-              Go back to the drafts
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-    </Card>
-  );
-}
-
-function Notes({ organisationId }: { organisationId: string }) {
-  const notes = useApiData<StatementNotes>("/api/reports/financial-statement-notes", { organisationId });
-  if (notes.error) return <Notice tone="error">{notes.error}</Notice>;
-  if (!notes.data) return null;
-  return <NotesEditor organisationId={organisationId} loaded={notes.data} />;
 }
 
 /** The long cards fold away so the download stays near the top; they open when needed. */
@@ -149,16 +85,23 @@ function YearEndReports({ organisationId }: { organisationId: string }) {
       <ReportFormatCard organisationId={organisationId} onChanged={setFormat} />
       <Download organisationId={organisationId} format={current} chosen={chosen} setYearEnd={setYearEnd} />
       {/^\d{4}-\d{2}-\d{2}$/.test(chosen) ? (
-        <YearEndSigning key={chosen} organisationId={organisationId} yearEnd={chosen} downloadHref={`/api/reports/financial-statements?organisationId=${encodeURIComponent(organisationId)}&yearEnd=${chosen}`} />
+        <YearEndSigning
+          key={chosen}
+          organisationId={organisationId}
+          yearEnd={chosen}
+          downloadHref={`/api/reports/financial-statements?organisationId=${encodeURIComponent(organisationId)}&yearEnd=${chosen}`}
+        />
       ) : null}
       {current !== "special_purpose" ? (
         <Section title="Statement of service performance">
           <ServicePerformanceCard organisationId={organisationId} yearEnd={chosen} />
         </Section>
       ) : null}
-      <Section title="Notes">
-        <Notes key={current} organisationId={organisationId} />
-      </Section>
+      {current !== "special_purpose" ? (
+        <Section title="Notes">
+          <StatementNotesCard key={current} organisationId={organisationId} />
+        </Section>
+      ) : null}
       {current !== "special_purpose" ? (
         <Section title="Categories">
           <CategoriesCard organisationId={organisationId} tier={current} />
