@@ -388,6 +388,7 @@ describe("farm staff (decision 904)", () => {
     expect(menus.at(-1)!.groups.flatMap((group) => group.links.map((link) => link.href))).toEqual([
       "/operations/farming",
       "/operations/farm/mobs",
+      "/operations/farm/animals",
       "/operations/farming/pasture",
       "/operations/farming/rainfall",
       "/operations/farming/soil",

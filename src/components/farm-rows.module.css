@@ -12,6 +12,8 @@
 .row {
   min-width: 0;
   overflow: hidden;
+  /* A long line that isn't a button (no tap to open) mustn't widen the card on a phone. */
+  contain: inline-size;
   border-bottom: 1px solid var(--border);
 }
 

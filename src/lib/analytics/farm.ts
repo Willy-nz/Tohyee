@@ -1,6 +1,7 @@
 import type { TableCopy } from "@/lib/analytics/engine";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { dec, toFixedString } from "@/lib/money/decimal";
+import { readAnimalTables } from "@/lib/analytics/farm-animals";
 import { readRainfallTables } from "@/lib/analytics/farm-rainfall";
 import { readVegetationTables } from "@/lib/analytics/farm-vegetation";
 
@@ -325,6 +326,7 @@ export async function readFarmTables(tx: OrgTx): Promise<TableCopy[]> {
   });
 
   tables.push(...(await readRainfallTables(tx)));
+  tables.push(...(await readAnimalTables(tx)));
   tables.push(...(await readVegetationTables(tx)));
 
   return tables;

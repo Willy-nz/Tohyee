@@ -17,6 +17,8 @@ export const OFFLINE_SCREENS: OfflineScreen[] = [
   { path: "/operations/farm/more", name: "More" },
   { path: "/operations/farm/offline", name: "Offline on this device" },
   { path: "/operations/farm/tractor", name: "Tractor mode" },
+  { path: "/operations/farm/animals", name: "Animals" },
+  { path: "/operations/farm/animals/quick", name: "Quick entry" },
   { path: "/operations/farming", name: "Farms and paddocks" },
   { path: "/operations/farming/pasture", name: "Pasture and feed" },
   { path: "/operations/farming/soil", name: "Soil tests" },

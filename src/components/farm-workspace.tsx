@@ -589,6 +589,7 @@ const FARM_WORK: MoreLink[] = [
   { href: "/operations/farm/tractor", icon: "location", label: "Tractor mode", note: "Spreading, spraying and mowing from phone GPS", staff: true },
   { href: "/operations/farm/security", icon: "camera", label: "Security", note: "Camera photos and clips", staff: true },
   { href: "/operations/farm/mobs", icon: "livestock", label: "Mobs", note: "Moves, weights, sales and stocking rate", staff: true },
+  { href: "/operations/farm/animals", icon: "scales", label: "Animals", note: "Tags, weights, body condition and quick entry", staff: true },
   { href: "/operations/farming/pasture", icon: "farm", label: "Pasture and feed", note: "Readings, grazings and feed", staff: true },
   { href: "/operations/farming/rainfall", icon: "effluent", label: "Rainfall", note: "Rain gauges, by month and season", staff: true },
   { href: "/operations/farming/calendar", icon: "calendar", label: "Farm calendar", note: "Jobs, due dates and reminders", staff: true },

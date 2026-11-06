@@ -46,6 +46,9 @@ const TABLES: Record<string, TableText> = {
   tohyee_farm_grazings: { label: "Grazings", noun: "grazings", description: "Mobs in and out of paddocks." },
   tohyee_farm_supplements: { label: "Supplements fed", noun: "supplements fed", description: "Supplements fed out by paddock." },
   tohyee_farm_rainfall: { label: "Rainfall", noun: "rain readings", description: "Rain gauge readings by day, in mm." },
+  tohyee_farm_animals: { label: "Animals", noun: "animals", description: "The animal register: tags, EIDs, sex, breed, birth dates and mobs." },
+  tohyee_farm_animal_weights: { label: "Animal weights", noun: "weights", description: "Each animal's weights, in kg." },
+  tohyee_farm_bcs: { label: "Body condition scores", noun: "scores", description: "Body condition scores by animal or mob average." },
   tohyee_farm_paddock_greenness: { label: "Paddock greenness", noun: "paddock satellite dates", description: "Satellite greenness (NDVI) by paddock and date, with how much was clear. Greenness, not feed: blank is no clear view." },
   // Google Analytics (decision 607).
   ...Object.fromEntries(GA_REPORTS.map((report) => [report.table, { label: report.label, noun: report.noun, description: report.description }])),

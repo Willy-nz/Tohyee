@@ -6,7 +6,7 @@ import { className, findClass, KIND_NAMES, LIVESTOCK_CLASSES, LIVESTOCK_KINDS, t
  * no server imports.
  */
 
-export const MOB_EVENT_TYPES = ["created", "moved", "split_out", "split_in", "merged_out", "merged_in", "sold", "died", "born", "bought", "reclass", "weighed", "counted", "closed", "reversed"] as const;
+export const MOB_EVENT_TYPES = ["created", "moved", "split_out", "split_in", "merged_out", "merged_in", "sold", "died", "born", "bought", "reclass", "weighed", "counted", "closed", "animals_out", "animals_in", "reversed"] as const;
 export type MobEventType = (typeof MOB_EVENT_TYPES)[number];
 
 export const MOB_EVENT_LABELS: Record<MobEventType, string> = {
@@ -24,6 +24,8 @@ export const MOB_EVENT_LABELS: Record<MobEventType, string> = {
   weighed: "Weighed",
   counted: "Counted",
   closed: "Closed",
+  animals_out: "Tagged animals moved to",
+  animals_in: "Tagged animals moved from",
   reversed: "Reversed",
 };
 

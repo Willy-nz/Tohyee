@@ -133,7 +133,7 @@ export function mcpServerFor(
             true,
           );
         }
-        if (result instanceof ToolFileAnswer) return { content: [{ type: "text", text: json }, fileContent(result.file)] };
+        if (result instanceof ToolFileAnswer) return { content: [{ type: "text", text: json }, fileContent(result.file), ...result.more.map(fileContent)] };
         return text(json);
       } catch (error) {
         if (error instanceof HttpError) return text(error.message, true);
