@@ -16,7 +16,7 @@ import { add, cmp, dec, sub, toFixedString, ZERO_DECIMAL } from "@/lib/money/dec
  * - The warnings are worked out from the forecast numbers. They aren't
  *   MetService's official warnings, and say so.
  * - Only the latest forecast is kept (a cache), unless the organisation has
- *   said it has MetService's written permission to keep records.
+ *   enabled records with an acknowledgement of responsibility for its use.
  */
 
 /** The words MetService's terms ask for beside its data (terms 1.3(e) and 2.8). */

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { DateInput } from "@/components/date-input";
 import { PaddockMap } from "@/components/farming";
 import { useApiData } from "@/components/hooks";
 import { InfoTip } from "@/components/info-tip";
@@ -20,9 +19,8 @@ import styles from "./weather-setup.module.css";
 /*
  * Settings › Farm › Weather (MetService) (decisions 1541-1550): a guided
  * setup, one step at a time, that carries on where it was left. Then the
- * optional records switches, for organisations with MetService's written
- * permission. Admins only. The key is pasted here once and never shown
- * again.
+ * optional records controls with a responsibility acknowledgement. Admins
+ * only. The key is pasted here once and never shown again.
  */
 
 const STEPS: WeatherSetupStep[] = ["about", "get_key", "paste", "test", "farms", "choose", "turn_on"];
@@ -39,8 +37,6 @@ const STEP_NAMES: Record<WeatherSetupStep, string> = {
 /** A purpose to give MetService when it asks what the data is for (decision 1545). */
 export const SUGGESTED_PURPOSE =
   "Weather forecasts for our own farm's day-to-day management (rain, temperature, wind and frost for planning farm work), shown only to our own farm team inside our farm records software. Not shared, published or resold.";
-
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
 export function WeatherSetupPage({ organisationId }: { organisationId: string }) {
   const loaded = useApiData<{ setup: WeatherSetup }>("/api/farming/weather", { organisationId });
@@ -584,13 +580,10 @@ function TurnOnStep({ organisationId, setup, onSetup }: StepProps) {
   );
 }
 
-/** Keeping forecast records, with MetService's written permission (decisions 1547-1549). Off by default. */
+/** Optional forecast records with a responsibility acknowledgement. Off by default. */
 function RecordsCard({ organisationId, setup, onSetup }: StepProps) {
   const permission = setup.permission;
   const [ticked, setTicked] = useState(false);
-  const [grantedOn, setGrantedOn] = useState("");
-  const [reference, setReference] = useState("");
-  const [file, setFile] = useState<File | null>(null);
   const [turningOff, setTurningOff] = useState(false);
   const [deleteRecords, setDeleteRecords] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -610,72 +603,48 @@ function RecordsCard({ organisationId, setup, onSetup }: StepProps) {
   };
   const turnOn = (event: FormEvent) => {
     event.preventDefault();
-    if (file && file.size > MAX_ATTACHMENT_BYTES) {
-      setMessage({ tone: "error", text: "The file can be at most 10 MB." });
-      return;
-    }
+    if (!ticked) return;
     void run(
       async () => {
-        const form = new FormData();
-        form.set("organisationId", organisationId);
-        form.set("grantedOn", grantedOn);
-        form.set("reference", reference);
-        if (file) form.set("file", file, file.name);
-        const response = await fetch("/api/farming/weather/records", { method: "POST", body: form, credentials: "same-origin" });
-        const payload = (await response.json().catch(() => null)) as { setup?: WeatherSetup; error?: string } | null;
-        if (!response.ok || !payload?.setup) throw new ApiError(payload?.error ?? `Couldn't save (${response.status}).`, response.status);
+        const answer = await api<{ setup: WeatherSetup }>("/api/farming/weather/records", { method: "POST", body: { organisationId, acknowledged: ticked } });
         setTicked(false);
-        return payload.setup;
+        return answer.setup;
       },
       () => "Forecast records are kept from the next refresh.",
     );
   };
   const patch = (body: Record<string, unknown>) => api<{ setup: WeatherSetup & { recordsDeleted?: number } }>("/api/farming/weather/records", { method: "PATCH", body: { organisationId, ...body } }).then((answer) => answer.setup);
   return (
-    <Card
-      title="Forecast records (optional)"
-      description={
-        <>
-          Only for farm businesses with MetService&apos;s written permission to keep forecast records.{" "}
-          <InfoTip label="About keeping records">
-            Without permission, MetService&apos;s terms allow only the latest forecast to be kept. Tohyee can&apos;t check a permission: it&apos;s your organisation&apos;s responsibility to have it and to keep to it. If you ask MetService, ask for permission for: keeping forecast records for managing your farm; and, if you want the comparisons, showing them with your own farm records such as rain gauge readings.
-          </InfoTip>
-        </>
-      }
-    >
+    <Card title="Forecast records (optional)">
       <div className={styles.body}>
         {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
         {permission.keepRecords ? (
           <>
             <dl className={styles.summary}>
-              <dt>Permission</dt>
-              <dd>
-                Dated {permission.grantedOn ? formatDate(permission.grantedOn) : "–"}, {permission.reference}
-              </dd>
               <dt>Turned on</dt>
               <dd>
                 {permission.setAt ? new Date(permission.setAt).toLocaleString("en-NZ", { dateStyle: "medium", timeStyle: "short" }) : "–"}
                 {permission.setByEmail ? ` by ${permission.setByEmail}` : ""}
               </dd>
-              <dt>File</dt>
-              <dd>
-                {permission.file ? (
-                  <a href={`/api/farming/weather/records/file?organisationId=${encodeURIComponent(organisationId)}`} target="_blank" rel="noreferrer">
-                    {permission.file.fileName}
-                  </a>
-                ) : (
-                  "None attached"
-                )}
-              </dd>
+              {permission.file ? (
+                <>
+                  <dt>Previously attached document</dt>
+                  <dd>
+                    <a href={`/api/farming/weather/records/file?organisationId=${encodeURIComponent(organisationId)}`} target="_blank" rel="noreferrer">
+                      {permission.file.fileName}
+                    </a>
+                  </dd>
+                </>
+              ) : null}
               <dt>Records kept</dt>
               <dd>{permission.records.toLocaleString("en-NZ")} forecasts</dd>
             </dl>
             <label className={styles.check}>
               <input type="checkbox" checked={permission.combine} disabled={busy} onChange={(event) => void run(() => api<{ setup: WeatherSetup }>("/api/farming/weather", { method: "PATCH", body: { organisationId, combine: event.target.checked } }).then((answer) => answer.setup), (next) => (next.permission.combine ? "Combining is on." : "Combining is off."))} />
               <span>
-                <strong>My permission covers combining with my other farm data</strong>{" "}
+                <strong>Use records in comparisons, Analytics and AI</strong>{" "}
                 <InfoTip label="About combining">
-                  MetService&apos;s terms treat combining their data with other data as a separate thing that needs their consent. With this on, the Weather page shows &quot;Forecast vs your rain gauge&quot;, the records are in Analytics (as tohyee_farm_weather_forecasts) and the AI can read them. The credit to MetService stays beside them.
+                  This enables forecast vs rain gauge comparisons, Analytics and read access for your connected AI, which may send records to an external AI service. Your use remains subject to MetService&apos;s terms.
                 </InfoTip>
               </span>
             </label>
@@ -739,28 +708,18 @@ function RecordsCard({ organisationId, setup, onSetup }: StepProps) {
                 </Button>
               </Notice>
             ) : null}
+            <p className={ui.muted}>Keeping records and using them with other data or external AI remain subject to <a href="https://data.metservice.com/terms-service" target="_blank" rel="noreferrer">MetService&apos;s terms</a>. This acknowledgement does not grant permission.</p>
             <label className={styles.check}>
               <input type="checkbox" checked={ticked} onChange={(event) => setTicked(event.target.checked)} />
               <span>
-                <strong>I have MetService&apos;s written permission to keep forecast records</strong>
+                <strong>I&apos;m responsible for ensuring my use complies with MetService&apos;s terms.</strong>
               </span>
             </label>
             {ticked ? (
               <form onSubmit={turnOn} className={styles.body}>
-                <div className={styles.inline}>
-                  <Field label="Date of the permission">
-                    <DateInput value={grantedOn} onChange={(event) => setGrantedOn(event.target.value)} required />
-                  </Field>
-                  <Field label="Reference" hint="For example the email's subject, or the agreement number.">
-                    <input value={reference} maxLength={300} onChange={(event) => setReference(event.target.value)} required />
-                  </Field>
-                </div>
-                <Field label="The permission (optional)" hint="A PDF, picture or document, up to 10 MB. Only admins can open it.">
-                  <input type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-                </Field>
                 <p className={ui.muted}>With this on, Tohyee keeps every forecast it fetches, with when it was fetched, by farm and pin. Who turned it on, and when, is recorded.</p>
                 <p>
-                  <Button type="submit" disabled={busy || !grantedOn || !reference.trim()}>
+                  <Button type="submit" disabled={busy || !ticked}>
                     Keep forecast records
                   </Button>
                 </p>

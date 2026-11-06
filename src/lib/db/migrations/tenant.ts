@@ -20116,4 +20116,13 @@ update weather_settings set key_tested = true
   where api_key_ciphertext is not null and tested_at is not null and status not in ('not_tested', 'bad_key');
 `,
   },
+  {
+    version: "0261",
+    name: "weather_records_acknowledgement",
+    sql: `
+-- A responsibility acknowledgement replaces the permission date/reference requirement.
+-- Preserve previously supplied details and files; do not invent permission evidence.
+alter table weather_settings drop constraint weather_settings_permission_details;
+`,
+  },
 ];

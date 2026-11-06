@@ -3292,7 +3292,7 @@ that something happened.
   MetService forecast below is kept apart).
 
 - **MetService weather forecast** (WX1-WX11, decisions 1541-1550, tenant
-  migrations 0257-0258): each organisation uses its own MetService key.
+  migrations 0257, 0258, 0260 and 0261): each organisation uses its own MetService key.
   Settings › Farm › **Weather (MetService)** (admins) walks through what it
   costs (MetService's API units, paid to MetService), getting a key, pasting
   and testing it, each farm's pin (the middle of its paddocks to start),
@@ -3302,9 +3302,10 @@ that something happened.
   a **Weather** page by the hour; both carry "This data was provided by
   MetService Limited." Refreshed every 3 hours by default; a refused key or
   no units left stops refreshing. Only the latest forecast is kept (24
-  hours at most), never offline or in backups. An admin whose organisation has
-  MetService's written permission can keep forecast records, and with a
-  second switch compare them with a rain gauge, and have them in Analytics
+  hours at most), never offline or in backups. An admin can enable forecast
+  records after acknowledging responsibility for compliance with MetService's
+  terms, without permission paperwork. A second switch enables rain-gauge
+  comparisons and access in Analytics
   (`tohyee_farm_weather_forecasts`) and the AI (`weather_forecast_records`).
   Not yet tried against MetService's live service.
 

@@ -5,7 +5,7 @@ import { METSERVICE_ATTRIBUTION, type ForecastHour } from "@/lib/weather/forecas
 /*
  * Kept MetService forecasts in the analytics file (decision 1549):
  * `tohyee_farm_weather_forecasts`, an hour a row of each forecast record,
- * only while an admin has turned on both permission switches (keeping
+ * only while an admin has turned on both feature switches (keeping
  * records, and combining them with the farm's own data). Otherwise there's
  * no such table: the latest forecast alone is never copied. Each row
  * carries MetService's credit.

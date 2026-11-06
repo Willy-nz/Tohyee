@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
 import type { Actor, OrgTx } from "@/lib/db/org-transaction";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
@@ -9,7 +8,6 @@ import { bounds, parseGeometry } from "@/lib/farming/geometry";
 import { requireFarming } from "@/lib/farming/paddocks";
 import { latestRainDay } from "@/lib/farming/rainfall-rules";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
-import { checkAttachment } from "@/lib/records/file-types";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
 import { requireArray, requireBoolean, requireId, requireString } from "@/lib/validation";
 import {
@@ -50,10 +48,10 @@ import { usingFakeProvider, weatherProvider, WeatherProviderError } from "@/lib/
  * - Only the latest forecast is kept, a row a farm. It's deleted when the
  *   key is removed, when MetService refuses the key, when the farm's pin
  *   moves or the forecast is turned off, and once it's 24 hours old.
- * - Forecast records are kept only while an admin says the organisation has
- *   MetService's written permission (keep_records). Combining them with the
- *   farm's own records (forecast vs rain gauge, Analytics, the AI) needs a
- *   second switch (combine). Tohyee can't check the permission: it's the
+ * - Forecast records are optional; enabling them requires an admin
+ *   acknowledgement of responsibility for compliance (keep_records).
+ *   Combining records with farm data (rain gauge, Analytics, AI) needs a
+ *   second switch (combine). Tohyee doesn't verify permission: it's the
  *   organisation's responsibility, and the screens say so.
  * - Refreshing calls MetService outside any database transaction, so a slow
  *   answer never holds the database.
@@ -240,7 +238,7 @@ export async function saveWeatherKey(tx: OrgTx, keyInput: unknown): Promise<Weat
 
 /**
  * Removes the key (WX2). The forecast stops and the kept forecast is
- * deleted. Records kept with MetService's permission stay until the
+ * deleted. Previously retained records stay until the
  * records switch is turned off (decision 1548).
  */
 export async function removeWeatherKey(tx: OrgTx): Promise<WeatherSetup> {
@@ -600,41 +598,23 @@ export async function sweepOldForecasts(tx: OrgTx, now = new Date()): Promise<nu
   return deleted.rowCount ?? 0;
 }
 
-// Keeping records, with MetService's permission ------------------------------------------------------------
+// Optional forecast records ---------------------------------------------------------------------
 
-/**
- * Turns keeping forecast records on (WX8): an admin says the organisation
- * has MetService's written permission, with its date and a reference, and
- * may attach it. Recorded with who and when, and in the audit log.
- */
-export async function turnOnRecords(tx: OrgTx, input: { grantedOn: unknown; reference: unknown; file?: { fileName: string; content: Uint8Array } | null }): Promise<WeatherSetup> {
+/** Enables records after an admin acknowledges responsibility for their use (WX8). */
+export async function turnOnRecords(tx: OrgTx, input: { acknowledged: unknown }): Promise<WeatherSetup> {
   await requireFarming(tx);
-  const grantedOn = parseIsoDate(input.grantedOn, "Date of the permission");
-  if (grantedOn > todayIsoDate()) throw new ValidationError("The date of the permission can't be after today.");
-  const reference = requireString(input.reference, "Reference", { maxLength: 300 }).trim();
+  if (input.acknowledged !== true) throw new ValidationError("Acknowledge responsibility for complying with MetService's terms before keeping records.");
   await settingsRow(tx, true);
   await tx.query(
-    `update weather_settings set keep_records = true, permission_granted_on = $1, permission_reference = $2, keep_records_set_at = now(),
-       keep_records_set_by_email = $3, updated_at = now() where id = true`,
-    [grantedOn, reference, tx.actor.email],
+    `update weather_settings set keep_records = true, keep_records_set_at = now(),
+       keep_records_set_by_email = $1, updated_at = now() where id = true`,
+    [tx.actor.email],
   );
-  let file: { fileName: string; contentType: string; byteSize: number; sha256: string } | null = null;
-  if (input.file) {
-    const checked = checkAttachment(input.file.fileName, input.file.content);
-    const sha256 = createHash("sha256").update(input.file.content).digest("hex");
-    file = { fileName: checked.fileName, contentType: checked.contentType, byteSize: input.file.content.length, sha256 };
-    await tx.query(
-      `insert into weather_permission_files (id, file_name, content_type, byte_size, sha256, content, added_by_email) values (true, $1, $2, $3, $4, $5, $6)
-       on conflict (id) do update set file_name = excluded.file_name, content_type = excluded.content_type, byte_size = excluded.byte_size, sha256 = excluded.sha256,
-         content = excluded.content, added_at = now(), added_by_email = excluded.added_by_email`,
-      [file.fileName, file.contentType, file.byteSize, sha256, Buffer.from(input.file.content), tx.actor.email],
-    );
-  }
   await writeAuditEvent(tx, {
     eventType: "weather.records_turned_on",
     entityType: "weather_settings",
     entityId: "metservice",
-    details: { grantedOn, reference, file: file ? { fileName: file.fileName, byteSize: file.byteSize, sha256: file.sha256 } : null },
+    details: { acknowledged: true, acknowledgement: "I'm responsible for ensuring my use complies with MetService's terms." },
   });
   return getWeatherSetup(tx);
 }
@@ -668,7 +648,7 @@ export async function deleteForecastRecords(tx: OrgTx): Promise<WeatherSetup & {
   return { ...(await getWeatherSetup(tx)), recordsDeleted: deleted };
 }
 
-/** The second switch (WX9): the permission covers combining with the farm's own records. Needs records on. */
+/** The second switch (WX9) enables comparisons, Analytics and AI access. Needs records on. */
 export async function setCombine(tx: OrgTx, onInput: unknown): Promise<WeatherSetup> {
   await requireFarming(tx);
   const on = requireBoolean(onInput, "combine");
@@ -687,11 +667,11 @@ export async function getPermissionFile(tx: OrgTx): Promise<{ fileName: string; 
   return { fileName: row.rows[0].file_name, contentType: row.rows[0].content_type, content: new Uint8Array(row.rows[0].content) };
 }
 
-/** Refuses unless both switches are on: records kept, and the permission covers combining (WX9). */
+/** Refuses unless records and combining are enabled (WX9). */
 export async function requireCombine(tx: OrgTx): Promise<void> {
   const row = await settingsRow(tx);
   if (!row.keep_records || !row.combine) {
-    throw new ConflictError("Forecast records can be shown with your farm's own records only when an admin has said your MetService permission covers keeping and combining them (Settings, Weather forecast).");
+    throw new ConflictError("Enable forecast records and combining in Settings, Weather forecast to use comparisons, Analytics and AI access.");
   }
 }
 

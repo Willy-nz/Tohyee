@@ -13881,3 +13881,18 @@ tells anyone where to graze.
       paddock; the map's paddock list and the paddock card show the round
       text and the next planned mob and date. The offline pack keeps the
       plan and each mob's breeding records.
+
+### Weather records acknowledgement (6 Nov 2026; decision 1556)
+
+Jess's request.
+
+1556. Supersedes the permission-paperwork requirements of decisions 1547 and 1549.
+Enabling forecast records requires one acknowledgement: "I'm responsible for
+ensuring my use complies with MetService's terms." No date, reference or upload
+is required. This records responsibility, not a claim that written permission
+was obtained. MetService's terms still apply. Audit the actor, time and exact
+acknowledgement; preserve any previously supplied documents and details.
+The separate combining control is a feature choice labelled "Use records in
+comparisons, Analytics and AI", with external AI access explained. Both features
+remain off by default; existing admin/farm access and deletion controls remain.
+Tenant migration 0261 removes the old database requirement for permission details.
