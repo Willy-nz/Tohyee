@@ -18719,6 +18719,38 @@ statements, with figures from the same functions as the report screens
 - **FS3** Amounts print as in printed statements: 1,234.56; negatives in
   brackets, (300.00); nothing as "-".
 
+### Annual financial statements as a report (FS4-FS7; Jess asked on 6 Nov 2026 for them to be "an option like P&L or balance sheet"; the details are Claude's calls, not yet reviewed)
+
+Tested in `tests/integration/financial-statements-report.test.ts`. The
+setup is FS1's: 31 March year end; 5,000.00 owner funds and 1,000.00 sales
+in the year to 31 Mar 2026; 3,000.00 sales and 1,350.00 expense (6010) in
+the year to 31 Mar 2027.
+
+- **FS4** Reports › Report › **Annual financial statements** (in the
+  Financial statements group, after Cash flows) shows the year's statements
+  on screen: the same statements, lines and figures as the PDF, in the same
+  order, with this year and last year side by side. The PDF is made from
+  what's shown. For the year to 31 Mar 2027: sales **3,000.00** and
+  **1,000.00**; net profit **1,650.00** and **1,000.00**.
+- **FS5** With a default profit and loss layout (Edit layout, then Set as
+  default layout), the statement of financial performance follows it: its
+  headings, groups and formula rows, in its order and with its labels, for
+  this year and last year. A group showing accounts lists them under its
+  label, then "Total" and the label. One that doesn't is one line. Hidden
+  rows are left out, and a text block prints as a paragraph. Example: a
+  layout with group "Sales" (account 4000, accounts not shown), group "Costs"
+  (account 6010, not shown) and formula "Result" = Sales − Costs gives
+  Sales **3,000.00** / **1,000.00**, Costs **1,350.00** / **-**, Result
+  **1,650.00** / **1,000.00**. A default balance sheet layout does the same
+  for the statement of financial position. With no default layout, FS1's
+  standard lines are used.
+- **FS6** **Edit layout** beside each of the two statements opens the profit
+  and loss or balance sheet layout (bookkeepers and up), as on those
+  reports. Changing it changes the statements and the PDF.
+- **FS7** The notes are edited in the report: saved notes show and print;
+  drafts are marked "DRAFT" until saved (FS2). Viewers see them but can't
+  edit. Nothing posts.
+
 Tier 3 and Tier 4 not-for-profit formats: see NPR1-NPR11.
 
 ## The AI's farm workspace (AIW1-AIW14; AIW1-AIW9 chosen with Jess on 14 Oct 2026, AIW10-AIW14 by Claude on 19 Oct 2026; not yet reviewed)
