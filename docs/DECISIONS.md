@@ -14154,3 +14154,18 @@ The separate combining control is a feature choice labelled "Use records in
 comparisons, Analytics and AI", with external AI access explained. Both features
 remain off by default; existing admin/farm access and deletion controls remain.
 Tenant migration 0261 removes the old database requirement for permission details.
+
+### The Journals list (7 Nov 2026; decision 1564)
+
+Jess: the list showed about 4,000 entries; only actual journals should
+show, 100 a page, and clicking one should let her edit it.
+
+1564. **Manual journals, 100 a page.** Accounting › Journals lists manual
+      journals and their corrections' replacements by default (not the
+      reversals a correction makes, and not journals from invoices, bank
+      lines, payments and the rest, which are still under Kind). It shows
+      100 a page with Previous, Next and the count. Clicking one opens it
+      above the list and scrolls to it. A manual journal has **Edit this
+      journal**: a posted journal isn't changed in place, so saving posts a
+      correction (a reversal and the new version), as before. The API takes
+      `page` and `pageSize` and gives `total`; `beforeId` still works.

@@ -711,12 +711,16 @@ export type JournalListFilters = {
   kind?: unknown;
   beforeId?: unknown;
   limit?: unknown;
+  /** Page numbers instead of beforeId (decision 1564): 1 is the newest. */
+  page?: unknown;
+  /** With `page`: 1 to 200, default 100. */
+  pageSize?: unknown;
 };
 
-export async function listJournals(
-  tx: OrgTx,
-  filters: JournalListFilters = {},
-): Promise<{ journals: Journal[]; nextBeforeId: string | null }> {
+/** With `page`: which page this is, how many there are, and how many journals match. */
+export type JournalListPage = { journals: Journal[]; nextBeforeId: string | null; page?: number; pages?: number; total?: number };
+
+export async function listJournals(tx: OrgTx, filters: JournalListFilters = {}): Promise<JournalListPage> {
   const from = parseOptionalIsoDate(filters.postingDateFrom, "postingDateFrom");
   const to = parseOptionalIsoDate(filters.postingDateTo, "postingDateTo");
   if (from && to && from > to) {
@@ -744,7 +748,8 @@ export async function listJournals(
     "payroll",
     "history",
   ];
-  const validKinds = ["primary", "reversal", "replacement", ...origins];
+  // "journals" (decision 1564): manual journals and their replacements, without the reversals a correction makes.
+  const validKinds = ["primary", "reversal", "replacement", "journals", ...origins];
   if (kind && !validKinds.includes(kind)) {
     throw new ValidationError(`kind must be one of: ${validKinds.join(", ")}.`);
   }
@@ -768,8 +773,22 @@ export async function listJournals(
   if (kind && origins.includes(kind)) {
     conditions.push(`origin = ${param(kind)}`);
   }
+  // Corrections are only made to manual journals, so their replacements are journals too.
+  if (kind === "journals") conditions.push("(origin = 'manual' or (origin = 'correction' and correction_kind = 'replacement'))");
   // History brought in from another system (IM23) is left out unless asked for: there can be thousands.
   if (kind !== "history") conditions.push("origin <> 'history'");
+  const paged = filters.page != null && filters.page !== "";
+  if (paged) {
+    const page = Number(filters.page);
+    if (!Number.isInteger(page) || page < 1 || page > 1_000_000) throw new ValidationError("page must be a whole number from 1.");
+    const sizeRaw = filters.pageSize == null || filters.pageSize === "" ? 100 : Number(filters.pageSize);
+    if (!Number.isInteger(sizeRaw) || sizeRaw < 1 || sizeRaw > 200) throw new ValidationError("pageSize must be 1 to 200.");
+    const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
+    const counted = await tx.query<{ total: string }>(`select count(*)::text as total from ledger_journals ${where}`, values);
+    const total = Number(counted.rows[0].total);
+    const rows = await tx.query<JournalRow>(`select ${JOURNAL_COLUMNS} from ledger_journals ${where} order by id desc limit ${sizeRaw} offset ${(page - 1) * sizeRaw}`, values);
+    return { journals: rows.rows.map(toJournal), nextBeforeId: null, page, pages: Math.max(1, Math.ceil(total / sizeRaw)), total };
+  }
   if (beforeId) conditions.push(`id < ${param(beforeId)}`);
 
   const result = await tx.query<JournalRow>(
