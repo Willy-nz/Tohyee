@@ -3288,7 +3288,26 @@ that something happened.
   same time last year, with how many days have a reading (a missing day is
   never counted as dry). Bookkeepers import a gauge's readings from CSV or
   Excel with a preview. In Analytics as `tohyee_farm_rainfall`; the AI has
-  a read-only `rainfall` tool. No outside weather data is fetched.
+  a read-only `rainfall` tool. No outside weather data is mixed in (the
+  MetService forecast below is kept apart).
+
+- **MetService weather forecast** (WX1-WX11, decisions 1541-1550, tenant
+  migrations 0257, 0258, 0260 and 0261): each organisation uses its own MetService key.
+  Settings › Farm › **Weather (MetService)** (admins) walks through what it
+  costs (MetService's API units, paid to MetService), getting a key, pasting
+  and testing it, each farm's pin (the middle of its paddocks to start),
+  what to fetch (rain, temperature, wind, gusts) with a units estimate, and
+  turning it on. Today has a **Weather forecast** card (the next 48 hours
+  and 7 days, frost and heavy rain flags, when it was updated) and More has
+  a **Weather** page by the hour; both carry "This data was provided by
+  MetService Limited." Refreshed every 3 hours by default; a refused key or
+  no units left stops refreshing. Only the latest forecast is kept (24
+  hours at most), never offline or in backups. An admin can enable forecast
+  records after acknowledging responsibility for compliance with MetService's
+  terms, without permission paperwork. A second switch enables rain-gauge
+  comparisons and access in Analytics
+  (`tohyee_farm_weather_forecasts`) and the AI (`weather_forecast_records`).
+  Not yet tried against MetService's live service.
 
 - **Farm team tasks** (FT1-FT7, decisions 1457-1461, tenant migration
   0247): Farm › More › **Tasks**. A task has what needs doing, a due day,
@@ -3389,6 +3408,26 @@ that something happened.
   changes). Admins can rename farm words (mob, actions, kinds and classes)
   for the screens only. The AI reads mobs, treatments and the timeline
   (list_mobs, list_animal_treatments, farm_timeline).
+
+- **Animals, weights and body condition** (decisions 1481-1495, AN1-AN9 and
+  BCS1-BCS8, tenant migrations 0237-0240; common NZ practice, not yet
+  reviewed): Farm › More › Animals is a register of animals by tag, with
+  EID or NAIT number (a field only), sex, breed, birth date, dam and sire,
+  and the mob each is in (with history). A mob shows "N of M head tagged";
+  tagging never changes its head or the books, and sales and deaths of
+  tagged animals are recorded on the mob, choosing the tags. Each animal's
+  page shows its weights with gain per day, body condition scores with the
+  trend and NZ targets, treatments by its tag or its mob, its mob's
+  breeding records and moves. BCS per animal (half points) or per mob (an
+  average, or a tally at each score), with photos; the scale is per kind
+  and a farm setting. Quick entry on a phone (tag, score and/or weight,
+  next) works offline, and a mob's weigh session can be worked out from
+  each tag. Animals, and scores and weights from other tools, import from
+  CSV or Excel; unmatched tags are listed, never added. The person's own
+  AI can suggest scores from photos, compared with the farm's own
+  reference photos; a person accepts, changes or declines each, and only
+  accepted ones count. Tohyee itself doesn't estimate a score or weight
+  from a photo. Analytics has animals, weights and scores.
 
 - **The AI reads farm data** (AIW10-AIW14, decision 560): a connected AI
   can read soil tests, fertiliser products and plans, pasture cover,

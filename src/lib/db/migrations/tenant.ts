@@ -19703,6 +19703,231 @@ alter table farm_imports add constraint farm_imports_kind_check check (kind in (
 `,
   },
   {
+    version: "0237",
+    name: "farm_animals",
+    sql: `
+-- The animal register (decisions 1481-1485; examples AN1-AN8, common NZ
+-- practice, not yet reviewed). An animal is on a farm, with a kind, a
+-- visual tag and optionally an EID or NAIT number (just a field). It's in
+-- at most one mob at a time, and its mob history is kept. Tagging an animal
+-- into a mob never changes the mob's head or the books' livestock
+-- movements: sales and deaths of tagged animals go through the mob.
+create table animals (
+  id bigserial primary key,
+  farm_id bigint not null references farms(id),
+  kind text not null,
+  tag text not null check (length(tag) between 1 and 30),
+  eid text check (eid is null or length(eid) between 1 and 30),
+  sex text check (sex is null or sex in ('female', 'male', 'castrated')),
+  breed text check (breed is null or length(breed) between 1 and 60),
+  birth_on date,
+  dam_id bigint references animals(id),
+  dam_text text check (dam_text is null or length(dam_text) between 1 and 60),
+  sire_id bigint references animals(id),
+  sire_text text check (sire_text is null or length(sire_text) between 1 and 60),
+  status text not null default 'on_farm' check (status in ('on_farm', 'sold', 'dead', 'missing')),
+  status_on date,
+  -- The mob's sale or death that this animal was part of.
+  status_event_id bigint references mob_events(id),
+  note text check (note is null or length(note) <= 500),
+  operation_id uuid,
+  request_hash text,
+  created_by_email text not null,
+  created_at timestamptz not null default now(),
+  check (status in ('on_farm', 'missing') or (status_on is not null and status_event_id is not null)),
+  check (dam_id is null or dam_id <> id),
+  check (sire_id is null or sire_id <> id)
+);
+create unique index animals_tag_on_farm on animals (farm_id, kind, lower(tag)) where status in ('on_farm', 'missing');
+create unique index animals_eid_on_farm on animals (farm_id, lower(eid)) where eid is not null and status in ('on_farm', 'missing');
+create unique index animals_operation_id_key on animals (operation_id) where operation_id is not null;
+create index animals_farm on animals (farm_id, status);
+create trigger animals_no_delete before delete on animals for each row execute function toeyee_forbid_delete();
+
+-- Which mob an animal was in, and when. One open row per animal at most.
+create table animal_mobs (
+  id bigserial primary key,
+  animal_id bigint not null references animals(id),
+  mob_id bigint not null references mobs(id),
+  from_on date not null,
+  to_on date check (to_on is null or to_on >= from_on),
+  how_in text not null check (how_in in ('tagged', 'moved', 'split', 'merged')),
+  how_out text check (how_out is null or how_out in ('moved', 'split', 'merged', 'sold', 'died', 'corrected')),
+  in_event_id bigint references mob_events(id),
+  out_event_id bigint references mob_events(id),
+  created_by_email text not null,
+  created_at timestamptz not null default now(),
+  check ((to_on is null) = (how_out is null))
+);
+create unique index animal_mobs_current on animal_mobs (animal_id) where to_on is null;
+create index animal_mobs_mob on animal_mobs (mob_id, from_on);
+create trigger animal_mobs_no_delete before delete on animal_mobs for each row execute function toeyee_forbid_delete();
+
+-- Tagged animals moved from one mob to another of the same class: the head
+-- goes with them, and no livestock movement is made (decision 1483).
+alter table mob_events drop constraint mob_events_event_type_check;
+alter table mob_events add constraint mob_events_event_type_check check (event_type in (
+  'created', 'moved', 'split_out', 'split_in', 'merged_out', 'merged_in',
+  'sold', 'died', 'born', 'bought', 'reclass', 'weighed', 'counted', 'closed', 'animals_out', 'animals_in'));
+
+alter table farm_imports drop constraint farm_imports_kind_check;
+alter table farm_imports add constraint farm_imports_kind_check check (kind in ('paddock_boundaries', 'fertiliser_applications', 'soil_tests', 'pasture_readings', 'mobs', 'grazings', 'animals', 'animal_records'));
+`,
+  },
+  {
+    version: "0238",
+    name: "animal_weights",
+    sql: `
+-- Weights per animal (decision 1486). A mob's weigh session can be made
+-- from them: the mob's weighing names its event here.
+create table animal_weights (
+  id bigserial primary key,
+  farm_id bigint not null references farms(id),
+  animal_id bigint not null references animals(id),
+  weighed_on date not null,
+  kg numeric(7, 1) not null check (kg > 0 and kg <= 2000),
+  mob_event_id bigint references mob_events(id),
+  source text not null default 'typed' check (source in ('typed', 'quick', 'import', 'ai_suggestion')),
+  note text check (note is null or length(note) <= 200),
+  status text not null default 'active' check (status in ('active', 'removed')),
+  removed_reason text check (removed_reason is null or length(removed_reason) between 1 and 500),
+  operation_id uuid,
+  request_hash text,
+  created_by_email text not null,
+  created_at timestamptz not null default now(),
+  check ((status = 'removed') = (removed_reason is not null))
+);
+create index animal_weights_animal on animal_weights (animal_id, weighed_on) where status = 'active';
+create index animal_weights_farm on animal_weights (farm_id, weighed_on);
+create unique index animal_weights_operation_id_key on animal_weights (operation_id) where operation_id is not null;
+create trigger animal_weights_no_delete before delete on animal_weights for each row execute function toeyee_forbid_delete();
+`,
+  },
+  {
+    version: "0239",
+    name: "body_condition_scores",
+    sql: `
+-- Body condition scores (decisions 1487-1490). A score is for one animal,
+-- or for a mob as an average with, if counted, how many at each score. The
+-- scale is kept on each record, so changing a farm's scale never changes
+-- old scores.
+create table bcs_scale_settings (
+  farm_id bigint not null references farms(id),
+  kind text not null,
+  scale text not null check (scale in ('1_10', '1_5')),
+  updated_by_email text not null,
+  updated_at timestamptz not null default now(),
+  primary key (farm_id, kind)
+);
+
+create table bcs_records (
+  id bigserial primary key,
+  farm_id bigint not null references farms(id),
+  animal_id bigint references animals(id),
+  mob_id bigint references mobs(id),
+  scored_on date not null,
+  scale text not null check (scale in ('1_10', '1_5')),
+  -- An animal's score, or a mob's average.
+  score numeric(3, 1) not null check (score >= 1 and score <= 10),
+  head_scored integer check (head_scored is null or head_scored between 1 and 100000),
+  -- A mob's tally: {"4.5": 12, "5.0": 30}.
+  tally jsonb,
+  scored_by text check (scored_by is null or length(scored_by) between 1 and 100),
+  source text not null default 'typed' check (source in ('typed', 'quick', 'import', 'ai_suggestion')),
+  note text check (note is null or length(note) <= 200),
+  status text not null default 'active' check (status in ('active', 'removed')),
+  removed_reason text check (removed_reason is null or length(removed_reason) between 1 and 500),
+  operation_id uuid,
+  request_hash text,
+  created_by_email text not null,
+  created_at timestamptz not null default now(),
+  check ((animal_id is null) <> (mob_id is null)),
+  check (animal_id is null or (tally is null and head_scored is null)),
+  check ((status = 'removed') = (removed_reason is not null))
+);
+create index bcs_records_animal on bcs_records (animal_id, scored_on) where animal_id is not null;
+create index bcs_records_mob on bcs_records (mob_id, scored_on) where mob_id is not null;
+create index bcs_records_farm on bcs_records (farm_id, scored_on);
+create unique index bcs_records_operation_id_key on bcs_records (operation_id) where operation_id is not null;
+create trigger bcs_records_no_delete before delete on bcs_records for each row execute function toeyee_forbid_delete();
+
+-- Photos of an animal or a mob for condition scoring, kept in the farm's
+-- photo store (safety_files). With a record, or waiting to be scored.
+create table bcs_photos (
+  id bigserial primary key,
+  farm_id bigint not null references farms(id),
+  -- The photo in safety_files (checked when added; no foreign key, so safety_files stays append-only and its truncate guard answers first).
+  file_id uuid not null unique,
+  animal_id bigint references animals(id),
+  mob_id bigint references mobs(id),
+  taken_on date not null,
+  bcs_record_id bigint references bcs_records(id),
+  status text not null default 'active' check (status in ('active', 'removed')),
+  operation_id uuid,
+  created_by_email text not null,
+  created_at timestamptz not null default now(),
+  check ((animal_id is null) <> (mob_id is null))
+);
+create index bcs_photos_animal on bcs_photos (animal_id, taken_on) where animal_id is not null;
+create index bcs_photos_mob on bcs_photos (mob_id, taken_on) where mob_id is not null;
+create unique index bcs_photos_operation_id_key on bcs_photos (operation_id) where operation_id is not null;
+create trigger bcs_photos_no_delete before delete on bcs_photos for each row execute function toeyee_forbid_delete();
+`,
+  },
+  {
+    version: "0240",
+    name: "bcs_suggestions_references",
+    sql: `
+-- AI suggestions from photos and the farm's reference photos (decisions
+-- 1491-1494). A suggestion is never a score: a person accepts (as is or
+-- changed) or declines it, and only an accepted one makes a record.
+-- A reference photo is one a person marked, with the score they gave it
+-- by eye, so the person's AI can compare against the farm's own stock.
+alter table bcs_photos add column reference_kind text;
+alter table bcs_photos add column reference_scale text check (reference_scale is null or reference_scale in ('1_10', '1_5'));
+alter table bcs_photos add column reference_score numeric(3, 1) check (reference_score is null or (reference_score >= 1 and reference_score <= 10));
+alter table bcs_photos add column reference_marked_by_email text;
+alter table bcs_photos add column reference_marked_at timestamptz;
+alter table bcs_photos add constraint bcs_photos_reference_check check ((reference_score is null) = (reference_kind is null) and (reference_score is null) = (reference_scale is null) and (reference_score is null) = (reference_marked_at is null));
+create index bcs_photos_references on bcs_photos (reference_kind, reference_score) where reference_score is not null and status = 'active';
+
+create table bcs_suggestions (
+  id bigserial primary key,
+  farm_id bigint not null references farms(id),
+  animal_id bigint references animals(id),
+  mob_id bigint references mobs(id),
+  photo_id bigint not null references bcs_photos(id),
+  scale text not null check (scale in ('1_10', '1_5')),
+  score numeric(3, 1) not null check (score >= 1 and score <= 10),
+  estimated_kg numeric(7, 1) check (estimated_kg is null or (estimated_kg > 0 and estimated_kg <= 2000)),
+  reasoning text not null check (length(reasoning) between 1 and 500),
+  reference_photo_ids bigint[] not null default '{}',
+  ai_key_name text,
+  proposed_by_user_id uuid,
+  proposed_by_email text not null,
+  idempotency_key text not null unique,
+  request_hash text not null,
+  created_at timestamptz not null default now(),
+  status text not null default 'waiting' check (status in ('waiting', 'accepted', 'declined')),
+  decided_score numeric(3, 1),
+  decided_kg numeric(7, 1),
+  bcs_record_id bigint references bcs_records(id),
+  animal_weight_id bigint references animal_weights(id),
+  mob_event_id bigint references mob_events(id),
+  decided_by_email text,
+  decided_at timestamptz,
+  decline_reason text check (decline_reason is null or length(decline_reason) between 1 and 500),
+  check ((animal_id is null) <> (mob_id is null)),
+  check ((status = 'waiting') = (decided_at is null)),
+  check ((status = 'accepted') = (bcs_record_id is not null and decided_score is not null)),
+  check (decline_reason is null or status = 'declined')
+);
+create index bcs_suggestions_farm on bcs_suggestions (farm_id, status);
+create trigger bcs_suggestions_no_delete before delete on bcs_suggestions for each row execute function toeyee_forbid_delete();
+alter table bcs_records add column suggestion_id bigint references bcs_suggestions(id);
+`,
+  },
+  {
     version: "0246",
     name: "rainfall",
     sql: `
@@ -20024,5 +20249,137 @@ create index vegetation_jobs_due on vegetation_jobs (next_attempt_at, id) where 
 create index vegetation_jobs_month on vegetation_jobs (created_at);
 `,
   },
-];
+  {
+    version: "0257",
+    name: "metservice_forecast",
+    sql: `
+-- MetService forecasts with the organisation's own key (decisions
+-- 1541-1550; WX1-WX8). One settings row. The key is encrypted with the
+-- server's TOHYEE_SECRET_KEY (a *_ciphertext column, so a restore re-wraps
+-- it) and is never sent to a browser. Each farm has one point. Only the
+-- latest forecast is kept, a row a farm, replaced each refresh and deleted
+-- when the key goes, when MetService refuses the key, or when it's 24 hours
+-- old: MetService's terms let it be stored only while it's needed.
+create table weather_settings (
+  id boolean primary key default true check (id),
+  api_key_ciphertext text,
+  key_saved_at timestamptz,
+  key_saved_by_email text,
+  setup_step text not null default 'about' check (setup_step in ('about', 'get_key', 'paste', 'test', 'farms', 'choose', 'turn_on')),
+  choices text[] not null default array['rain', 'temperature', 'wind']::text[],
+  refresh_hours integer not null default 3 check (refresh_hours in (1, 3, 6, 12)),
+  enabled boolean not null default false,
+  status text not null default 'not_tested' check (status in ('not_tested', 'ok', 'bad_key', 'no_units', 'not_allowed', 'rate_limited', 'error')),
+  tested_at timestamptz,
+  paused_at timestamptz,
+  last_refresh_at timestamptz,
+  last_manual_refresh_at timestamptz,
+  units_charged_last integer,
+  updated_at timestamptz not null default now(),
+  check (not enabled or api_key_ciphertext is not null)
+);
+insert into weather_settings (id) values (true);
 
+create table weather_locations (
+  farm_id bigint primary key references farms(id),
+  latitude numeric(9,6) not null check (latitude between -90 and 90),
+  longitude numeric(9,6) not null check (longitude between -180 and 180),
+  updated_at timestamptz not null default now(),
+  updated_by_email text not null
+);
+
+create table weather_forecast_cache (
+  farm_id bigint primary key references farms(id),
+  latitude numeric(9,6) not null,
+  longitude numeric(9,6) not null,
+  fetched_at timestamptz not null,
+  choices text[] not null,
+  hours jsonb not null
+);
+`,
+  },
+  {
+    version: "0258",
+    name: "metservice_forecast_records",
+    sql: `
+-- Keeping forecast records, only for an organisation that says it has
+-- MetService's written permission (decisions 1547-1549; WX8-WX10). Off by
+-- default. The permission's date and reference are kept, with who turned it
+-- on and when (and in the audit log), and optionally the permission itself
+-- as a file. Combining the records with the farm's own data (forecast vs
+-- rain gauge, Analytics, the AI) is a second switch that needs the first.
+-- Turning records off deletes them unless the admin chooses to keep them.
+alter table weather_settings
+  add column keep_records boolean not null default false,
+  add column permission_granted_on date,
+  add column permission_reference text,
+  add column keep_records_set_at timestamptz,
+  add column keep_records_set_by_email text,
+  add column combine boolean not null default false,
+  add column combine_set_at timestamptz,
+  add column combine_set_by_email text,
+  add constraint weather_settings_combine_needs_records check (not combine or keep_records),
+  add constraint weather_settings_permission_details check (not keep_records or (permission_granted_on is not null and permission_reference is not null));
+
+create table weather_permission_files (
+  id boolean primary key default true check (id),
+  file_name text not null,
+  content_type text not null,
+  byte_size integer not null,
+  sha256 text not null,
+  content bytea not null,
+  added_at timestamptz not null default now(),
+  added_by_email text not null
+);
+
+create table weather_forecast_history (
+  id bigserial primary key,
+  farm_id bigint not null references farms(id),
+  latitude numeric(9,6) not null,
+  longitude numeric(9,6) not null,
+  fetched_at timestamptz not null,
+  choices text[] not null,
+  hours jsonb not null
+);
+create index weather_forecast_history_farm on weather_forecast_history (farm_id, fetched_at);
+`,
+  },
+  {
+    version: "0259",
+    name: "mob_event_types_animals_and_reversed",
+    sql: `
+-- 0237 (tagged animals moving between mobs) and 0252 (reversing a head
+-- count change) each rewrote this check with only their own new types, so
+-- whichever ran last dropped the other's. Allow all of them.
+alter table mob_events drop constraint mob_events_event_type_check;
+alter table mob_events add constraint mob_events_event_type_check check (event_type in (
+  'created', 'moved', 'split_out', 'split_in', 'merged_out', 'merged_in',
+  'sold', 'died', 'born', 'bought', 'reclass', 'weighed', 'counted', 'closed',
+  'animals_out', 'animals_in', 'reversed'));
+`,
+  },
+  {
+    version: "0260",
+    name: "weather_settings_revision",
+    sql: `
+-- Issue #619 findings 2 and 3. Each change to the key, what's fetched or
+-- on/off adds one to revision; a refresh or connection test still waiting
+-- on MetService checks it hasn't moved before it keeps anything or changes
+-- the status. key_tested says the key saved now passed Test connection:
+-- forecasts aren't fetched with a key until it has.
+alter table weather_settings add column revision bigint not null default 0;
+alter table weather_settings add column key_tested boolean not null default false;
+update weather_settings set key_tested = true
+  where api_key_ciphertext is not null and tested_at is not null and status not in ('not_tested', 'bad_key');
+`,
+  },
+  {
+    version: "0261",
+    name: "weather_records_acknowledgement",
+    sql: `
+-- A responsibility acknowledgement replaces the permission date/reference requirement.
+-- Preserve previously supplied details and files; do not invent permission evidence.
+alter table weather_settings drop constraint weather_settings_permission_details;
+`,
+  },
+];

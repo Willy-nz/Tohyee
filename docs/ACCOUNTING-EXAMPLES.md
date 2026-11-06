@@ -21304,6 +21304,73 @@ and `tests/integration/rainfall.test.ts`.
   `tohyee_farm_rainfall` (a row a reading, removed ones left out): RF1-RF7
   sum to 99.0 mm over 6 readings for Cowshed.
 
+## Farming: MetService weather forecast (WX1-WX11; built by Claude 5 Nov 2026 when Jess asked for MetService forecasts with each farm's own key, Claude's rules, not yet reviewed)
+
+Records only: nothing posts to the books. Decisions 1541-1550. MetService's
+API hasn't been tried live from Tohyee: these use the made-up forecast
+(`TOHYEE_WEATHER_PROVIDER=fake`). Tested in
+`tests/unit/weather-forecast-rules.test.ts` and
+`tests/integration/weather-forecast.test.ts`.
+
+- **WX1 Setup and credit.** Only admins see Settings › Farm › Weather
+  (MetService); a viewer or farm staff is refused, and so is anyone from
+  another organisation. The setup carries on at the step it was left on.
+  MetService's credit, "This data was provided by MetService Limited.",
+  sits right under each table of forecast numbers, in the same size type.
+- **WX2 Key and units.** Aroha pastes her key: it's kept encrypted, and no
+  answer, audit entry or browser page has it again. One farm with rain,
+  temperature and wind (speed and direction: 4 variables) refreshed every
+  3 hours: 4 units a refresh, 8 refreshes, 32 units a day, 960 in 30 days.
+  Two farms with rain only, every 12 hours: 4 a day. Frost risk needs no
+  extra variable. A test costs 1 unit.
+- **WX3 A refresh.** The next 7 days hour by hour from the hour now is in
+  (168 values a variable), for the farm's pin. 275.15 K is 2.0 °C, 5 m/s
+  is 18 km/h, 1.26 mm/h is 1.3 mm, a value flagged noData is shown as a
+  dash. Only the chosen things are kept, and only the latest forecast: a
+  second refresh replaces it (one row a farm).
+- **WX4 Days.** New Zealand days: 6 November starts 11:00 UTC on the 5th.
+  The day's rain is the hours' total; low, high and strongest wind and gust
+  are shown. The card shows the next 48 hours every 3 hours and 7 days; the
+  Weather page shows every hour.
+- **WX5 Warnings** (worked out from the numbers, said not to be
+  MetService's official warnings): frost risk when the air is forecast at
+  2.0 °C or below ("Frost risk: down to -0.5 °C."); heavy rain at 25 mm in
+  a day ("Heavy rain: 26.0 mm in the day.") or 10 mm in an hour. 2.1 °C
+  and 24 mm aren't flagged.
+- **WX6 Age.** Refreshing every 3 hours, a forecast fetched at 8:00 is
+  current at 12:00 and "Out of date" after 12:00. At 24 hours old it's no
+  longer shown and the clean-up deletes it. With no connection the page
+  shows what it loaded, with its age; nothing is saved on the device.
+  Refresh (bookkeepers and up) is refused within 15 minutes of the last.
+- **WX7 Problems.** 401 is a refused key ("MetService didn't accept the
+  key…"): the kept forecast is deleted and refreshing stops. No units left
+  (402, or 403/429 mentioning units, quota, limit or credit: not yet tried
+  against the live service) and "not allowed" stop refreshing too, so
+  nothing more is charged, until a test says Connected. A rate limit or an
+  outage is tried again at the next refresh. Removing the key deletes the
+  kept forecast.
+- **WX8 Records, with acknowledgement.** Off: two refreshes keep 0 records.
+  An admin acknowledges responsibility for complying with MetService's terms
+  and enables records without a permission date, reference or uploaded file.
+  Missing/false acknowledgements and non-admin requests are refused. The
+  acknowledgement, actor and time are audited; no permission evidence is
+  invented. Two more refreshes keep 2 records (and still 1 latest forecast).
+- **WX9 Combining** needs the feature switch, "Use records in comparisons,
+  Analytics and AI", which needs records enabled. Until then
+  Forecast vs your rain gauge, Analytics' `tohyee_farm_weather_forecasts`
+  and the AI's `weather_forecast_records` are refused or empty. With it:
+  a rain day (9 am to 9 am, as a gauge is read) compares the gauge's
+  reading with the forecast for it from the last record fetched before
+  9 am that day; 8.5 mm read against 5.0 mm forecast is "+3.5". A record
+  that doesn't cover all 24 hours gives no forecast for the day. Each
+  Analytics row and the AI's answer carry the credit.
+- **WX10 Turning records off** asks whether to delete them, and deletes
+  by default (2 records gone, in the audit log); combining goes off, the
+  Analytics table goes, and refreshes keep no more records. Keeping them
+  for now is a choice, with "Delete them now" offered after.
+- **WX11 Backups.** With 1 latest forecast and 2 records kept, a backup has
+  the forecast table empty and both records (Jess, 6 Nov 2026).
+
 ## Farming: farm team tasks (FT1-FT7; built by Claude 5 Nov 2026 when Jess asked for the missing farm features, Claude's rules, not yet reviewed)
 
 Records only: nothing posts to the books. Decisions 1457-1461. Tested in
@@ -21532,3 +21599,93 @@ Nothing here posts or changes a head count. Tested in
   and "Shift" for move show on the screens only; the mob's class is still
   mixed-age cows. An unknown word is refused; a blank goes back to the
   standard word; only admins change them.
+
+## Farming: animals, weights and the head count (AN1-AN9; built by Claude 5 Nov 2026, common NZ practice, not yet reviewed)
+
+The mob's head is the one count (decisions 1481-1486). Tagging changes no
+head and no livestock movement; sales and deaths of tagged animals go
+through the mob's own steps. Tested in `tests/integration/farm-animals.test.ts`
+and `tests/unit/farm-animals.test.ts`.
+
+- **AN1 An animal.** Cow 214, dairy cattle, EID 982000123456789, female,
+  Friesian, born 1 Aug 2021. A second animal tagged 214, or another with
+  that EID, on the farm is refused. Calf 301 with dam "214" typed links to
+  cow 214.
+- **AN2 Tagging changes no head.** Milkers (3 mixed-age cows) with 214,
+  301 and 302 tagged in: still 3 head, **3 of 3 head tagged**, and **no
+  livestock movement**. A fourth tag into Milkers is refused: record more
+  head on the mob first. A sheep can't go in a dairy mob.
+- **AN3 N of M.** The mob's line and card say "3 of 3 head tagged".
+- **AN4 A sale or death of tagged animals.** Livestock on, 300 mixed-age
+  cows in the opening. Milkers, 10 head with tags 11, 12 and 13, sell 8
+  for $14,400.00 on 10 Aug: with no tag chosen it's refused (2 head would
+  be left with 3 tagged); with 11 chosen it's **one sale movement of 8**,
+  the mob has 2 head and 2 tagged, and 11 is sold on 10 Aug. A count to 1
+  is refused (2 tagged). A death of 1 naming 12 marks 12 dead; the year
+  shows **8 sold and 1 died**. Choosing 2 tags for 1 head is refused, and
+  so is the last head going while 13 is still in the mob. 12 can't be set
+  dead on its own: record the death on the mob.
+- **AN5 Moving tagged animals.** Herd 1 (5) with 21 and 22, Herd 2 (4), both
+  mixed-age cows. 21 moves to Herd 2 on 5 Jul: **Herd 1 has 4 and Herd 2
+  has 5; no livestock movement**. Moving 22 to the rising two-year heifers
+  is refused (another class). Correcting 22 into Herd 2 and back changes no
+  head. Splitting 2 from Herd 2 into Herd 3 with 21 chosen: Herd 2 has 3
+  and none tagged, Herd 3 has 2 with 21. Merging Herd 3 into Herd 1: 6
+  head, 2 tagged. 21's mobs: Herd 1 (tagged, moved out), Herd 2 (moved in,
+  split out), Herd 3 (split in, merged out), Herd 1 (merged in, now).
+- **AN6 Missing.** S3 missing on 20 Aug stays in Steers, counted, until a
+  death, sale or count; found puts it back on farm.
+- **AN7 A weigh session from tags.** Steers: S1 412.0, S2 430.5 and S3
+  401.0 kg on 1 Sep: the mob's weighing is **414.5 kg average of 3**
+  (1,243.5 / 3). On 1 Oct quick entry weighs S1 436.0 and S2 451.0, then
+  Finish: **443.5 kg average of 2, +29.0 kg over 30 days**. Sent again,
+  quick entry's weight isn't kept twice; a second Finish finds no tag
+  weights left.
+- **AN8 Gain per day.** S1 412.0 on 1 Sep and 436.0 on 1 Oct: **+24.0 kg
+  over 30 days, 0.80 kg a day**.
+- **AN9 Importing animals.** Ewes, 3 head. A file of E1-E5 for the Ewes mob:
+  E1, E2 (dam E1, in the file) and E3 (dam X9, not on the register) import,
+  tagged into Ewes, which keeps **3 head, 3 tagged**; E4 is refused (no
+  untagged head left) and E5's sex "Q" isn't known. X9 is kept as typed.
+  The same file again is refused.
+
+## Farming: body condition scores and AI suggestions (BCS1-BCS8; built by Claude 5 Nov 2026, common NZ practice, not yet reviewed)
+
+Records only: nothing posts (decisions 1487-1494). Tested in
+`tests/integration/farm-animals.test.ts` and `tests/unit/farm-animals.test.ts`.
+
+- **BCS1 Scales per kind.** Dairy and beef cattle 1-10, sheep, deer and
+  goats 1-5, in half points: 4.5 is kept, 4.3 is refused, 6 on a 1-5 scale
+  is refused.
+- **BCS2 A tally.** 50 cows: 12 at 4.0, 30 at 4.5 and 8 at 5.0: 223.0 / 50 =
+  4.46, **BCS 4.5 average of 50 (4.0 to 5.0)**. A tally of 51 for a mob of
+  50 is refused. Ewes: 20 at 2.5, 60 at 3.0 and 20 at 3.5 average 3.0, with
+  20 below the year-round 3.0.
+- **BCS3 An average.** Ewes 2.85 of 120 scored: **2.9**.
+- **BCS4 Trend and targets.** Cow 7 scored 4.5 on 1 Jul (in Cows) and Cows'
+  tally on 15 Jul: Cows' trend is **4.5 (tagged, 1 Jul) and 4.5 (mob, 15
+  Jul)**, with DairyNZ's targets (calving 5.0 and 5.5; mating at least 4.0
+  and 4.5). Goats have no targets. Changing dairy cattle to 1-5 for the
+  farm (admins only): no targets, no trend points, and the old scores keep
+  1-10.
+- **BCS5 Quick entry.** A score and/or a weight for a tag, through the
+  device's queue; sent again with the same operation id, nothing is kept
+  twice.
+- **BCS6 Importing scores and weights.** A file with E1 3.5 and 68.2 kg,
+  e2 2.5, E9 (not on the register), E3 6 (not on the 1-5 scale) and E3
+  61 kg: **2 scores and 2 weights**; E9 is listed as unmatched and nothing
+  is added.
+- **BCS7 AI suggestions.** Two photos of cow 9 kept to score. The AI
+  suggests 4.5 and about 520 kg for one, and 3.0 for the other. Until
+  decided: **no score, no weight, nothing in the mob's trend**. The first
+  is accepted changed to 5.0 with its weight: a BCS of **5.0, "From an AI
+  suggestion (4.5), changed; accepted by …"**, and a weight of 520.0 kg
+  marked as from a photo. The second is declined: nothing is recorded. A
+  second suggestion for a photo, or a score off the half points, is
+  refused. A photo scored from a suggestion can't be a reference.
+- **BCS8 Reference photos.** Cow 5 scored 5.0 by eye with a photo: marked a
+  reference for 5.0. A photo of Cows' average 4.5 needs a score typed: 4.0.
+  The farm's dairy references are **4.0 and 5.0**. The AI looks at a new
+  photo of cow 5 with both references, and its suggestion names them.
+  Another organisation has **no references, no photos to score**, and can't
+  suggest on this one.

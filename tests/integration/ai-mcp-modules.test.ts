@@ -101,7 +101,7 @@ describeWithDatabase("the AI's tools follow the organisation's modules (#576) an
     const organisation = toolAnswer(next.answer);
     expect(organisation.toolListVersion).not.toBe(before);
     expect(organisation).toMatchObject({ toolListUpToDate: false });
-    expect(organisation.toolsNow).toEqual(expect.arrayContaining([...FARMING_TOOLS.filter((name) => !["add_farm_note", "update_farm_note", "propose_pasture_cover_estimate"].includes(name))]));
+    expect(organisation.toolsNow).toEqual(expect.arrayContaining([...FARMING_TOOLS.filter((name) => !["add_farm_note", "update_farm_note", "propose_pasture_cover_estimate", "suggest_bcs"].includes(name))]));
 
     const relisted = await post(token, "tools/list", {}, session);
     expect(toolNames(relisted.answer)).toContain("farm_notebook");

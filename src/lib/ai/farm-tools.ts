@@ -13,9 +13,13 @@ import { fertiliserWhatIf, parseWhatIf } from "@/lib/farming/fertiliser-what-if"
 import { listGrazings, listReadings, listSupplements, pastureSummary } from "@/lib/farming/pasture";
 import { listSoilTests, soilSummary } from "@/lib/farming/soil";
 import { farmStocking, listMobs } from "@/lib/farming/mobs";
+import { getAnimal } from "@/lib/farming/animal-detail";
+import { listAnimals } from "@/lib/farming/animals";
+import { mobBcs } from "@/lib/farming/bcs";
 import { farmTimeline } from "@/lib/farming/timeline";
 import { listTreatments } from "@/lib/farming/treatments";
 import { listRainReadings, rainfallOverview } from "@/lib/farming/rainfall";
+import { listForecastRecords } from "@/lib/weather/service";
 import { getFarmVegetation, getPaddockTrend, type PaddockObservation } from "@/lib/farming/vegetation/service";
 import { FLAG_WORDS, QUALITY_WORDS } from "@/lib/farming/vegetation/rules";
 import { ValidationError } from "@/lib/errors";
@@ -414,6 +418,39 @@ export const FARM_READ_TOOLS: AiTool[] = [
     },
   },
   {
+    name: "list_animals",
+    title: "List animals",
+    description:
+      "The farm's animal register: each animal's tag, EID or NAIT number (as typed; nothing is sent to NAIT), kind, sex, breed, birth date, dam and sire, status (on farm, missing; sold and dead with includeGone), the mob it's in, and its last weight (with gain per day) and body condition score. Filter by mob or a tag search. Read only.",
+    level: "read",
+    inputSchema: schema({ farmId: FARM_ID, mobId: { type: "string", description: "One mob, from list_mobs." }, q: { type: "string", description: "Part of a tag or EID." }, includeGone: { type: "boolean" }, limit: limitInput(200, 1000), cursor: CURSOR }),
+    run: async (tx, args) => {
+      const page = pageByPosition(await listAnimals(tx, { farmId: await farmFor(tx, args.farmId), mobId: args.mobId, q: args.q, includeGone: args.includeGone === true }), args.cursor, boundedLimit(args.limit, 200, 1000));
+      return { animals: page.rows, more: page.more, nextCursor: page.nextCursor };
+    },
+  },
+  {
+    name: "get_animal",
+    title: "One animal's records",
+    description:
+      "One animal's page: details, the mobs it was in and when, every weight with gain per day, its body condition scores (with the farm's scale and any NZ targets), treatments given by its tag or to its whole mob while it was in it, the mob's mating, AI and scanning while it was in it, and moves. Scores from AI suggestions are only there once a person accepted them. Read only.",
+    level: "read",
+    inputSchema: schema({ animalId: { type: "string", description: "From list_animals." } }, ["animalId"]),
+    run: async (tx, args) => {
+      const detail = await getAnimal(tx, args.animalId);
+      return { ...detail, photos: detail.photos.length, suggestions: detail.suggestions.filter((entry) => entry.status === "waiting").length };
+    },
+  },
+  {
+    name: "mob_bcs",
+    title: "A mob's body condition",
+    description:
+      "A mob's body condition scores: its own records (averages and tallies of how many at each score), its trend (with days its tagged animals were scored, as their average), the farm's scale for the kind, and NZ targets where a recognised source gives them. Read only.",
+    level: "read",
+    inputSchema: schema({ mobId: { type: "string", description: "From list_mobs." } }, ["mobId"]),
+    run: async (tx, args) => mobBcs(tx, args.mobId),
+  },
+  {
     name: "list_animal_treatments",
     title: "List animal treatments",
     description:
@@ -446,13 +483,25 @@ export const FARM_READ_TOOLS: AiTool[] = [
     name: "rainfall",
     title: "Rainfall",
     description:
-      "Rain recorded in the farm's own rain gauges, in mm, by rain day (a 9 am reading is the day before's rain): for each active gauge (or one farm's), this month, this season and the last 12 months to a date, by month and by NZ season, each with the same time last year and how many days have a reading (a day with no reading is unknown, not dry). With from and to, the day readings themselves for one farm. Tohyee keeps no outside weather data.",
+      "Rain recorded in the farm's own rain gauges, in mm, by rain day (a 9 am reading is the day before's rain): for each active gauge (or one farm's), this month, this season and the last 12 months to a date, by month and by NZ season, each with the same time last year and how many days have a reading (a day with no reading is unknown, not dry). With from and to, the day readings themselves for one farm. MetService forecasts aren't in this tool: see weather_forecast_records.",
     level: "read",
     inputSchema: schema({ farmId: FARM_ID, onDate: DATE, from: DATE, to: DATE }),
     run: async (tx, args) =>
       args.from || args.to
         ? { readings: await listRainReadings(tx, { farmId: await farmFor(tx, args.farmId), from: args.from, to: args.to ?? todayIsoDate() }) }
         : { gauges: await rainfallOverview(tx, { farmId: args.farmId, onDate: args.onDate }) },
+  },
+  {
+    name: "weather_forecast_records",
+    title: "MetService forecast records",
+    description:
+      "MetService forecasts the organisation kept as records for one farm, newest first: when each was fetched, the farm's pin, and hour by hour the rain (mm), temperature (degrees C), wind and gusts (km/h) and wind direction (degrees). Only available when an admin has enabled forecast records and their use in comparisons, Analytics and AI; otherwise it's refused. The admin acknowledges responsibility for compliance with MetService's terms; Tohyee does not verify permission. This tool returns retained records, not the latest-forecast cache. Whenever you show or use these numbers, say: \"This data was provided by MetService Limited.\"",
+    level: "read",
+    inputSchema: schema({ farmId: FARM_ID, from: DATE, to: DATE, limit: LIMIT(20) }),
+    run: async (tx, args) => ({
+      attribution: "This data was provided by MetService Limited.",
+      records: await listForecastRecords(tx, { farmId: await farmFor(tx, args.farmId), from: args.from, to: args.to, limit: boundedLimit(args.limit, 20, 200) }),
+    }),
   },
   {
     name: "paddock_greenness",
