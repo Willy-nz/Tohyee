@@ -13723,14 +13723,32 @@ Claude's calls, not yet reviewed. No migration.
 Jess: a new custom report should have all the report options.
 
 1567. **Every report can start a custom report** (CRS1, not yet reviewed).
-      Trial balance, stock valuation, bank reconciliation, budget vs actual
-      and changes in equity start as list reports of the report's own
-      figures, with columns to choose; General ledger starts as Account
+      Trial balance, stock valuation, bank reconciliation and budget vs
+      actual start as list reports of the report's own figures, with
+      columns to choose (changes in equity is now a layout, decision 1568); General ledger starts as Account
       transactions for all accounts; Annual financial statements opens its
       report (its statements follow the layouts). From Reports › Custom the
       date is this month's end, with the first bank account or the latest
       budget; Save as custom report on each of those reports keeps what was
       chosen there. Tenant migration 0263.
+### Changes in equity layouts (7 Nov 2026; decision 1568)
+
+Jess: Edit layout on changes in equity, as on cash flows. Examples
+CEL1-CEL5. Claude's calls on the details, not yet reviewed. Tenant
+migration 0264.
+
+1568. **Changes in equity has a layout and a default layout, like cash
+      flows** (decisions 1562-1563). Its rows are headings and groups of the
+      statement's own lines (net profit, each equity account's movement),
+      renamed, reordered, hidden or with notes, between equity at the start
+      and at the end, which can be renamed but not removed. A line the
+      layout doesn't place shows on its own after its rows, so the end is
+      always the balance sheet's. Edit layout is on Reports › Changes in
+      equity and beside the annual statement; Set as default layout makes
+      both use it. A custom report started from Changes in equity is now a
+      layout; one already saved as a list (decision 1567) stays a list and
+      can't be the default. List reports also show a nil opening balance
+      as 0.00 and dates as dates.
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

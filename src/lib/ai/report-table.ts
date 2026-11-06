@@ -1,4 +1,5 @@
 import type { CashFlowFigures } from "@/lib/reports/cash-flow-layout";
+import type { EquityFigures } from "@/lib/reports/equity-layout";
 import type { AnyCustomReportFigures } from "@/lib/reports/custom";
 import type { BudgetVsActual, BudgetVsActualGroup, VarianceFigures } from "@/lib/reports/budget-vs-actual";
 import type { ProfitAndLossSplit, SplitGroup } from "@/lib/reports/financial";
@@ -198,7 +199,8 @@ export function budgetTable(report: BudgetVsActual): ReportTable {
  */
 export function customTable(report: { id: string; title: string; kind: string; publishedAt: string | null }, figures: AnyCustomReportFigures): ReportTable {
   if (figures.base === "cash_flows") return cashFlowTable(report, figures as CashFlowFigures);
-  const financial = figures as Exclude<AnyCustomReportFigures, CashFlowFigures>;
+  if ("opening" in figures) return equityTable(report, figures);
+  const financial = figures as Exclude<AnyCustomReportFigures, CashFlowFigures | EquityFigures>;
   const rows: ReportTableRow[] = [];
   for (const block of financial.blocks) {
     if (block.kind === "text") {
@@ -261,6 +263,38 @@ function cashFlowTable(report: { id: string; title: string; kind: string; publis
     rows.push({ key: `t${block.id}`, kind: "total", label: block.total.label, values: block.total.values });
   }
   for (const line of figures.end) rows.push({ key: line.key, kind: "total", label: line.label, values: line.values });
+  const periods = figures.columns.filter((column) => column.from || column.to);
+  return {
+    report: "custom_report",
+    reportId: report.id,
+    title: report.title,
+    kind: report.kind,
+    publishedAt: report.publishedAt,
+    base: figures.base,
+    from: periods.map((column) => column.from).filter((date): date is string => Boolean(date)).sort()[0] ?? null,
+    to: periods.map((column) => column.to).filter((date): date is string => Boolean(date)).sort().at(-1) ?? null,
+    currencyCode: figures.currencyCode,
+    filter: null,
+    columns: figures.columns.map((column) => ({ key: column.key, kind: column.kind, label: column.label, from: column.from, to: column.to })),
+    rows,
+    notInReport: [],
+    inSeveralGroups: [],
+    computedAt: figures.computedAt,
+  };
+}
+
+/** A changes in equity layout's figures (CEL1-CEL4): equity at the start, the rows, then equity at the end. */
+function equityTable(report: { id: string; title: string; kind: string; publishedAt: string | null }, figures: EquityFigures): ReportTable {
+  const rows: ReportTableRow[] = [{ key: "opening", kind: "total", label: figures.opening.label, values: figures.opening.values }];
+  for (const block of figures.blocks) {
+    if (block.kind === "text") {
+      rows.push({ key: `b${block.id}`, kind: "text", label: block.text, values: {} });
+      continue;
+    }
+    if (block.kind === "group" && block.showLines) for (const line of block.lines) rows.push({ key: `${block.id}:${line.ref}`, kind: "account", label: line.label, values: line.values });
+    rows.push({ key: block.id, kind: block.kind === "heading" ? "heading" : "group", label: block.label, values: block.values, ...(block.note ? { note: block.note } : {}), ...(block.hidden ? { hidden: true } : {}) });
+  }
+  rows.push({ key: "closing", kind: "total", label: figures.closing.label, values: figures.closing.values });
   const periods = figures.columns.filter((column) => column.from || column.to);
   return {
     report: "custom_report",

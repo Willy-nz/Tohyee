@@ -7759,8 +7759,9 @@ Kobe Ltd, 50.00 + GST = **57.50**, dated 30 Apr, voided 5 May.
 
 - **CRS1** A custom report can start from every standard report (Jess asked
   on 6 Nov 2026; not yet reviewed). Trial balance, stock valuation, bank
-  reconciliation, budget vs actual and changes in equity start as list
-  reports of that report's own figures, so they always match it: with the
+  reconciliation and budget vs actual start as list reports of that
+  report's own figures, so they always match it (changes in equity starts
+  as a layout, CEL1-CEL5): with the
   journals 1,000.00 owner funds into the bank (1 Apr 2026) and a 230.00
   expense (6010, 5 May 2026), the trial balance custom report at 31 May
   2026 has 1000 debit **770.00**, 3000 credit **1,000.00**, 6010 debit
@@ -18872,6 +18873,41 @@ shown only to someone with payroll access. Nothing here posts to the books.
   Paddock 12 (20.0 ha) at 2,500 measured and 14 (15.0 ha) at 1,900 by
   satellite: **2,243 kg DM/ha, 78,500 kg DM, 1 estimate**.
 - **AIW14** With Farming off, the tools say so.
+
+### Changes in equity layouts (CEL1-CEL5; Jess asked on 7 Nov 2026 for Edit layout on changes in equity, as on cash flows; the details are Claude's calls, not yet reviewed)
+
+Tested in `tests/integration/equity-layouts.test.ts`. Owner funds in
+**500.00** on 1 Jul 2025 (the year before). In the year to 31 Mar 2027:
+owner funds in **3,000.00**, sales **8,000.00** and accounting fees
+**1,500.00** (all through the bank) and drawings **1,200.00**. The
+standard statement: equity at the start **500.00**; net profit
+**6,500.00**; owner funds introduced **3,000.00**; owner drawings
+**(1,200.00)**; equity at the end **8,800.00**, which is the balance
+sheet's.
+
+- **CEL1** A layout is rows in order: headings, and groups of the
+  statement's lines (net profit, or an equity account's movement), shown
+  as one line or with their lines under them, between equity at the start
+  and equity at the end. Example: "Profit for the year" (net profit)
+  **6,500.00**, then "Owner contributions (net)" (owner funds and
+  drawings) **1,800.00**. Equity at the start is still **500.00** and at
+  the end **8,800.00**.
+- **CEL2** Nothing is lost: a line the layout doesn't place shows on its
+  own line after the layout's rows, in the standard order. A layout with
+  only "Profit" still shows owner funds **3,000.00** and drawings
+  **(1,200.00)**, and **8,800.00** at the end.
+- **CEL3** A line can be placed once. Placing it twice, an account that
+  doesn't exist, or one that isn't an equity account is refused when the
+  layout is saved.
+- **CEL4** A hidden group isn't shown but still counts. A row's note shows
+  under it; a text block prints where it is. Equity at the start and at
+  the end can be renamed but are always there, and the end is always the
+  start plus every line.
+- **CEL5** Set as default layout makes Reports › Changes in equity and the
+  annual financial statements' statement of changes in equity use it,
+  this year and last year, with Edit layout beside it. A changes in equity
+  custom report saved as a list (CRS1) stays a list and can't be the
+  default layout.
 
 ### Covers from paddock photos (AIW15-AIW19; #503, by Claude on 30 Oct 2026; not yet reviewed)
 

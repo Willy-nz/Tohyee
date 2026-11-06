@@ -61,7 +61,10 @@ describeWithDatabase("custom report starting points", () => {
   });
 
   it("changes in equity, stock valuation and the first bank account", async () => {
-    const equity = await start("changes_in_equity");
+    // Changes in equity starts as a layout (CEL5); one saved as a list stays a list.
+    const equityLayout = (await run((tx) => createCustomReport(tx, { idempotencyKey: key("r"), base: "changes_in_equity", periodEnd: "2026-05-31" }))).report;
+    expect(equityLayout.layout).toMatchObject({ title: "Changes in equity", blocks: [{ lines: ["profit"] }] });
+    const equity = await start("changes_in_equity", { title: "Changes in equity", filters: { from: null, to: "2026-05-31" }, columns: ["item", "amount"] });
     expect((equity.figures.data as { closingEquity: string }).closingEquity).toBe((await run((tx) => changesInEquity(tx, { from: null, to: "2026-05-31" }))).closingEquity);
     const stock = await start("inventory_valuation");
     expect(stock.report.layout).toMatchObject({ filters: { asAt: null } });

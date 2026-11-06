@@ -21,12 +21,20 @@ export type TransactionReportBase =
 
 export type CustomReportBase = FinancialReportBase | TransactionReportBase | "cash_flows";
 
-/** The standard reports that can have a default layout: profit and loss, balance sheet and (CFL5) cash flows. */
-export type LayoutBase = FinancialReportBase | "cash_flows";
+/** The standard reports that can have a default layout: profit and loss, balance sheet, (CFL5) cash flows and (CEL5) changes in equity. */
+export type LayoutBase = FinancialReportBase | "cash_flows" | "changes_in_equity";
 
 /** A cash flows layout (CFL1-CFL5). */
 export function isCashFlowBase(base: string): base is "cash_flows" {
   return base === "cash_flows";
+}
+
+/**
+ * A changes in equity layout (CEL1-CEL5), told from a changes in equity
+ * report saved as a list (CRS1) by its rows.
+ */
+export function isEquityLayout(base: string, layout: unknown): layout is EquityLayout {
+  return base === "changes_in_equity" && Boolean(layout) && typeof layout === "object" && Array.isArray((layout as { blocks?: unknown }).blocks);
 }
 
 export function isTransactionReportBase(base: string): base is TransactionReportBase {
@@ -209,6 +217,28 @@ export function standardCashFlowLayout(periodEnd: string): CashFlowLayout {
   };
 }
 
+/**
+ * Changes in equity layouts (CEL1-CEL5): headings and groups of the
+ * statement's lines ("profit", or "account:<code>" for an equity account's
+ * movement) and notes, between equity at the start and at the end.
+ */
+export type EquityBlock = CashFlowRow | { id: string; kind: "text"; text: string };
+export type EquityEndLabels = { opening: string; closing: string };
+export const EQUITY_END_LABELS: EquityEndLabels = {
+  opening: "Equity at the start of the period",
+  closing: "Equity at the end of the period",
+};
+export type EquityLayout = { title: string; columns: ReportColumnsSetting; blocks: EquityBlock[]; endLabels?: Partial<EquityEndLabels> };
+
+/** The standard statement as a layout: net profit, then each account's movement as it comes (CEL2). */
+export function standardEquityLayout(periodEnd: string): EquityLayout {
+  return {
+    title: "Changes in equity",
+    columns: { periodEnd, periodLength: "year", periodCount: 1, difference: false, percent: false, yearToDate: false },
+    blocks: [{ id: "profit", kind: "group", label: "Net profit", lines: ["profit"], showLines: false }],
+  };
+}
+
 export type ReportBlock =
   | { id: string; kind: "table"; title: string; rows: ReportRow[] }
   | { id: string; kind: "text"; text: string };
@@ -241,7 +271,7 @@ export type TransactionReportLayout = {
   columns: string[];
 };
 
-export type StoredCustomReportLayout = CustomReportLayout | TransactionReportLayout | CashFlowLayout;
+export type StoredCustomReportLayout = CustomReportLayout | TransactionReportLayout | CashFlowLayout | EquityLayout;
 
 export type TransactionReportColumn = { key: string; label: string };
 

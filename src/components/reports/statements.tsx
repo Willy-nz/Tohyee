@@ -1,14 +1,15 @@
 "use client";
 
-import { useSaveAsCustomReport } from "@/components/reports/save-as-custom-report";
 import { useState } from "react";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { ReportFrame, type ReportDates, ReportToolbar, StatementHeading, useYearEndMonth } from "@/components/reports/report-frame";
 import { CashFlowTable } from "@/components/reports/cash-flow-custom-report";
+import { EquityTable } from "@/components/reports/equity-custom-report";
 import { useReportLayout } from "@/components/reports/report-layout";
 import { Notice, ui } from "@/components/ui";
 import type { CashFlowFigures } from "@/lib/reports/cash-flow-layout";
+import type { EquityFigures } from "@/lib/reports/equity-layout";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import { columnHeading, statementPeriod } from "@/lib/reports/report-dates";
 import type { cashFlowStatement, changesInEquity, StatementRow } from "@/lib/reports/statements";
@@ -70,9 +71,16 @@ const print = { label: "Print", onSelect: () => window.print() };
 export function ChangesInEquityReport({ organisationId }: { organisationId: string }) {
   const yearEndMonth = useYearEndMonth(organisationId);
   const [dates, setDates] = usePeriod();
-  const report = useApiData<ChangesInEquity>("/api/reports/changes-in-equity", { organisationId, from: dates.from, to: dates.to });
-  const save = useSaveAsCustomReport(organisationId, "changes_in_equity", { from: dates.from, to: dates.to });
+  const layout = useReportLayout(organisationId, "changes_in_equity");
+  const [standard, setStandard] = useState(false);
+  const report = useApiData<ChangesInEquity & { layout: { report: { id: string; title: string }; figures: EquityFigures } | null }>("/api/reports/changes-in-equity", {
+    organisationId,
+    from: dates.from,
+    to: dates.to,
+    ...(standard ? { standard: "1" } : {}),
+  });
   const data = report.data;
+  const shownLayout = data?.layout ?? null;
   const title = "Statement of changes in equity";
   const period = data ? statementPeriod(data.from, data.to, yearEndMonth) : "";
   return (
@@ -86,16 +94,22 @@ export function ChangesInEquityReport({ organisationId }: { organisationId: stri
           yearEndMonth={yearEndMonth}
           onUpdate={setDates}
           busy={report.loading}
-          more={[print, ...(save.item ? [save.item] : [])]}
+          more={[
+            print,
+            ...(layout.chosen ? [standard ? { label: `Show in ${layout.chosen.title}`, onSelect: () => setStandard(false) } : { label: "Show the standard layout", onSelect: () => setStandard(true) }] : []),
+          ]}
+          actions={data ? layout.button(data.to) : null}
           exportProps={data ? { organisationId, report: "changes-in-equity", title, period, style: "statement", tables: [{ id: "changes-in-equity-report" }] } : null}
         />
       }
     >
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
-      {data ? <StatementHeading title={title} period={period} /> : null}
+      {layout.error ? <Notice tone="error">{layout.error}</Notice> : null}
+      {data ? <StatementHeading title={title} period={period} lines={shownLayout ? [`In the layout ${shownLayout.report.title}`] : []} /> : null}
       {data && !data.reconciles ? <Notice tone="warning">Equity at {formatDate(data.to)} doesn&apos;t match the balance sheet.</Notice> : null}
-      {data ? (
+      {shownLayout ? <EquityTable id="changes-in-equity-report" figures={shownLayout.figures} showHidden={false} /> : null}
+      {data && !shownLayout ? (
         <div className={ui.statementWrap}>
           <table id="changes-in-equity-report" className={`${ui.table} ${ui.statement}`}>
             <Head from={data.from} to={data.to} />

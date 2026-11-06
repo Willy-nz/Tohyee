@@ -31,8 +31,10 @@ import {
   type TransactionCustomReportFigures,
   type TransactionReportLayout,
   isCashFlowBase,
+  isEquityLayout,
   isTransactionReportBase,
   standardCashFlowLayout,
+  standardEquityLayout,
   type CashFlowLayout,
   standardLayout,
   templateLayout,
@@ -42,6 +44,7 @@ import { budgetTotals } from "@/lib/budgets/service";
 import { valueWithDescendants } from "@/lib/tracking/service";
 import { optionalSource, requireId, requireIdempotencyKey } from "@/lib/validation";
 import { type CashFlowFigures, computeCashFlowLayout, parseCashFlowLayout } from "@/lib/reports/cash-flow-layout";
+import { computeEquityLayout, type EquityFigures, parseEquityLayout } from "@/lib/reports/equity-layout";
 import {
   computeTransactionCustomReport,
   parseTransactionReportLayout,
@@ -613,9 +616,10 @@ export async function listCustomReports(tx: OrgTx, viewInput: unknown): Promise<
 }
 
 /** A report and its figures: worked out now for a draft, as stored for a published copy (CR7). */
-export type AnyCustomReportFigures = CustomReportFigures | TransactionCustomReportFigures | CashFlowFigures;
+export type AnyCustomReportFigures = CustomReportFigures | TransactionCustomReportFigures | CashFlowFigures | EquityFigures;
 
 async function computeSavedReport(tx: OrgTx, base: CustomReportBase, layout: StoredCustomReportLayout): Promise<AnyCustomReportFigures> {
+  if (isEquityLayout(base, layout)) return computeEquityLayout(tx, layout);
   if (isTransactionReportBase(base)) return computeTransactionCustomReport(tx, base, layout as TransactionReportLayout);
   if (isCashFlowBase(base)) return computeCashFlowLayout(tx, layout as CashFlowLayout);
   return computeCustomReport(tx, base as FinancialReportBase, layout as CustomReportLayout);
@@ -650,10 +654,15 @@ export async function createCustomReport(
   // A profit and loss or balance sheet starts from its template, the standard
   // report's rows (`start: "standard"`, Edit layout, decision 1359), or a
   // layout given ("Save as" from the editor).
+  // Changes in equity starts as a layout (CEL1); one given as a list stays a list (CRS1).
   const layout: StoredCustomReportLayout = isCashFlowBase(base)
     ? command.layout == null
       ? standardCashFlowLayout(periodEnd)
       : await parseCashFlowLayout(tx, command.layout)
+    : base === "changes_in_equity" && (command.layout == null || isEquityLayout(base, command.layout))
+      ? command.layout == null
+        ? standardEquityLayout(periodEnd)
+        : await parseEquityLayout(tx, command.layout)
     : isTransactionReportBase(base)
     ? command.layout == null
       ? templateTransactionReportLayout(base, periodEnd)
@@ -663,7 +672,7 @@ export async function createCustomReport(
       : command.start === "standard"
         ? standardLayout(base as FinancialReportBase, periodEnd)
         : templateLayout(base as FinancialReportBase, periodEnd);
-  if (isTransactionReportBase(base)) await validateTransactionTrackingFilter(tx, (layout as TransactionReportLayout).filters);
+  if (isTransactionReportBase(base) && !isEquityLayout(base, layout)) await validateTransactionTrackingFilter(tx, (layout as TransactionReportLayout).filters);
   const hash = requestHash("custom_report_create", { base, layout });
   const earlier = await tx.query<{ id: string; request_hash: string }>(
     "select id, request_hash from custom_reports where command_source = $1 and idempotency_key = $2",
@@ -696,12 +705,15 @@ export async function updateCustomReport(
   if (command.version !== current.version) {
     throw new ConflictError("Someone else has changed this report since you opened it. Reload it to see their changes.");
   }
+  // A changes in equity report stays a layout or a list, as it was made (CEL5).
   const layout: StoredCustomReportLayout = isCashFlowBase(current.base)
     ? await parseCashFlowLayout(tx, command.layout)
+    : isEquityLayout(current.base, current.layout)
+      ? await parseEquityLayout(tx, command.layout)
     : isTransactionReportBase(current.base)
     ? await parseTransactionReportLayout(tx, current.base, command.layout)
     : await parseLayout(tx, current.base as FinancialReportBase, command.layout);
-  if (isTransactionReportBase(current.base)) await validateTransactionTrackingFilter(tx, (layout as TransactionReportLayout).filters);
+  if (isTransactionReportBase(current.base) && !isEquityLayout(current.base, layout)) await validateTransactionTrackingFilter(tx, (layout as TransactionReportLayout).filters);
   await tx.query(
     `update custom_reports set title = $2, layout = $3::jsonb, version = version + 1, updated_by_email = $4, updated_at = now() where id = $1`,
     [id, layout.title, JSON.stringify(layout), tx.actor.email],
@@ -716,6 +728,7 @@ export async function previewCustomReport(tx: OrgTx, idInput: unknown, layoutInp
   const id = requireId(idInput, "reportId");
   const report = await findReport(tx, id);
   if (report.kind === "published") throw new ConflictError("A published report can't be changed.");
+  if (isEquityLayout(report.base, report.layout)) return computeEquityLayout(tx, await parseEquityLayout(tx, layoutInput));
   if (isTransactionReportBase(report.base)) return computeTransactionCustomReport(tx, report.base, await parseTransactionReportLayout(tx, report.base, layoutInput));
   if (isCashFlowBase(report.base)) return computeCashFlowLayout(tx, await parseCashFlowLayout(tx, layoutInput));
   return computeCustomReport(tx, report.base as FinancialReportBase, await parseLayout(tx, report.base as FinancialReportBase, layoutInput));
