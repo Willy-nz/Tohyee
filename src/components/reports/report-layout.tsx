@@ -7,14 +7,14 @@ import type { MoreMenuItem } from "@/components/more-menu";
 import { Button } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { type FinancialReportBase, lastDayOfMonth } from "@/lib/reports/custom-layout";
+import { type LayoutBase, lastDayOfMonth } from "@/lib/reports/custom-layout";
 
 /**
  * The standard profit and loss or balance sheet's default layout (decision
  * 1359): whether it has one, "Edit layout" (opens it, or starts one from the
  * standard rows), and switching between it and the standard layout.
  */
-export function useReportLayout(organisationId: string, base: FinancialReportBase) {
+export function useReportLayout(organisationId: string, base: LayoutBase) {
   const router = useRouter();
   const { can } = useWorkspace();
   const defaults = useApiData<{

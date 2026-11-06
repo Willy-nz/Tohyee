@@ -13686,6 +13686,24 @@ the details, not yet reviewed.
       instead of having its own download and notes. Tier 3 and Tier 4
       performance reports are still a PDF from that page.
 
+### Cash flow layouts (7 Nov 2026; decisions 1562-1563)
+
+Jess chose what can change (rename, group, move between sections, reorder,
+hide, notes). Examples CFL1-CFL5. Claude's calls on the details, not yet
+reviewed. Tenant migration 0262.
+
+1562. **A cash flows layout arranges lines, not accounts' balances.** A
+      custom report can start from Cash flows. Its sections hold headings and
+      groups of the statement's own lines (net profit, non-cash adjustments,
+      each account's movement, disposal proceeds), so the amounts are always
+      the standard statement's. A line the layout doesn't place stays in its
+      usual section, and the last lines (net change, cash at the start and
+      end) can be renamed but not removed. The net change always matches the
+      bank accounts.
+1563. **Cash flows has a default layout too** (decision 1359). Edit layout is
+      on Reports › Cash flows and beside the annual statement of cash flows;
+      Set as default layout makes both use it.
+
 ### Tests that hung on CI (6 Nov 2026; decisions 1557-1558)
 
 Claude's calls, not yet reviewed. No migration.

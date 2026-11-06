@@ -1,3 +1,4 @@
+import type { AnyCustomReportFigures } from "@/lib/reports/custom";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import * as splitRoute from "@/app/api/reports/profit-and-loss/route";
 import * as trackingRoute from "@/app/api/tracking/route";
@@ -357,7 +358,7 @@ describeWithDatabase("tracking categories", () => {
     const saved = await w.as((tx) =>
       updateCustomReport(tx, report.id, { layout: { ...report.layout, filter: { categoryId: w.location, valueId: w.v.Otago } }, version: 1 }),
     );
-    const rows = (figures: CustomReportFigures) =>
+    const rows = (figures: CustomReportFigures | AnyCustomReportFigures) =>
       Object.fromEntries(
         (figures.blocks[0] as { rows: Array<{ label: string; values: Record<string, string | null> }> }).rows.map((row) => [row.label, row.values.p0]),
       );

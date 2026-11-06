@@ -1,3 +1,4 @@
+import type { CashFlowFigures } from "@/lib/reports/cash-flow-layout";
 import type { AnyCustomReportFigures } from "@/lib/reports/custom";
 import type { BudgetVsActual, BudgetVsActualGroup, VarianceFigures } from "@/lib/reports/budget-vs-actual";
 import type { ProfitAndLossSplit, SplitGroup } from "@/lib/reports/financial";
@@ -196,8 +197,10 @@ export function budgetTable(report: BudgetVsActual): ReportTable {
  * screen), and each text block as a text row.
  */
 export function customTable(report: { id: string; title: string; kind: string; publishedAt: string | null }, figures: AnyCustomReportFigures): ReportTable {
+  if (figures.base === "cash_flows") return cashFlowTable(report, figures as CashFlowFigures);
+  const financial = figures as Exclude<AnyCustomReportFigures, CashFlowFigures>;
   const rows: ReportTableRow[] = [];
-  for (const block of figures.blocks) {
+  for (const block of financial.blocks) {
     if (block.kind === "text") {
       rows.push({ key: `b${block.id}`, kind: "text", label: block.text, values: {} });
       continue;
@@ -232,12 +235,48 @@ export function customTable(report: { id: string; title: string; kind: string; p
     from: periods.map((column) => column.from).filter((date): date is string => Boolean(date)).sort()[0] ?? null,
     to: periods.map((column) => column.to).filter((date): date is string => Boolean(date)).sort().at(-1) ?? null,
     currencyCode: figures.currencyCode,
-    filter: figures.filterLabel ?? null,
+    filter: financial.filterLabel ?? null,
     columns: figures.columns.map((column) => ({ key: column.key, kind: column.kind, label: column.label, from: column.from, to: column.to })),
     rows,
-    notInReport: figures.notInReport,
-    inSeveralGroups: figures.inSeveralGroups,
+    notInReport: financial.notInReport,
+    inSeveralGroups: financial.inSeveralGroups,
     ...("data" in figures && figures.data !== undefined ? { transactions: figures.data } : {}),
+    computedAt: figures.computedAt,
+  };
+}
+
+/** A cash flows layout's figures (CFL1-CFL4): each section's rows and total, then the last lines. */
+function cashFlowTable(report: { id: string; title: string; kind: string; publishedAt: string | null }, figures: CashFlowFigures): ReportTable {
+  const rows: ReportTableRow[] = [];
+  for (const block of figures.blocks) {
+    if (block.kind === "text") {
+      rows.push({ key: `b${block.id}`, kind: "text", label: block.text, values: {} });
+      continue;
+    }
+    rows.push({ key: `b${block.id}`, kind: "heading", label: block.title, values: {} });
+    for (const row of block.rows) {
+      if (row.kind === "group" && row.showLines) for (const line of row.lines) rows.push({ key: `${row.id}:${line.ref}`, kind: "account", label: line.label, values: line.values });
+      rows.push({ key: row.id, kind: row.kind === "heading" ? "heading" : "group", label: row.label, values: row.values, ...(row.note ? { note: row.note } : {}), ...(row.hidden ? { hidden: true } : {}) });
+    }
+    rows.push({ key: `t${block.id}`, kind: "total", label: block.total.label, values: block.total.values });
+  }
+  for (const line of figures.end) rows.push({ key: line.key, kind: "total", label: line.label, values: line.values });
+  const periods = figures.columns.filter((column) => column.from || column.to);
+  return {
+    report: "custom_report",
+    reportId: report.id,
+    title: report.title,
+    kind: report.kind,
+    publishedAt: report.publishedAt,
+    base: figures.base,
+    from: periods.map((column) => column.from).filter((date): date is string => Boolean(date)).sort()[0] ?? null,
+    to: periods.map((column) => column.to).filter((date): date is string => Boolean(date)).sort().at(-1) ?? null,
+    currencyCode: figures.currencyCode,
+    filter: null,
+    columns: figures.columns.map((column) => ({ key: column.key, kind: column.kind, label: column.label, from: column.from, to: column.to })),
+    rows,
+    notInReport: [],
+    inSeveralGroups: [],
     computedAt: figures.computedAt,
   };
 }
