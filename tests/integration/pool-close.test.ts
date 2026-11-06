@@ -35,6 +35,8 @@ describeWithDatabase("closing database pools", () => {
     warn.mockRestore();
     await getAdminPool().query(`drop database if exists ${quoteSqlIdentifier(databaseName)} with (force)`);
     expect((await getAdminPool().query("select 1 from pg_database where datname = $1", [databaseName])).rowCount).toBe(0);
+    // The connection that was still out was ended by the drop: its next query fails, and nothing crashes.
+    await expect(held.query("select 1")).rejects.toThrow();
     held.release(true);
   });
 

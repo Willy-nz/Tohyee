@@ -50,6 +50,14 @@ function createPool(connectionString: string, max: number): pg.Pool {
   pool.on("error", (error) => {
     console.error("[tohyee] idle database connection error:", error.message);
   });
+  // The pool only listens to idle clients. One in use whose session is ended
+  // (a database dropped WITH (FORCE), or a restart) mustn't crash the server
+  // either: its next query fails instead.
+  pool.on("connect", (client) => {
+    client.on("error", (error) => {
+      console.error("[tohyee] database connection error:", error.message);
+    });
+  });
   return pool;
 }
 
