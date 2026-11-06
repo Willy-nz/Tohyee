@@ -1,4 +1,5 @@
 import { route, searchParams, withOrganisation } from "@/lib/api/http";
+import { financialStatementsPdf } from "@/lib/reports/financial-statements";
 import { yearEndReportPdf } from "@/lib/reports/performance-report-pdf";
 
 function asciiFileName(name: string): string {
@@ -9,10 +10,19 @@ function asciiFileName(name: string): string {
     .replace(/["\\]/g, "");
 }
 
-/** GET: the year-end financial statements for the year ending `yearEnd`, as one PDF (FS1-FS3). Viewers and above. */
+/**
+ * GET: the year-end financial statements for the year ending `yearEnd`, as
+ * one PDF (FS1-FS3): in the organisation's report format, or (`kind=statements`)
+ * the special purpose statements the Annual financial statements report shows (FS4).
+ * Viewers and above.
+ */
 export const GET = route(async (request) => {
   const params = searchParams(request);
-  const pdf = await withOrganisation(request, params.get("organisationId"), "viewer", (tx) => yearEndReportPdf(tx, { yearEnd: params.get("yearEnd") }));
+  const pdf = await withOrganisation(request, params.get("organisationId"), "viewer", (tx) =>
+    params.get("kind") === "statements"
+      ? financialStatementsPdf(tx, { yearEnd: params.get("yearEnd") })
+      : yearEndReportPdf(tx, { yearEnd: params.get("yearEnd") }),
+  );
   return new Response(new Uint8Array(pdf.bytes), {
     status: 200,
     headers: {
