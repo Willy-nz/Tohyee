@@ -13652,6 +13652,19 @@ common NZ practice, not yet reviewed. No migration.
       but its date, quality, legend and attribution are kept, and the map
       says the picture was too big to keep on the device. Earlier dates
       are then kept only while everything fits.
+### Tests that hung on CI (6 Nov 2026; decisions 1557-1558)
+
+Claude's calls, not yet reviewed. No migration.
+
+1557. **Closing a database pool waits 10 seconds at most** for connections
+      still in use (TOHYEE_POOL_CLOSE_WAIT_MS), then says so in the log and
+      goes on. It's done before a database is dropped (demo farm delete,
+      restore, test clean-up), and the drop's FORCE ends what's left.
+      Before, it could wait forever. CI's test database also runs without
+      saving to disk safely (fsync off), as it's thrown away.
+1558. **The phone's queue keeps the order things were saved in.** A new
+      item is stamped just after the newest one, so two saved in the same
+      millisecond, or after the clock was put back, still sync in order.
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

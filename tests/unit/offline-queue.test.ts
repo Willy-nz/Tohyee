@@ -54,6 +54,24 @@ describe("the queue", () => {
     expect(again.items().map((entry) => [entry.operationId, entry.status])).toEqual([[item.operationId, "waiting"]]);
   });
 
+  it("keeps the order things were saved in, even within one millisecond or with the clock put back", async () => {
+    // A clock that never moves, then one that goes back: ids that sort the other way round.
+    const times = ["2026-10-28T09:00:00.000Z", "2026-10-28T09:00:00.000Z", "2026-10-28T09:00:00.000Z", "2026-10-28T08:00:00.000Z"];
+    let call = 0;
+    const factory = new IDBFactory();
+    const now = () => times[Math.min(call++, times.length - 1)];
+    const queue = await openQueue(SCOPE, { factory, now, locks: null, channel: false });
+    const ids = ["ffffffff-0000-4000-8000-000000000001", "88888888-0000-4000-8000-000000000002", "11111111-0000-4000-8000-000000000003", "00000000-0000-4000-8000-000000000004"];
+    for (const [index, operationId] of ids.entries()) await queue.add({ ...reportItem(`Report ${index + 1}`), operationId });
+    expect(queue.items().map((item) => item.operationId)).toEqual(ids);
+    // The same after reopening, from what's stored.
+    const again = await openQueue(SCOPE, { factory, now: () => "2026-10-28T09:00:00.000Z", locks: null, channel: false });
+    expect(again.items().map((item) => item.operationId)).toEqual(ids);
+    const remote = server();
+    await again.sync(remote.send);
+    expect(remote.seen.map((body) => body.operationId)).toEqual(ids);
+  });
+
   it("sends once, with organisationId and its operation id, and a second sync sends nothing", async () => {
     const { queue } = await fresh();
     const { item } = await queue.add(reportItem());

@@ -62,6 +62,18 @@ jobs:
           sudo apt-get install -y postgresql-client-17
           /usr/lib/postgresql/17/bin/pg_dump --version
 
+      # The test databases are thrown away, so they needn't be safe from a
+      # power cut. Without this, each DROP DATABASE waits for a checkpoint
+      # that writes the whole server's changes to disk, and with many test
+      # files at once that can run past a test's time limit.
+      - name: Make the test database quicker (it's thrown away)
+        run: |
+          for setting in "fsync = off" "synchronous_commit = off" "full_page_writes = off"; do
+            /usr/lib/postgresql/17/bin/psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter system set $setting"
+          done
+          /usr/lib/postgresql/17/bin/psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "select pg_reload_conf()"
+          /usr/lib/postgresql/17/bin/psql "$TEST_DATABASE_URL" -At -c "show fsync"
+
       - name: Check foundation docs
         run: npm run validate:foundation
 

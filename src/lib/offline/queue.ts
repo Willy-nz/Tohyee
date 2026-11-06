@@ -118,6 +118,12 @@ export type QueueItem = {
   meta: Record<string, unknown>;
 };
 
+/** `time`, or 1 ms after the newest item's createdAt if that isn't later (queue order). */
+export function afterNewest(time: string, items: readonly Pick<QueueItem, "createdAt">[]): string {
+  const newest = items.reduce((latest, item) => (item.createdAt > latest ? item.createdAt : latest), "");
+  return newest && time <= newest ? new Date(Date.parse(newest) + 1).toISOString() : time;
+}
+
 export type NewQueueItem = {
   operationId?: string;
   kind: string;
@@ -469,7 +475,9 @@ export async function openQueue(scope: QueueScope, options: QueueOptions = {}): 
       const operationId = input.operationId ?? newOperationId();
       const existing = items.find((item) => item.operationId === operationId);
       if (existing) return { item: existing, stored: !unstored.has(operationId) };
-      const time = now();
+      // Just after the newest item, so the queue keeps the order things were
+      // saved in even within one millisecond or with the clock put back.
+      const time = afterNewest(now(), items);
       const item: QueueItem = {
         operationId,
         scope: key,
