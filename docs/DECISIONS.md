@@ -14187,3 +14187,12 @@ show, 100 a page, and clicking one should let her edit it.
       journal**: a posted journal isn't changed in place, so saving posts a
       correction (a reversal and the new version), as before. The API takes
       `page` and `pageSize` and gives `total`; `beforeId` still works.
+
+### General ledger report (7 Nov 2026; decision 1566)
+
+1566. **General ledger is its own report.** Reports › General ledger (in
+      the Ledger group, first) is Account transactions for every account
+      with an opening balance or lines in the range, titled General ledger,
+      with no account to choose (GL1). It has the same tracking filter,
+      export, print and Save as custom report. Account transactions keeps
+      its account picker.
