@@ -3,8 +3,9 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { compareAmountColumns } from "@/lib/reports/compare-columns";
 import { type CashFlowFigures, computeCashFlowLayout } from "@/lib/reports/cash-flow-layout";
+import { computeEquityLayout, type EquityFigures } from "@/lib/reports/equity-layout";
 import { computeCustomReport, type CustomReport, getCustomReport } from "@/lib/reports/custom";
-import type { CashFlowLayout, CustomReportFigures, CustomReportLayout, FinancialReportBase, LayoutBase, ReportColumn } from "@/lib/reports/custom-layout";
+import { type CashFlowLayout, type CustomReportFigures, type CustomReportLayout, type FinancialReportBase, isEquityLayout, type LayoutBase, type ReportColumn } from "@/lib/reports/custom-layout";
 import { balanceSheet, financialYearEndMonth, profitAndLoss, totalsFilter } from "@/lib/reports/financial";
 import { parseCompare } from "@/lib/reports/statement-compare";
 import { parseTrackingFilter } from "@/lib/reports/tracking-filter";
@@ -21,10 +22,10 @@ import { requireId } from "@/lib/validation";
  */
 
 export type { LayoutBase };
-const BASES: readonly LayoutBase[] = ["profit_and_loss", "balance_sheet", "cash_flows"];
+const BASES: readonly LayoutBase[] = ["profit_and_loss", "balance_sheet", "cash_flows", "changes_in_equity"];
 
 function parseBase(input: unknown): LayoutBase {
-  if (typeof input !== "string" || !BASES.includes(input as LayoutBase)) throw new ValidationError("Choose the profit and loss, the balance sheet or cash flows.");
+  if (typeof input !== "string" || !BASES.includes(input as LayoutBase)) throw new ValidationError("Choose the profit and loss, the balance sheet, cash flows or changes in equity.");
   return input as LayoutBase;
 }
 
@@ -48,12 +49,17 @@ export async function setLayoutDefault(tx: OrgTx, input: { base: unknown; report
     return listLayoutDefaults(tx);
   }
   const reportId = requireId(input.reportId, "reportId");
-  const found = await tx.query<{ kind: string; base: string; archived_at: string | null }>("select kind, base, archived_at from custom_reports where id = $1 for update", [reportId]);
+  const found = await tx.query<{ kind: string; base: string; archived_at: string | null; layout: unknown }>(
+    "select kind, base, archived_at, layout from custom_reports where id = $1 for update",
+    [reportId],
+  );
   const report = found.rows[0];
   if (!report) throw new NotFoundError("Report not found.");
   if (report.base !== base) throw new ValidationError("That report starts from a different standard report.");
   if (report.kind !== "draft") throw new ConflictError("A published report is a frozen copy, so it can't be the layout reports are worked out with. Use its draft.");
   if (report.archived_at) throw new ConflictError("This report is archived. Bring it back first.");
+  if (base === "changes_in_equity" && !isEquityLayout(base, report.layout))
+    throw new ValidationError("That report is a list, not a layout. Start one from Changes in equity, or use Edit layout on the report (CEL5).");
   await tx.query(
     `insert into report_layout_defaults (base, custom_report_id, set_by_email) values ($1, $2, $3)
      on conflict (base) do update set custom_report_id = excluded.custom_report_id, set_by_email = excluded.set_by_email, set_at = now()
@@ -92,7 +98,7 @@ export async function runDefaultLayout(
   },
 ): Promise<{ report: CustomReport; figures: CustomReportFigures } | null> {
   const parsed = parseBase(input.base);
-  if (parsed === "cash_flows") throw new ValidationError("Use the cash flows layout.");
+  if (parsed === "cash_flows" || parsed === "changes_in_equity") throw new ValidationError("Use the cash flows or changes in equity layout.");
   const base: FinancialReportBase = parsed;
   const defaults = await listLayoutDefaults(tx);
   const chosen = defaults.find((entry) => entry.base === base);
@@ -129,11 +135,30 @@ export async function runDefaultCashFlowLayout(
   const chosen = (await listLayoutDefaults(tx)).find((entry) => entry.base === "cash_flows");
   if (!chosen) return null;
   const { report } = await getCustomReport(tx, chosen.reportId);
+  return { report, figures: await computeCashFlowLayout(tx, report.layout as CashFlowLayout, { columns: await layoutPeriods(tx, input) }) };
+}
+
+/** A period and the earlier ones to compare, as columns for a cash flows or changes in equity layout. */
+async function layoutPeriods(tx: OrgTx, input: { from: string; to: string; compare?: unknown; compareBy?: unknown; order?: unknown }): Promise<ReportColumn[]> {
   const compare = parseCompare({ compare: input.compare, compareBy: input.compareBy, order: input.order }) ?? { periods: 0, periodLength: "month" as const };
-  const columns: ReportColumn[] = compareAmountColumns("profit_and_loss", { from: input.from, to: input.to }, { ...compare, total: false, percentOfIncome: false }, await financialYearEndMonth(tx))
+  return compareAmountColumns("profit_and_loss", { from: input.from, to: input.to }, { ...compare, total: false, percentOfIncome: false }, await financialYearEndMonth(tx))
     .filter((column) => column.kind === "period")
     .map((column) => ({ key: column.key, kind: "period", label: column.label, from: column.from, to: column.to }));
-  return { report, figures: await computeCashFlowLayout(tx, report.layout as CashFlowLayout, { columns }) };
+}
+
+/**
+ * The default changes in equity layout for a period, with earlier periods
+ * to compare (CEL5), or null when there's none (the standard statement shows).
+ */
+export async function runDefaultEquityLayout(
+  tx: OrgTx,
+  input: { from: string; to: string; compare?: unknown; compareBy?: unknown; order?: unknown },
+): Promise<{ report: CustomReport; figures: EquityFigures } | null> {
+  const chosen = (await listLayoutDefaults(tx)).find((entry) => entry.base === "changes_in_equity");
+  if (!chosen) return null;
+  const { report } = await getCustomReport(tx, chosen.reportId);
+  if (!isEquityLayout(report.base, report.layout)) return null;
+  return { report, figures: await computeEquityLayout(tx, report.layout, { columns: await layoutPeriods(tx, input) }) };
 }
 
 const FAVOURITE_KEY = /^(std:[a-z]{2,20}|custom:[1-9][0-9]{0,17})$/;

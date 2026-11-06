@@ -21,10 +21,18 @@ import type {
 } from "@/lib/reports/custom-layout";
 
 type Loaded = { report: CustomReport; figures: AnyCustomReportFigures };
-type TableRow = { kind?: "section" | "total"; values: Record<string, unknown> };
+/** `keepZero`: show 0.00 rather than a blank, for a balance that's worth saying is nil. */
+type TableRow = { kind?: "section" | "total"; values: Record<string, unknown>; keepZero?: boolean };
+
+/** Amount columns, right-aligned. */
+const NUMBER_COLUMNS = new Set([
+  "debit", "credit", "balance", "total", "current", "days1to30", "days31to60", "days61to90", "over90", "sales", "creditNotes", "netSales", "document.amount",
+  "invoices", "amount", "quantity", "averageCost", "value", "actual", "budget", "variance", "variancePercent",
+]);
 
 function displayValue(value: unknown): string {
   if (value == null) return "";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return formatDate(value);
   if (typeof value === "string" || typeof value === "number") return String(value);
   if (typeof value === "boolean") return value ? "Yes" : "";
   return "";
@@ -35,13 +43,13 @@ function reportRows(figures: TransactionCustomReportFigures): TableRow[] {
   const showDocuments = figures.selectedColumns.some((key) => key.startsWith("document."));
   const data = figures.data as Record<string, unknown>;
   const rows: TableRow[] = [];
-  const push = (values: Record<string, unknown>, kind?: TableRow["kind"]) => rows.push({ values, kind });
+  const push = (values: Record<string, unknown>, kind?: TableRow["kind"], keepZero = false) => rows.push({ values, kind, keepZero });
   if (figures.base === "account_transactions") {
     const accounts = (data.accounts ?? []) as Array<Record<string, unknown>>;
     for (const account of accounts) {
       const lines = (account.lines ?? []) as Array<Record<string, unknown>>;
       push({ date: `${account.code} · ${account.name}` }, "section");
-      push({ description: "Opening balance", balance: account.opening });
+      push({ description: "Opening balance", balance: account.opening }, undefined, true);
       for (const line of lines) {
         const source = line.source as Record<string, unknown> | null;
         push({
@@ -160,10 +168,10 @@ function reportRows(figures: TransactionCustomReportFigures): TableRow[] {
     group("expenses", "Expenses");
     push({ ...(data.netProfit as Record<string, unknown>), name: "Net profit" }, "total");
   } else if (figures.base === "changes_in_equity") {
-    push({ item: "Equity at the start", amount: data.openingEquity }, "total");
-    push({ item: "Net profit for the period", amount: data.profit });
+    push({ item: "Equity at the start", amount: data.openingEquity }, "total", true);
+    push({ item: "Net profit for the period", amount: data.profit }, undefined, true);
     for (const movement of (data.movements ?? []) as Array<Record<string, unknown>>) push({ item: movement.label, amount: movement.amount });
-    push({ item: "Equity at the end", amount: data.closingEquity }, "total");
+    push({ item: "Equity at the end", amount: data.closingEquity }, "total", true);
   } else {
     const journals = (data.journals ?? []) as Array<Record<string, unknown>>;
     for (const journal of journals) {
@@ -367,14 +375,14 @@ export function TransactionCustomReportPage({ organisationId, loaded }: { organi
         <ReportExport organisationId={organisationId} report={exportName} title={report.title} period={period} tables={[{ id: exportId }]} />
         <div className={ui.tableWrap}>
           <table id={exportId} className={ui.table}>
-            <thead><tr>{selectedColumns.map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead>
+            <thead><tr>{selectedColumns.map((column) => <th key={column.key} className={NUMBER_COLUMNS.has(column.key) ? ui.num : undefined}>{column.label}</th>)}</tr></thead>
             <tbody>
               {rows.map((row, index) => (
                 <tr key={index} className={row.kind === "section" ? ui.reportHeading : row.kind === "total" ? ui.reportTotal : undefined}>
                   {selectedColumns.map((column) => {
                     const value = cellValue(row, column);
-                    return                     <td key={column.key} className={["debit", "credit", "balance", "total", "current", "days1to30", "days31to60", "days61to90", "over90", "sales", "creditNotes", "netSales", "document.amount"].includes(column.key) ? ui.num : undefined}>
-                      {typeof value === "string" && /^-?\d+\.\d{2}$/.test(value) ? <Money value={value} blankZero /> : displayValue(value)}
+                    return                     <td key={column.key} className={NUMBER_COLUMNS.has(column.key) ? ui.num : undefined}>
+                      {typeof value === "string" && /^-?\d+\.\d{2}$/.test(value) ? <Money value={value} blankZero={!row.keepZero} /> : displayValue(value)}
                     </td>;
                   })}
                 </tr>

@@ -17,6 +17,7 @@ import type { AnyCustomReportFigures } from "@/lib/reports/custom";
 import {
   type ComputedBlock,
   CUSTOM_REPORT_BASES,
+  isEquityLayout,
   isTransactionReportBase,
   CUSTOM_REPORT_LIMITS,
   type CustomReportBase,
@@ -44,6 +45,7 @@ import { statementAsAt, statementPeriod } from "@/lib/reports/report-dates";
 import { InfoTip } from "@/components/info-tip";
 import { CustomFiguresTable, type RowEditor } from "@/components/reports/custom-report-table";
 import { CashFlowCustomReportPage } from "@/components/reports/cash-flow-custom-report";
+import { EquityCustomReportPage } from "@/components/reports/equity-custom-report";
 import { TransactionCustomReportPage } from "@/components/reports/transaction-custom-report";
 import { MoreMenu, type MoreMenuItem } from "@/components/more-menu";
 import { ExportMenu } from "@/components/reports/report-export";
@@ -136,7 +138,7 @@ export function StartCustomReport({ organisationId }: { organisationId: string }
         <div className={ui.stat}>
           <div className={ui.statLabel}>Start from</div>
           <div className={ui.statValue}>Annual financial statements</div>
-          <p className={ui.muted}>Built from your profit and loss, balance sheet and cash flows layouts: edit them with Edit layout beside each statement.</p>
+          <p className={ui.muted}>Built from your profit and loss, balance sheet, changes in equity and cash flows layouts: edit them with Edit layout beside each statement.</p>
           <Link className={`${ui.button} ${ui.secondary}`} href="/operations/reports?report=statements">
             Open the statements
           </Link>
@@ -904,6 +906,9 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
   if (!loaded.data) return <p className={ui.muted}>Loading…</p>;
   const currentLoaded = state ?? loaded.data;
+  if (isEquityLayout(currentLoaded.report.base, currentLoaded.report.layout)) {
+    return <EquityCustomReportPage organisationId={organisationId} loaded={currentLoaded} />;
+  }
   if (isTransactionReportBase(currentLoaded.report.base)) {
     return <TransactionCustomReportPage organisationId={organisationId} loaded={currentLoaded} />;
   }

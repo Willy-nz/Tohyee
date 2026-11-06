@@ -10,8 +10,9 @@ import { balanceSheet, financialYearEndMonth, profitAndLoss } from "@/lib/report
 import { getPerformanceSettings } from "@/lib/reports/performance-report";
 import type { ComputedRow, CustomReportFigures, FinancialReportBase } from "@/lib/reports/custom-layout";
 import type { CashFlowFigures } from "@/lib/reports/cash-flow-layout";
-import { CASH_FLOW_END_LABELS } from "@/lib/reports/custom-layout";
-import { type LayoutBase, runDefaultCashFlowLayout, runDefaultLayout } from "@/lib/reports/report-layouts";
+import { CASH_FLOW_END_LABELS, EQUITY_END_LABELS } from "@/lib/reports/custom-layout";
+import type { EquityFigures } from "@/lib/reports/equity-layout";
+import { type LayoutBase, runDefaultCashFlowLayout, runDefaultEquityLayout, runDefaultLayout } from "@/lib/reports/report-layouts";
 import { cashFlowStatement, changesInEquity, type StatementRow } from "@/lib/reports/statements";
 import { statementAmount, statementValue } from "@/lib/reports/statement-format";
 import { requireArray, requireString } from "@/lib/validation";
@@ -341,6 +342,35 @@ function cashFlowLines(figures: CashFlowFigures, yearEnd: string, priorEnd: stri
   return { lines, paragraphs };
 }
 
+/** A default changes in equity layout as statement lines (CEL5): equity at the start, the rows, then equity at the end. */
+function equityLines(figures: EquityFigures, yearEnd: string, priorEnd: string): { lines: Line[]; paragraphs: string[] } {
+  const current = figures.columns.find((column) => column.to === yearEnd)?.key;
+  const prior = figures.columns.find((column) => column.to === priorEnd)?.key;
+  const value = (values: Record<string, string | null>, key: string | undefined) => (key ? (values[key] ?? null) : null);
+  // The standard names say "year" here, as the statements cover one.
+  const yearly = (label: string, standard: string) => (label === standard ? label.replace(/of the period$/, "of the year") : label);
+  const lines: Line[] = [
+    { key: "e:opening", label: yearly(figures.opening.label, EQUITY_END_LABELS.opening), current: value(figures.opening.values, current), prior: value(figures.opening.values, prior), kind: "subtotal" },
+  ];
+  const paragraphs: string[] = [];
+  for (const row of figures.blocks) {
+    if (row.kind === "text") {
+      paragraphs.push(row.text);
+      continue;
+    }
+    if (row.hidden) continue;
+    const note = row.note ? { note: row.note } : {};
+    if (row.kind === "heading") lines.push({ key: row.id, label: row.label, current: null, prior: null, kind: "section", ...note });
+    else if (row.showLines) {
+      lines.push({ key: `h:${row.id}`, label: row.label, current: null, prior: null, kind: "section" });
+      for (const line of row.lines) lines.push({ key: `${row.id}:${line.ref}`, label: line.label, current: value(line.values, current), prior: value(line.values, prior) });
+      lines.push({ key: row.id, label: `Total ${row.label}`, current: value(row.values, current), prior: value(row.values, prior), kind: "subtotal", ...note });
+    } else lines.push({ key: row.id, label: row.label, current: value(row.values, current), prior: value(row.values, prior), ...note });
+  }
+  lines.push({ key: "e:closing", label: yearly(figures.closing.label, EQUITY_END_LABELS.closing), current: value(figures.closing.values, current), prior: value(figures.closing.values, prior), kind: "total" });
+  return { lines, paragraphs };
+}
+
 /** The year's statements (FS1, FS4-FS7): the standard lines, or the default layouts for financial performance and position (decision 1560). */
 export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unknown }, now = new Date()): Promise<FinancialStatements> {
   const yearEndMonth = await financialYearEndMonth(tx);
@@ -390,6 +420,7 @@ export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unkn
     );
   const plLayout = await layout("profit_and_loss");
   const bsLayout = await layout("balance_sheet");
+  const ceLayout = await runDefaultEquityLayout(tx, { from: yearStart, to: yearEnd, compare: 1, compareBy: "year", order: "newest_first" });
   const cfLayout = await runDefaultCashFlowLayout(tx, { from: yearStart, to: yearEnd, compare: 1, compareBy: "year", order: "newest_first" });
 
   const heading = (label: string): Line => ({
@@ -480,11 +511,11 @@ export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unkn
     total("Total equity", bs.equity.total, bsPrior.equity.total),
   ]);
 
-  const equity: FinancialStatement = {
+  const equityStandard: FinancialStatement = {
     key: "equity",
     title: "Statement of changes in equity",
     subtitle: period,
-    base: null,
+    base: "changes_in_equity",
     layout: null,
     paragraphs: [],
     lines: [
@@ -499,6 +530,11 @@ export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unkn
       total("Equity at the end of the year", sce.closingEquity, scePrior.closingEquity),
     ],
   };
+
+  // The default changes in equity layout, when there's one (CEL5).
+  const equity: FinancialStatement = ceLayout
+    ? { ...equityStandard, layout: { reportId: ceLayout.report.id, title: ceLayout.report.title }, ...equityLines(ceLayout.figures, yearEnd, priorEnd) }
+    : equityStandard;
 
   const proceeds = (value: string) =>
     /^-?0(\.0+)?$/.test(value)

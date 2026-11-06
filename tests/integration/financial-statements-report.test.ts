@@ -71,7 +71,7 @@ describeWithDatabase("annual financial statements report", () => {
     expect(statement(report, "performance").layout).toBeNull();
     expect(statement(report, "performance").base).toBe("profit_and_loss");
     expect(statement(report, "position").base).toBe("balance_sheet");
-    expect(statement(report, "equity").base).toBeNull();
+    expect(statement(report, "equity").base).toBe("changes_in_equity");
     expect(report.notes.saved).toBe(false);
     await expect(run((tx) => buildFinancialStatements(tx, { yearEnd: "2027-03-30" }))).rejects.toThrow(/financial year end/);
   });
