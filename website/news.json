@@ -2,10 +2,10 @@
   "about": "Announcements shown on the Home page of the Tohyee server app (Windows), next to the GitHub releases. Edit this file on main and GitHub Pages publishes it to https://willy-nz.github.io/Tohyee/news.json. Each item: date (YYYY-MM-DD), title, body, and optionally link (https) and kind (\"conference\" shows it in the conference card).",
   "items": [
     {
-      "date": "2026-11-05",
-      "title": "Tohyee 0.28.0: e-signatures, time-limited access and farm mobs",
-      "body": "Sign quotes, year-end statements, staff paperwork and any PDF online. Your AI can build Analytics reports, and every report has a history. Give people access for a set time and write a hiring brief from your books. On the farm: mobs, animal treatments with safe dates, satellite paddock greenness, rainfall, team tasks and map extras.",
-      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.28.0"
+      "date": "2026-11-06",
+      "title": "Tohyee 0.29.0: e-signatures, time-limited access, farm animals and weather",
+      "body": "Sign quotes, year-end statements, staff paperwork and any PDF online. Your AI can build Analytics reports, and every report has a history. Give people access for a set time and write a hiring brief from your books. On the farm: mobs, breeding and rotation planning, a farm timeline, animals with weights and body condition scores, treatments with safe dates, satellite paddock greenness, MetService forecasts with your own key, rainfall, team tasks and map extras.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.29.0"
     },
     {
       "date": "2026-11-04",
