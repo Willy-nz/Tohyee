@@ -28,6 +28,9 @@ import {
   planRefund,
 } from "@/lib/sales-platforms/orders";
 import { SALES_PLATFORM_LABELS, type SalesPlatform, type SyncResult } from "@/lib/sales-platforms/types";
+import { closeHeld, countSent, holdLines, refundHeld, saveHeld, takeRefundFromHeld } from "@/lib/sales-platforms/when-sent";
+
+export { ordersHeld } from "@/lib/sales-platforms/when-sent";
 import { isOverseas } from "@/lib/tax/exports";
 
 /**
@@ -65,6 +68,8 @@ export type Posting = PostingRules & {
   reserveAccountCode: string | null;
   /** The contact guest checkouts go to (decision 317), or null to refuse them. */
   guestContactId: string | null;
+  /** Sales when sent's Income in advance account (SWS1), or null when it's off. */
+  salesWhenSentAccountCode: string | null;
 };
 
 export type PostingContext = {
@@ -91,6 +96,7 @@ type ConnectionSettingsRow = {
   chargebacks_code: string | null;
   reserve_code: string | null;
   guest_contact_id: string | null;
+  when_sent_code: string | null;
 };
 
 /**
@@ -103,8 +109,9 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
     `select c.id, c.platform, c.store_domain, c.post_to_accounts, c.start_date::text as start_date, c.clearing_account_id,
             clearing.code as clearing_code, payout.code as payout_code, fees.code as fees_code, sales.code as sales_code,
             shipping.code as shipping_code, untaxed.code as untaxed_code, c.guest_contact_id::text,
-            chargebacks.code as chargebacks_code, reserve.code as reserve_code
+            chargebacks.code as chargebacks_code, reserve.code as reserve_code, when_sent.code as when_sent_code
        from sales_platform_connections c
+       left join accounts when_sent on when_sent.id = c.sales_when_sent_account_id
        left join accounts clearing on clearing.id = c.clearing_account_id
        left join accounts payout on payout.id = c.payout_account_id
        left join accounts fees on fees.id = c.fees_account_id
@@ -144,6 +151,7 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
     chargebacksAccountCode: row.chargebacks_code,
     reserveAccountCode: row.reserve_code,
     guestContactId: row.guest_contact_id,
+    salesWhenSentAccountCode: row.platform === "shopify" ? row.when_sent_code : null,
     baseCurrency: tx.baseCurrency,
     gstRegistered: settings.gstRegistered,
     gstRegistration: {
@@ -174,13 +182,14 @@ type DocumentRow = {
   sales_order_id: string | null;
   invoice_id: string | null;
   customer_payment_id: string | null;
+  sales_when_sent: boolean;
 };
 
 type RecordKind = "order" | "refund" | "payout";
 
 async function findDocument(tx: OrgTx, posting: Posting, kind: RecordKind, externalId: string): Promise<DocumentRow | null> {
   const result = await tx.query<DocumentRow>(
-    `select id, state, retry, contact_id, sales_order_id, invoice_id, customer_payment_id from sales_platform_documents
+    `select id, state, retry, contact_id, sales_order_id, invoice_id, customer_payment_id, sales_when_sent from sales_platform_documents
       where platform = $1 and store_domain = $2 and record_kind = $3 and external_id = $4 for update`,
     [posting.platform, posting.storeDomain, kind, externalId],
   );
@@ -204,6 +213,7 @@ type DocumentValues = Partial<{
   reserve_held_transfer_id: string;
   reserve_released_transfer_id: string;
   external_updated_at: string | null;
+  sales_when_sent: boolean;
 }>;
 
 const DOCUMENT_COLUMNS = [
@@ -223,6 +233,7 @@ const DOCUMENT_COLUMNS = [
   "reserve_held_transfer_id",
   "reserve_released_transfer_id",
   "external_updated_at",
+  "sales_when_sent",
 ] as const;
 
 /** Records (or updates) what a Shopify record became. Columns not given keep their values. */
@@ -480,6 +491,10 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       await refuse(plan.reason);
       return;
     }
+    // Sales when sent (SWS1): what's to be sent is held in Income in advance until it is.
+    const heldAccount = posting.salesWhenSentAccountCode;
+    const holding = heldAccount ? holdLines(plan.lines, plan.rates, plan.amountsMode, heldAccount) : null;
+    const soLines = holding ? holding.lines : plan.lines.map((line) => ({ ...line, source: undefined }));
     const made = await attempt(tx, async () => {
       const { salesOrder } = await createSalesOrder(tx, {
         source: SOURCE,
@@ -489,9 +504,10 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
         reference: order.name,
         memo: `${shop} order ${order.name}`,
         amountsMode: plan.amountsMode,
-        lines: plan.lines,
+        lines: soLines,
       });
       const approved = await approveSalesOrder(tx, salesOrder.id, { source: SOURCE, idempotencyKey: keyFor(posting, "order", id, "so-approve") });
+      if (holding && heldAccount && holding.held.length > 0) await saveHeld(tx, posting.connectionId, id, heldAccount, holding.held);
       return approved.salesOrder;
     });
     if (!made.ok) {
@@ -505,6 +521,7 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       contact_id: contactId,
       sales_order_id: made.value.id,
       external_updated_at: order.updatedAt,
+      ...(holding && holding.held.length > 0 ? { sales_when_sent: true } : {}),
     });
     context.counts.posted = (context.counts.posted ?? 0) + 1;
     await log(tx, context, {
@@ -514,7 +531,11 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       contactId,
       documentType: "sales_order",
       documentId: made.value.id,
-      message: [`Added approved sales order ${made.value.soNumber} for ${order.name} (${money(made.value.total)}).`, ...plan.notes].join(" "),
+      message: [
+        `Added approved sales order ${made.value.soNumber} for ${order.name} (${money(made.value.total)}).`,
+        ...(holding && holding.held.length > 0 ? [`What's to be sent is held in ${heldAccount} until Shopify marks it sent.`] : []),
+        ...plan.notes,
+      ].join(" "),
     });
     doc = await findDocument(tx, posting, kind, id);
   }
@@ -531,6 +552,7 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       return;
     }
     await saveDocument(tx, posting, kind, id, { state: "cancelled", retry: false, external_updated_at: order.updatedAt });
+    if (doc.sales_when_sent) await closeHeld(tx, posting.connectionId, id);
     await log(tx, context, {
       action: "cancelled",
       recordKind: kind,
@@ -654,6 +676,30 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
     if (!doc || doc.invoice_id === null) return;
   }
 
+  // Sales when sent (SWS2-SWS8): what Shopify has sent, up to `upTo`, moves out of Income in advance.
+  const heldOrder = doc.sales_when_sent;
+  const invoiceId = doc.invoice_id;
+  const countWhatWasSent = async (upTo: string | null): Promise<boolean> => {
+    if (!heldOrder) return true;
+    const invoiceDate = (await tx.query<{ d: string }>("select invoice_date::text as d from sales_invoices where id = $1", [invoiceId])).rows[0].d;
+    const counted = await attempt(tx, () => countSent(tx, { connectionId: posting.connectionId, storeDomain: posting.storeDomain, order, invoiceDate, upTo }));
+    if (!counted.ok) {
+      await wait(`What ${order.name} has sent couldn't be counted as sales yet: ${errorText(counted.error)}`);
+      return false;
+    }
+    if (counted.value.counted > 0) {
+      context.counts.posted = (context.counts.posted ?? 0) + 1;
+      await log(tx, context, {
+        action: "posted",
+        recordKind: kind,
+        externalId: id,
+        contactId: doc!.contact_id,
+        message: `Counted what ${order.name} sent as sales (${counted.value.counted} ${counted.value.counted === 1 ? "fulfilment" : "fulfilments"}), out of Income in advance.`,
+      });
+    }
+    return true;
+  };
+
   // Refunds (SPC14, WC5): paid back from where the payment went; an invoice left owing is credited instead.
   let failedRefund = false;
   const refundTarget = order.refunds.length > 0 ? await refundSource(tx, posting, order, doc.customer_payment_id) : null;
@@ -662,7 +708,10 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
   const items = await linkedItems(tx, posting, order.lines.flatMap((line) => (line.variantId ? [line.variantId] : [])));
   for (const refund of order.refunds) {
     if (await findDocument(tx, posting, "refund", refund.externalId)) continue;
-    const plan = planRefund(order, refund, posting, items, overseas);
+    // What was sent before the refund counts first, so the refund comes out of what was still held then (SWS5).
+    if (!(await countWhatWasSent(refund.processedAt ?? refund.createdAt))) return;
+    const held = heldOrder ? await refundHeld(tx, posting.connectionId, id) : null;
+    const plan = planRefund(order, refund, posting, items, overseas, held);
     if (plan.ok === "nothing") {
       await saveDocument(tx, posting, "refund", refund.externalId, { state: "done", order_external_id: id, name: order.name });
       await log(tx, context, { action: "skipped", recordKind: "refund", externalId: refund.externalId, message: plan.reason });
@@ -698,6 +747,17 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
         returnInvoiceId: doc!.invoice_id,
       });
       const approved = await approveCreditNote(tx, creditNote.id, { source: SOURCE, idempotencyKey: keyFor(posting, "refund", refund.externalId, "approve") });
+      await takeRefundFromHeld(tx, {
+        connectionId: posting.connectionId,
+        order,
+        refundId: refund.externalId,
+        date,
+        key: keyFor(posting, "refund", refund.externalId, "held"),
+        uses: plan.held,
+        lines: plan.lines,
+        rates: plan.rates,
+        amountsMode: plan.amountsMode,
+      });
       if (owingInvoice) {
         // Left owing (WC5): the credit reduces what's still owed; anything more is left as credit to deal with.
         const due = dec((await getInvoice(tx, doc!.invoice_id)).amountDue ?? "0");
@@ -755,6 +815,7 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
           }).`,
     });
   }
+  if (!(await countWhatWasSent(null))) return;
   await saveDocument(tx, posting, kind, id, { retry: failedRefund, external_updated_at: order.updatedAt });
 }
 

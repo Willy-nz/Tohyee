@@ -115,7 +115,18 @@ describe("orders (SPC11-SPC13, SPC16, SPC17, SPC23)", () => {
       amountsMode: "inclusive",
       total: "46.00",
       notes: [],
-      lines: [{ description: "Large candle", quantity: "2", unitPrice: "23.00", accountCode: "4000", taxCode: "GST", itemId: "11" }],
+      rates: ["0.15"],
+      lines: [
+        {
+          description: "Large candle",
+          quantity: "2",
+          unitPrice: "23.00",
+          accountCode: "4000",
+          taxCode: "GST",
+          itemId: "11",
+          source: { kind: "line", externalId: "4001", requiresShipping: true },
+        },
+      ],
     });
     expect(orderPayments(order)).toMatchObject({ lastAt: "2026-10-02T01:30:00.000Z", giftCard: false });
     expect(toPlainString(orderPayments(order).amount)).toBe("46");
@@ -125,7 +136,9 @@ describe("orders (SPC11-SPC13, SPC16, SPC17, SPC23)", () => {
     const rules = { ...RULES, gstRegistered: false };
     const untaxed = planOrder(read(order1001({ lines: [{ ...order1001().lines[0], tax: [] }] })), rules, items([]), false);
     expect(untaxed).toMatchObject({ ok: true, amountsMode: "no_tax", total: "46.00", notes: [] });
-    expect(untaxed.ok && untaxed.lines).toEqual([{ description: "Large candle", quantity: "2", unitPrice: "23.00", accountCode: "4000", taxCode: null, itemId: null }]);
+    expect(untaxed.ok && untaxed.lines).toEqual([
+      { description: "Large candle", quantity: "2", unitPrice: "23.00", accountCode: "4000", taxCode: null, itemId: null, source: { kind: "line", externalId: "4001", requiresShipping: true } },
+    ]);
     const taxed = planOrder(read(order1001()), rules, items([]), false);
     expect(taxed).toMatchObject({
       ok: true,
@@ -141,10 +154,11 @@ describe("orders (SPC11-SPC13, SPC16, SPC17, SPC23)", () => {
       amountsMode: "inclusive",
       total: "28.90",
       notes: [],
+      rates: ["0.15", "0.15", "0.15"],
       lines: [
-        { description: "Wax melts - Vanilla", quantity: "2", unitPrice: "7.33", accountCode: "4000", taxCode: "GST", itemId: "12" },
-        { description: "Wax melts - Vanilla", quantity: "1", unitPrice: "7.34", accountCode: "4000", taxCode: "GST", itemId: "12" },
-        { description: "Shipping: NZ Post standard", quantity: "1", unitPrice: "6.90", accountCode: "4000", taxCode: "GST", itemId: null },
+        { description: "Wax melts - Vanilla", quantity: "2", unitPrice: "7.33", accountCode: "4000", taxCode: "GST", itemId: "12", source: { kind: "line", externalId: "4002", requiresShipping: true } },
+        { description: "Wax melts - Vanilla", quantity: "1", unitPrice: "7.34", accountCode: "4000", taxCode: "GST", itemId: "12", source: { kind: "line", externalId: "4002", requiresShipping: true } },
+        { description: "Shipping: NZ Post standard", quantity: "1", unitPrice: "6.90", accountCode: "4000", taxCode: "GST", itemId: null, source: { kind: "shipping", externalId: "4102", requiresShipping: true } },
       ],
     });
   });
@@ -206,6 +220,9 @@ describe("refunds (SPC14)", () => {
       date: "2026-10-06",
       total: "23.00",
       refunded: "23.00",
+      amountsMode: "inclusive",
+      rates: ["0.15"],
+      held: [],
       lines: [{ description: "Large candle", quantity: "1", unitPrice: "23.00", accountCode: "4000", taxCode: "GST", itemId: "11" }],
     });
   });

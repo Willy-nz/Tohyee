@@ -18909,6 +18909,55 @@ sheet's.
   custom report saved as a list (CRS1) stays a list and can't be the
   default layout.
 
+### Shopify sales when sent (SWS1-SWS9; Jess, 10 Nov 2026: "we are including sales in sales that have not been sent")
+
+Jess chose: invoice when paid (so GST is counted then, as the GST Act's
+time of supply is the earlier of the invoice and the payment), with what
+hasn't been sent held in Income in advance until Shopify marks it sent,
+line by line. Tested in `tests/integration/sales-when-sent.test.ts`. The
+details are Claude's calls, not yet reviewed.
+
+Setup: Glimmers Ltd as in SPC11 (GST registered, prices include GST,
+clearing account 1010, sales 4000, shipping 4000), with **Sales when
+sent** on and Income in advance **2350** (a current liability). Order
+#1001, paid on 1 Nov: Paw pendant (a stock item, average cost **20.00**)
+**115.00**, Impression kit (a non-stock item) **23.00** and shipping
+**11.50**; total **149.50**.
+
+- **SWS1** Paid: the invoice is dated 1 Nov for **149.50** with GST
+  **19.50**, so the GST return for 1 Nov counts it as before. Its lines
+  for things to be sent go to **2350**, not sales, and carry no item, so
+  no stock moves yet: pendant **100.00**, kit **20.00**, shipping
+  **10.00**. Sales is **0.00**.
+- **SWS2** The kit is sent on 3 Nov (a Shopify fulfilment with the kit's
+  line): Dr 2350 **20.00** / Cr 4000 **20.00**, dated 3 Nov. Shipping
+  counts with the first thing sent: Dr 2350 **10.00** / Cr 4000
+  **10.00**. 2350 holds **100.00**.
+- **SWS3** The pendant is sent on 20 Nov: Dr 2350 **100.00** / Cr 4000
+  **100.00**, and one pendant comes out of stock at its average cost,
+  Dr cost of goods sold **20.00** / Cr inventory **20.00**, both dated
+  20 Nov. 2350 is back to **0.00**.
+- **SWS4** Part of a line: two pendants (**230.00**, **200.00** net),
+  one sent: **100.00** to sales and one out of stock; the second later
+  takes the rest, **100.00**. A line that doesn't need shipping (Shopify
+  says so) is sales when paid, as before.
+- **SWS5** Refunded before it's sent: the credit note's line for the
+  pendant goes to **2350** with no item (it was never taken out of stock):
+  Dr 2350 **100.00**, Dr GST **15.00**, Cr 1010 **115.00**. The pendant
+  then has nothing left to send, so nothing more happens to it. A refund of
+  something already sent is as SPC14.
+- **SWS6** Part refunded before it's sent (a **57.50** goodwill refund on
+  the unsent pendant): the credit note line, **50.00**, goes to 2350, and
+  when the pendant is sent the **50.00** left goes to sales.
+- **SWS7** Whatever's left: when a line has nothing left to send, anything
+  still held for it goes to sales (or back), so 2350 always clears.
+- **SWS8** Sent before it's paid: the sale counts on the invoice date. A
+  cancelled fulfilment counts for nothing. A fulfilment is counted once.
+- **SWS9** Only orders brought in while Sales when sent is on are held.
+  Turning it off leaves orders already held to be counted when sent.
+  Journals it posts say they came from Shopify and can't be corrected by
+  hand. Not for WooCommerce yet.
+
 ### Covers from paddock photos (AIW15-AIW19; #503, by Claude on 30 Oct 2026; not yet reviewed)
 
 Tested in `tests/integration/pasture-photos.test.ts` and

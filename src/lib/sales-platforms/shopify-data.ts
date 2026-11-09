@@ -510,7 +510,12 @@ export async function fetchShopifyExtras(gql: Gql, request: ExtrasRequest): Prom
 // ---------------------------------------------------------------------------
 // On each order (SPD6, SPD9-SPD10): asked for with the order when the part is on.
 
-export type OrderParts = { discounts: boolean; fulfilments: boolean; fulfilmentOrders: boolean };
+/** `sent`: what each fulfilment sent, for sales when sent (SWS2; read_orders). */
+export type OrderParts = { discounts: boolean; fulfilments: boolean; fulfilmentOrders: boolean; sent?: boolean };
+
+/** Fulfilments and lines per fulfilment read for sales when sent: about 50 more points. */
+export const SENT_PER_ORDER = 5;
+export const SENT_LINES_PER_FULFILMENT = 10;
 
 const MONEY = "shopMoney { amount currencyCode }";
 
@@ -534,6 +539,13 @@ export function orderExtraFields(parts: OrderParts): { order: string; allocation
   if (parts.fulfilments) {
     order.push(`displayFulfillmentStatus totalShippingPriceSet { ${MONEY} }
     fulfillments(first: ${FULFILMENTS_PER_ORDER}) { id status createdAt deliveredAt trackingInfo(first: 1) { company number } }`);
+  }
+  if (parts.sent) {
+    // An alias, so it doesn't clash with the extras' own fulfillments field.
+    order.push(`sentLines: fulfillments(first: ${SENT_PER_ORDER}) {
+      id status createdAt
+      fulfillmentLineItems(first: ${SENT_LINES_PER_FULFILMENT}) { nodes { lineItem { id } quantity } pageInfo { hasNextPage } }
+    }`);
   }
   if (parts.fulfilments && parts.fulfilmentOrders) {
     order.push(`fulfillmentOrders(first: ${FULFILMENT_ORDERS_PER_ORDER}) { nodes { id status } }`);

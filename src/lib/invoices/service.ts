@@ -608,8 +608,12 @@ async function resolveDraft(
     throw new ValidationError(`${customer.name} isn't marked as a customer. Edit the contact first, or pick another one.`);
   }
 
-  const accounts = await tx.query<{ id: string; code: string; name: string; account_class: string; is_active: boolean }>(
-    "select id, code, name, account_class, is_active from accounts where lower(code) = any($1::text[])",
+  const accounts = await tx.query<{ id: string; code: string; name: string; account_class: string; is_active: boolean; held: boolean }>(
+    `select a.id, a.code, a.name, a.account_class, a.is_active,
+            -- A store's Income in advance account (sales when sent, SWS1, SWS5) takes invoice and credit note lines too.
+            (exists (select 1 from sales_platform_connections c where c.sales_when_sent_account_id = a.id)
+              or exists (select 1 from sales_platform_held_lines h where h.held_account_id = a.id)) as held
+       from accounts a where lower(a.code) = any($1::text[])`,
     [[...new Set(draft.lines.map((line) => line.accountCode.toLowerCase()))]],
   );
   const accountsByCode = new Map(accounts.rows.map((row) => [row.code.toLowerCase(), row]));
@@ -638,7 +642,7 @@ async function resolveDraft(
     if (!account.is_active) {
       throw new ValidationError(`${label}: account ${account.code} (${account.name}) is archived.`);
     }
-    if (account.account_class !== "revenue") {
+    if (account.account_class !== "revenue" && !account.held) {
       throw new ValidationError(
         `${label}: account ${account.code} (${account.name}) isn't a revenue account. Invoice lines go to revenue accounts, like Sales.`,
       );

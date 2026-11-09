@@ -82,6 +82,8 @@ export type SalesPlatformConnection = {
   feesAccountCode: string | null;
   salesAccountCode: string | null;
   shippingAccountCode: string | null;
+  /** Sales when sent's Income in advance account (SWS1), or null when it's off. */
+  salesWhenSentAccountCode: string | null;
   /** Where a disputed amount goes (SPC25). */
   chargebacksAccountCode: string | null;
   /** The bank account money Shopify holds back sits in (SPC28). */

@@ -61,7 +61,8 @@ export type JournalOrigin =
   | "livestock_valuation"
   | "livestock_rations"
   | "recode"
-  | "history";
+  | "history"
+  | "sales_when_sent";
 export type CorrectionKind = "reversal" | "replacement";
 
 /**
@@ -998,6 +999,11 @@ export async function correctJournal(
   if (original.origin === "fixed_asset_disposal") {
     throw new ValidationError(
       `Journal #${original.id} was posted by a fixed asset disposal (${original.reference}), so it can't be corrected in the ledger. To undo it, undo the disposal on the asset.`,
+    );
+  }
+  if (original.origin === "sales_when_sent") {
+    throw new ValidationError(
+      `Journal #${original.id} moved a Shopify sale out of Income in advance when it was sent (${original.reference}), so it can't be corrected in the ledger (SWS9).`,
     );
   }
   if (original.origin === "opening_balance") {

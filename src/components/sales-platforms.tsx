@@ -25,6 +25,7 @@ import { CustomerMatches } from "@/components/customer-matches";
 import { ShopifyPartsList, ShopifyScopesCard, StockSection } from "@/components/sales-platform-extras";
 import { CustomerChoiceField, type SetupStep, SkuNote, StoreSetup } from "@/components/store-setup";
 import { type CustomerChoice, CUSTOMER_CHOICES, customerChoiceOf, customerChoiceSettings } from "@/lib/sales-platforms/setup";
+import type { Account } from "@/lib/accounts/service";
 import styles from "./store-setup.module.css";
 
 /**
@@ -643,6 +644,9 @@ export function ConnectionCard({
             ) : null}
           </div>
         ) : null}
+        {connected && connection.platform === "shopify" && connection.postToAccounts ? (
+          <SalesWhenSent organisationId={organisationId} connection={connection} isAdmin={isAdmin} busy={busy} run={run} />
+        ) : null}
         {connected ? (
           <details className={styles.more}>
             <summary>More: what comes in, {connection.platform === "shopify" ? "Shopify's parts, stock, " : ""}test or disconnect</summary>
@@ -703,6 +707,91 @@ export function ConnectionCard({
         </div>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Sales when sent (SWS1-SWS9, decision 1569): off, a paid order's sales
+ * count when it's paid; on, what's still to be sent is held in an Income in
+ * advance account until Shopify marks it sent. GST counts when it's paid
+ * either way.
+ */
+function SalesWhenSent({
+  organisationId,
+  connection,
+  isAdmin,
+  busy,
+  run,
+}: {
+  organisationId: string;
+  connection: SalesPlatformConnection;
+  isAdmin: boolean;
+  busy: boolean;
+  run: (work: () => Promise<string>) => Promise<void>;
+}) {
+  const confirm = useConfirm();
+  const accounts = useApiData<{ accounts: Account[] }>(isAdmin && !connection.salesWhenSentAccountCode ? "/api/accounts" : null, { organisationId });
+  const liabilities = (accounts.data?.accounts ?? []).filter((account) => account.isActive && account.accountClass === "liability" && account.accountType !== "bank");
+  const named = liabilities.find((account) => /income in advance|unearned|deferred (income|revenue)/i.test(account.name));
+  const [choice, setChoice] = useState("");
+  const chosen = choice || named?.code || "";
+  const codes = new Set((accounts.data?.accounts ?? []).map((account) => account.code));
+  let fresh = 2350;
+  while (codes.has(String(fresh))) fresh += 1;
+  const path = `/api/sales-platforms/connections/${connection.id}`;
+  const turnOn = () =>
+    run(async () => {
+      const body = chosen === "__new__" || !chosen ? { newSalesWhenSentAccount: { code: String(fresh), name: "Income in advance" } } : { salesWhenSentAccountCode: chosen };
+      await api(path, { method: "PATCH", body: { organisationId, ...body } });
+      return "Sales when sent is on. Orders brought in from now are held until Shopify marks them sent.";
+    });
+  const turnOff = async () => {
+    if (!(await confirm("Turn sales when sent off? Orders brought in from now count as sales when they're paid. Orders already held still count when they're sent."))) return;
+    void run(async () => {
+      await api(path, { method: "PATCH", body: { organisationId, salesWhenSentAccountCode: null } });
+      return "Sales when sent is off for new orders.";
+    });
+  };
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <strong>Sales when sent</strong>
+      {connection.salesWhenSentAccountCode ? (
+        <span className={ui.muted}>
+          On. A paid order is invoiced when it&apos;s paid, so its GST counts then, but what&apos;s still to be sent is held in {connection.salesWhenSentAccountCode} until Shopify
+          marks it sent. Then it moves to sales, and stock comes off, line by line.
+        </span>
+      ) : (
+        <span className={ui.muted}>
+          Off: sales count when the order&apos;s paid, sent or not. On, what&apos;s still to be sent is held in Income in advance until Shopify marks it sent. GST still
+          counts when it&apos;s paid. It applies to orders brought in from when it&apos;s turned on.
+        </span>
+      )}
+      {isAdmin ? (
+        <div className={ui.actions}>
+          {connection.salesWhenSentAccountCode ? (
+            <Button variant="secondary" disabled={busy} onClick={() => void turnOff()}>
+              Turn off
+            </Button>
+          ) : (
+            <>
+              <Field label="Held in">
+                <select value={chosen || "__new__"} onChange={(event) => setChoice(event.target.value)} disabled={busy}>
+                  <option value="__new__">Add {fresh} Income in advance</option>
+                  {liabilities.map((account) => (
+                    <option key={account.id} value={account.code}>
+                      {account.code} {account.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Button variant="secondary" disabled={busy || accounts.loading} onClick={() => void turnOn()}>
+                Turn on
+              </Button>
+            </>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
