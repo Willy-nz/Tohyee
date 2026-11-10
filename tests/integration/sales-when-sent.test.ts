@@ -8,6 +8,7 @@ import { correctJournal } from "@/lib/ledger/journals";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { getOrganisation } from "@/lib/organisations/registry";
 import { connectStore, syncConnection, updateConnectionSettings } from "@/lib/sales-platforms/service";
+import { listOrdersToSend } from "@/lib/sales-platforms/to-send";
 import { listHeldOrders, markHeldOrderSent } from "@/lib/sales-platforms/when-sent";
 import { setSalesPlatformFetchForTests } from "@/lib/sales-platforms/shopify";
 import { createTaxCode } from "@/lib/tax/codes";
@@ -305,5 +306,39 @@ describeWithDatabase("Shopify sales when sent", () => {
     w.state.orders[0].fulfilments = [{ id: 9901, createdAt: "2026-11-19T22:00:00Z", lines: [{ lineId: 8001, quantity: 1 }, { lineId: 8002, quantity: 1 }] }];
     await w.sync("2026-11-20T02:00:00Z");
     expect(await books(w)).toEqual({ held: "0.00", sales: "-130.00", cogs: "20.00", stock: "0.00" });
+  });
+
+  it("SWS11: Sales › To send lists orders not yet fully sent, from Shopify's status or what's held", async () => {
+    const w = await setup({ whenSent: false, pendants: 3 });
+    const paid = (id: number, at: string) => [{ id, kind: "SALE", amount: "149.50", processedAt: at }];
+    w.state.orders.push(order({ fulfilmentStatus: "UNFULFILLED" }));
+    w.state.orders.push(order({ id: 7002, name: "#1002", processedAt: "2026-10-31T21:00:00Z", updatedAt: "2026-10-31T21:01:00Z", fulfilmentStatus: "FULFILLED", transactions: paid(9702, "2026-10-31T21:00:00Z") }));
+    await w.sync("2026-11-01T02:00:00Z");
+    expect(await w.as((tx) => listOrdersToSend(tx))).toMatchObject({
+      held: "0.00",
+      orders: [{ name: "#1001", customer: "Aroha Ngata", total: "149.50", status: "not_sent", held: null, date: "2026-11-01" }],
+    });
+    // On: #1003 is held, and part sent.
+    await w.as((tx) => updateConnectionSettings(tx, w.connectionId, { newSalesWhenSentAccount: { code: "2350", name: "Income in advance" } }));
+    w.state.orders.push(
+      order({
+        id: 7003,
+        name: "#1003",
+        processedAt: "2026-11-01T20:00:00Z",
+        updatedAt: "2026-11-01T20:01:00Z",
+        fulfilmentStatus: "PARTIALLY_FULFILLED",
+        transactions: paid(9703, "2026-11-01T20:00:00Z"),
+        fulfilments: [{ id: 9911, createdAt: "2026-11-01T21:00:00Z", lines: [{ lineId: 8002, quantity: 1 }] }],
+      }),
+    );
+    await w.sync("2026-11-02T02:00:00Z");
+    const list = await w.as((tx) => listOrdersToSend(tx));
+    expect(list.held).toBe("100.00");
+    expect(list.orders.map((o) => [o.name, o.status, o.held, o.toSend])).toEqual([
+      ["#1001", "not_sent", null, []],
+      ["#1003", "part_sent", "100.00", ["Paw pendant"]],
+    ]);
+    await w.as((tx) => markHeldOrderSent(tx, w.connectionId, "7003", "2026-11-05"));
+    expect((await w.as((tx) => listOrdersToSend(tx))).orders.map((o) => o.name)).toEqual(["#1001"]);
   });
 });

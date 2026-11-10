@@ -7,9 +7,7 @@ import { SALES_PLATFORMS_HREF } from "@/components/navigation";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
-import { todayIsoDate } from "@/lib/dates";
-import { formatDate, formatDateTime } from "@/lib/format";
-import type { HeldOrder } from "@/lib/sales-platforms/when-sent";
+import { formatDateTime } from "@/lib/format";
 import type { CoverageKind, CoverageState, KindCoverage } from "@/lib/sales-platforms/coverage-status";
 import {
   AUTH_METHOD_LABELS,
@@ -768,7 +766,9 @@ function SalesWhenSent({
           counts when it&apos;s paid. It applies to orders brought in from when it&apos;s turned on.
         </span>
       )}
-      <HeldOrders organisationId={organisationId} connectionId={connection.id} busy={busy} run={run} />
+      <span>
+        <Link href="/operations/to-send">Sales › To send</Link> lists the orders not yet sent{connection.salesWhenSentAccountCode ? ", what's held for each, and Mark as sent" : ""}.
+      </span>
       {isAdmin ? (
         <div className={ui.actions}>
           {connection.salesWhenSentAccountCode ? (
@@ -795,84 +795,6 @@ function SalesWhenSent({
         </div>
       ) : null}
     </div>
-  );
-}
-
-/**
- * Orders still waiting to be sent (SWS10), with Mark as sent for one Shopify
- * never marked fulfilled: it counts as sent on the day chosen, as a
- * fulfilment would (decision 1570). Shown only when there are some.
- */
-function HeldOrders({
-  organisationId,
-  connectionId,
-  busy,
-  run,
-}: {
-  organisationId: string;
-  connectionId: string;
-  busy: boolean;
-  run: (work: () => Promise<string>) => Promise<void>;
-}) {
-  const { can } = useWorkspace();
-  const [version, setVersion] = useState(0);
-  const held = useApiData<{ orders: HeldOrder[] }>(`/api/sales-platforms/connections/${connectionId}/held`, { organisationId, v: version });
-  const [days, setDays] = useState<Record<string, string>>({});
-  const today = todayIsoDate("Pacific/Auckland");
-  const orders = held.data?.orders ?? [];
-  if (orders.length === 0) return null;
-  const mark = (order: HeldOrder) =>
-    run(async () => {
-      const sentOn = days[order.orderId] || today;
-      await api(`/api/sales-platforms/connections/${connectionId}/held/${order.orderId}/sent`, { method: "POST", body: { organisationId, sentOn } });
-      setVersion((value) => value + 1);
-      return `${order.name} marked as sent on ${formatDate(sentOn)}: ${order.held} moved to sales.`;
-    });
-  return (
-    <details>
-      <summary>
-        {orders.length} {orders.length === 1 ? "order" : "orders"} waiting to be sent ({orders.reduce((total, order) => total + Number(order.held), 0).toFixed(2)} held)
-      </summary>
-      <p className={ui.muted}>If Shopify never marked one fulfilled but it has gone, mark it sent here. It counts as sales, and its stock comes off, on the day you choose.</p>
-      <table className={ui.table}>
-        <thead>
-          <tr>
-            <th>Order</th>
-            <th>Invoiced</th>
-            <th>Still to send</th>
-            <th className={ui.num}>Held</th>
-            {can("bookkeeper") ? <th>Sent on</th> : null}
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map((order) => (
-            <tr key={order.orderId}>
-              <td>{order.name}</td>
-              <td>{formatDate(order.invoiceDate)}</td>
-              <td>{order.lines.join(", ")}</td>
-              <td className={ui.num}>{order.held}</td>
-              {can("bookkeeper") ? (
-                <td>
-                  <div className={ui.actions}>
-                    <input
-                      type="date"
-                      aria-label={`Day ${order.name} was sent`}
-                      min={order.invoiceDate}
-                      max={today}
-                      value={days[order.orderId] ?? today}
-                      onChange={(event) => setDays({ ...days, [order.orderId]: event.target.value })}
-                    />
-                    <Button size="small" variant="secondary" disabled={busy} onClick={() => void mark(order)}>
-                      Mark as sent
-                    </Button>
-                  </div>
-                </td>
-              ) : null}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </details>
   );
 }
 
