@@ -63,7 +63,7 @@ const ROUTES: Array<[string, IllustratedIconName]> = [
   ["/operations/purchases", "purchases"], ["/operations/purchase-orders", "checklist"],
   ["/operations/bills", "receipt"], ["/operations/expense-claims", "receipt"],
   ["/operations/supplier-credit-notes", "credit-note"],
-  ["/operations/sales", "sales"], ["/operations/sales-orders", "checklist"],
+  ["/operations/sales", "sales"], ["/operations/sales-orders", "checklist"], ["/operations/to-send", "checklist"],
   ["/operations/invoices", "sales"], ["/operations/customer-statements", "reports"], ["/operations/quotes", "price"], ["/operations/credit-notes", "credit-note"],
   ["/crm/mail", "mail"], ["/crm/email-templates", "mail"], ["/crm/tasks", "calendar"],
   ["/crm/sequences", "pipeline"], ["/crm/follow-ups", "clock"],

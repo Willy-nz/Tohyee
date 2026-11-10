@@ -42,13 +42,18 @@ export const MENUS: Menu[] = [
       {
         heading: "Documents",
         links: [
-          { href: "/operations/invoices", label: "Invoices" },
-          { href: "/operations/invoices?show=awaiting", label: "Awaiting payment" },
-          { href: "/operations/quotes", label: "Quotes" },
-          { href: "/operations/sales-orders", label: "Sales orders" },
-          { href: "/operations/signing", label: "Signing" },
-          { href: "/operations/credit-notes", label: "Credit notes" },
-          { href: "/operations/repeating-invoices", label: "Repeating invoices" },
+          ...section("Invoicing", [
+            { href: "/operations/invoices", label: "Invoices" },
+            { href: "/operations/invoices?show=awaiting", label: "Awaiting payment" },
+            { href: "/operations/credit-notes", label: "Credit notes" },
+            { href: "/operations/repeating-invoices", label: "Repeating invoices" },
+          ]),
+          ...section("Orders", [
+            { href: "/operations/quotes", label: "Quotes" },
+            { href: "/operations/sales-orders", label: "Sales orders" },
+            { href: "/operations/to-send", label: "To send" },
+            { href: "/operations/signing", label: "Signing" },
+          ]),
         ],
       },
       {
@@ -513,6 +518,7 @@ export const AREAS: Record<string, string[]> = {
     "/operations/credit-notes",
     "/operations/quotes",
     "/operations/sales-orders",
+    "/operations/to-send",
     "/operations/signing",
     "/operations/repeating-invoices",
     "/operations/overpayments",

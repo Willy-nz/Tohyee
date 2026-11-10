@@ -13773,6 +13773,11 @@ migration 0265.
       a fulfilment would (sales and stock), so it's not a typed-in status;
       who and when go in the sync log and audit trail. Marking it fulfilled
       in Shopify works too and keeps both right.
+1571. **Sales › To send (SWS11).** The live list of Shopify orders not yet
+      fully sent sits under Sales, not Settings. Shopify's fulfilment status
+      decides what's listed, so it works with Sales when sent off; with it
+      on, the amounts held and Mark as sent are there too. The store's
+      settings link to it instead of listing the orders.
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

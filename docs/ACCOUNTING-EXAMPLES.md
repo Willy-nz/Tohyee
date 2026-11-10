@@ -18966,6 +18966,12 @@ sent** on and Income in advance **2350** (a current liability). Order
   and audit trail say who marked it. A fulfilment Shopify records later
   finds nothing left and counts for nothing. An order not yet invoiced, or
   holding nothing, can't be marked.
+- **SWS11** Sales › To send (Jess, 10 Nov 2026: "we need to see live"):
+  every Shopify order not yet fully sent, oldest first, with its customer,
+  invoice and total. Not sent or part sent comes from Shopify's own status
+  (so it shows with Sales when sent off too), or from what's held when it's
+  on, with the amount held, the total held and Mark as sent (SWS10). A
+  sent or cancelled order isn't listed.
 
 ### Covers from paddock photos (AIW15-AIW19; #503, by Claude on 30 Oct 2026; not yet reviewed)
 

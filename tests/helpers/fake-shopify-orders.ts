@@ -65,6 +65,8 @@ export type OrderFixture = {
   transactions: TransactionFixture[];
   refunds?: RefundFixture[];
   fulfilments?: FulfilmentFixture[];
+  /** Shopify's displayFulfillmentStatus (UNFULFILLED, PARTIALLY_FULFILLED, FULFILLED...). */
+  fulfilmentStatus?: string;
   test?: boolean;
 };
 export type BalanceTransactionFixture = { id: number; type: string; amount: string; fee: string; net: string; orderName?: string | null; adjustmentReason?: string | null };
@@ -164,6 +166,7 @@ export function orderNode(o: OrderFixture) {
     },
     transactions: o.transactions.map((t) => transactionNode(t, currency)),
     refunds: (o.refunds ?? []).map((r) => ({ id: gid("Refund", r.id) })),
+    ...(o.fulfilmentStatus ? { displayFulfillmentStatus: o.fulfilmentStatus } : {}),
     // The alias the order query gives Fulfillment for sales when sent.
     sentLines: (o.fulfilments ?? []).map((f) => ({
       id: gid("Fulfillment", f.id),
