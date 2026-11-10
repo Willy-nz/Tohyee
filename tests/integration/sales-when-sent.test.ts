@@ -8,6 +8,7 @@ import { correctJournal } from "@/lib/ledger/journals";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { getOrganisation } from "@/lib/organisations/registry";
 import { connectStore, syncConnection, updateConnectionSettings } from "@/lib/sales-platforms/service";
+import { listHeldOrders, markHeldOrderSent } from "@/lib/sales-platforms/when-sent";
 import { setSalesPlatformFetchForTests } from "@/lib/sales-platforms/shopify";
 import { createTaxCode } from "@/lib/tax/codes";
 import { AROHA, CLIENT_ID, CLIENT_SECRET, type OrderFixture, fakeShopifyStore, storeState } from "../helpers/fake-shopify-orders";
@@ -283,5 +284,26 @@ describeWithDatabase("Shopify sales when sent", () => {
     expect(await books(w)).toEqual({ held: "0.00", sales: "-260.00", cogs: "40.00", stock: "0.00" });
     // Not a liability account, or a WooCommerce store: refused.
     await expect(w.as((tx) => updateConnectionSettings(tx, w.connectionId, { salesWhenSentAccountCode: "4000" }))).rejects.toThrow("isn't a liability account");
+  });
+
+  it("SWS10: an order Shopify never marked sent can be marked sent in Tohyee", async () => {
+    const w = await setup();
+    w.state.orders.push(order());
+    await w.sync("2026-11-01T02:00:00Z");
+    expect(await w.as((tx) => listHeldOrders(tx, w.connectionId))).toEqual([
+      { orderId: "7001", name: "#1001", invoiceDate: "2026-11-01", held: "130.00", lines: ["Paw pendant", "Impression kit", "Shipping: NZ Post"] },
+    ]);
+    await expect(w.as((tx) => markHeldOrderSent(tx, w.connectionId, "7001", "2026-10-30"))).rejects.toThrow("can't be before its invoice (1 Nov 2026)");
+    await w.as((tx) => markHeldOrderSent(tx, w.connectionId, "7001", "2026-11-15"));
+    expect(await books(w)).toEqual({ held: "0.00", sales: "-130.00", cogs: "20.00", stock: "0.00" });
+    expect((await sentJournals(w)).map((j) => [j.posting_date, j.reference])).toEqual([["2026-11-15", "#1001 marked sent"]]);
+    expect(await w.as((tx) => listHeldOrders(tx, w.connectionId))).toEqual([]);
+    const said = (await w.as((tx) => tx.query<{ message: string }>("select message from sales_platform_sync_log where message like '%marked as sent%'"))).rows;
+    expect(said[0].message).toContain("#1001 marked as sent on 15 Nov 2026 by jess@sales-when-sent.nz");
+    // Nothing left: marking again is refused, and Shopify's fulfilment later counts for nothing.
+    await expect(w.as((tx) => markHeldOrderSent(tx, w.connectionId, "7001", "2026-11-16"))).rejects.toThrow("has nothing left to send");
+    w.state.orders[0].fulfilments = [{ id: 9901, createdAt: "2026-11-19T22:00:00Z", lines: [{ lineId: 8001, quantity: 1 }, { lineId: 8002, quantity: 1 }] }];
+    await w.sync("2026-11-20T02:00:00Z");
+    expect(await books(w)).toEqual({ held: "0.00", sales: "-130.00", cogs: "20.00", stock: "0.00" });
   });
 });

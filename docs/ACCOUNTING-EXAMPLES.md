@@ -18957,6 +18957,15 @@ sent** on and Income in advance **2350** (a current liability). Order
   Turning it off leaves orders already held to be counted when sent.
   Journals it posts say they came from Shopify and can't be corrected by
   hand. Not for WooCommerce yet.
+- **SWS10** Shopify never marked it sent (Jess, 10 Nov 2026: "if it is an
+  old order and shopify is wrong we should be able to say it has been sent
+  and finished"): a bookkeeper chooses **Mark as sent** on an order still
+  held, with the day it went (#1001 above on 15 Nov). Everything left to
+  send counts as sent that day, as a fulfilment would: Dr 2350 **130.00** /
+  Cr 4000 **130.00** and one pendant out of stock at **20.00**. The sync log
+  and audit trail say who marked it. A fulfilment Shopify records later
+  finds nothing left and counts for nothing. An order not yet invoiced, or
+  holding nothing, can't be marked.
 
 ### Covers from paddock photos (AIW15-AIW19; #503, by Claude on 30 Oct 2026; not yet reviewed)
 
