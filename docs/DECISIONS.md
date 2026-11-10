@@ -13768,6 +13768,11 @@ migration 0265.
       advance. A line with nothing left to send has anything left held
       moved to sales, so Income in advance clears. Customer deposits with
       GST were the other choice and remain unbuilt.
+1570. **Mark as sent (SWS10).** For an order Shopify never marked fulfilled,
+      a bookkeeper can mark it sent in Tohyee on a chosen day. It posts what
+      a fulfilment would (sales and stock), so it's not a typed-in status;
+      who and when go in the sync log and audit trail. Marking it fulfilled
+      in Shopify works too and keeps both right.
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

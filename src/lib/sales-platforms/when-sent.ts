@@ -1,12 +1,17 @@
+import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
-import { ValidationError } from "@/lib/errors";
+import { writeAuditEvent } from "@/lib/audit";
+import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import { formatDate } from "@/lib/format";
 import { loadStockContext } from "@/lib/inventory/stock";
 import { postMovement } from "@/lib/inventory/movements";
 import { type AmountsMode, calculateInvoice } from "@/lib/invoices/amounts";
 import { parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { add, cmp, dec, type Decimal, isPositive, isZero, mul, mulDiv, neg, sub, sum, toFixedString, toPlainString } from "@/lib/money/decimal";
 import type { PlatformOrder } from "@/lib/sales-platforms/connector";
+import { writeLog } from "@/lib/sales-platforms/log";
 import { type HeldUse, localDate, type PlannedLine, type RefundHeld } from "@/lib/sales-platforms/orders";
+import { requireString } from "@/lib/validation";
 
 /*
  * Shopify sales when sent (examples SWS1-SWS9, decision 1569). An order
@@ -214,6 +219,82 @@ export async function takeRefundFromHeld(
 }
 
 /**
+ * Counts lines as sent on `date` (SWS2-SWS4, SWS10): each line's share out
+ * of Income in advance to its sales account (null `lines`: everything left),
+ * the shipping with the first thing sent, and stock items out of stock.
+ * Updates `rows` in place; the caller saves them. Returns the journal.
+ */
+async function send(
+  tx: OrgTx,
+  input: { rows: HeldRow[]; lines: ReadonlyArray<{ lineItemId: string; quantity: string }> | null; date: string; orderName: string; reference: string; description: string; key: string },
+): Promise<string | null> {
+  const { rows, date } = input;
+  const wanted =
+    input.lines ?? rows.filter((row) => row.line_kind === "line" && !row.closed).map((row) => ({ lineItemId: row.line_external_id, quantity: toPlainString(left(row)) }));
+  const moves: Move[] = [];
+  const stock: Array<{ itemCode: string; itemType: string; quantity: Decimal; description: string; rowId: string }> = [];
+  let anything = false;
+  for (const sent of wanted) {
+    const row = rows.find((entry) => entry.line_kind === "line" && entry.line_external_id === sent.lineItemId && !entry.closed);
+    if (!row) continue;
+    const remaining = left(row);
+    const want = dec(sent.quantity);
+    const quantity = cmp(want, remaining) <= 0 ? want : remaining;
+    if (!isPositive(quantity)) continue;
+    const share = cmp(quantity, remaining) === 0 ? stillHeld(row) : mulDiv(stillHeld(row), quantity, remaining, SCALE);
+    moves.push({ from: row.held_code, to: row.income_code, amount: share, description: `${row.description} sent` });
+    row.recognised_amount = toFixedString(add(dec(row.recognised_amount), share), SCALE);
+    row.sent_quantity = toPlainString(add(dec(row.sent_quantity), quantity));
+    if (row.item_code && (row.item_type === "stock" || row.item_type === "kit")) {
+      stock.push({ itemCode: row.item_code, itemType: row.item_type, quantity, description: `${input.orderName}: ${row.description} sent`, rowId: row.id });
+    }
+    anything = true;
+  }
+  // The shipping counts with the first thing sent (SWS2), or when the whole order is marked sent (SWS10).
+  if (anything || input.lines === null) {
+    for (const row of rows) {
+      if (row.line_kind !== "shipping" || row.closed || isPositive(dec(row.sent_quantity))) continue;
+      const share = stillHeld(row);
+      moves.push({ from: row.held_code, to: row.income_code, amount: share, description: row.description });
+      row.recognised_amount = toFixedString(add(dec(row.recognised_amount), share), SCALE);
+      row.sent_quantity = "1";
+    }
+  }
+  finish(rows, moves);
+  const journalId = await postMoves(tx, `${input.key}:journal`, date, input.reference, input.description, moves);
+  if (stock.length > 0) {
+    const ctx = await loadStockContext(tx, "Stock can't be taken out for what was sent");
+    for (const entry of stock) {
+      const parts =
+        entry.itemType === "kit"
+          ? (
+              await tx.query<{ code: string; quantity: string }>(
+                `select i.code, k.quantity::text from kit_components k join items i on i.id = k.component_item_id join items kit on kit.id = k.kit_item_id
+                  where lower(kit.code) = lower($1) and i.item_type = 'stock' order by lower(i.code)`,
+                [entry.itemCode],
+              )
+            ).rows.map((component) => ({ code: component.code, quantity: mul(entry.quantity, dec(component.quantity)) }))
+          : [{ code: entry.itemCode, quantity: entry.quantity }];
+      for (const part of parts) {
+        await postMovement(tx, {
+          source: SOURCE,
+          idempotencyKey: `${input.key}:stock:${entry.rowId}:${part.code}`.slice(0, 200),
+          movementType: "issue",
+          movementDate: date,
+          itemCode: part.code,
+          reference: input.orderName,
+          description: entry.description,
+          inventoryAccountCode: ctx.inventoryCode,
+          offsetAccountCode: ctx.costOfSalesCode,
+          quantity: toPlainString(part.quantity),
+        });
+      }
+    }
+  }
+  return journalId;
+}
+
+/**
  * Counts what each fulfilment sent (SWS2-SWS4, SWS8): for each successful
  * fulfilment not yet counted (up to `upTo`, oldest first), a journal moves
  * each sent line's share out of Income in advance to its sales account, and
@@ -242,67 +323,15 @@ export async function countSent(
     if (fulfilment.incomplete) throw new ValidationError(`a fulfilment sent more lines than Tohyee reads, so what it sent can't be counted yet.`);
     const sentOn = fulfilment.createdAt ? localDate(fulfilment.createdAt) : input.invoiceDate;
     const date = sentOn < input.invoiceDate ? input.invoiceDate : sentOn;
-    const moves: Move[] = [];
-    const stock: Array<{ itemCode: string; itemType: string; quantity: Decimal; description: string; rowId: string }> = [];
-    let anything = false;
-    for (const sent of fulfilment.lines) {
-      const row = rows.find((entry) => entry.line_kind === "line" && entry.line_external_id === sent.lineItemId && !entry.closed);
-      if (!row) continue;
-      const remaining = left(row);
-      const want = dec(sent.quantity);
-      const quantity = cmp(want, remaining) <= 0 ? want : remaining;
-      if (!isPositive(quantity)) continue;
-      const share = cmp(quantity, remaining) === 0 ? stillHeld(row) : mulDiv(stillHeld(row), quantity, remaining, SCALE);
-      moves.push({ from: row.held_code, to: row.income_code, amount: share, description: `${row.description} sent` });
-      row.recognised_amount = toFixedString(add(dec(row.recognised_amount), share), SCALE);
-      row.sent_quantity = toPlainString(add(dec(row.sent_quantity), quantity));
-      if (row.item_code && (row.item_type === "stock" || row.item_type === "kit")) {
-        stock.push({ itemCode: row.item_code, itemType: row.item_type, quantity, description: `${order.name}: ${row.description} sent`, rowId: row.id });
-      }
-      anything = true;
-    }
-    // The shipping counts with the first thing sent (SWS2).
-    if (anything) {
-      for (const row of rows) {
-        if (row.line_kind !== "shipping" || row.closed || isPositive(dec(row.sent_quantity))) continue;
-        const share = stillHeld(row);
-        moves.push({ from: row.held_code, to: row.income_code, amount: share, description: `${row.description}` });
-        row.recognised_amount = toFixedString(add(dec(row.recognised_amount), share), SCALE);
-        row.sent_quantity = "1";
-      }
-    }
-    finish(rows, moves);
-    const key = `sp:${input.storeDomain}:sent:${fulfilment.externalId}`.slice(0, 120);
-    const journalId = await postMoves(tx, `${key}:journal`, date, `${order.name} sent`, `${order.name}: sent on ${sentOn}`, moves);
-    if (stock.length > 0) {
-      const ctx = await loadStockContext(tx, "Stock can't be taken out for what was sent");
-      for (const entry of stock) {
-        const parts =
-          entry.itemType === "kit"
-            ? (
-                await tx.query<{ code: string; quantity: string }>(
-                  `select i.code, k.quantity::text from kit_components k join items i on i.id = k.component_item_id join items kit on kit.id = k.kit_item_id
-                    where lower(kit.code) = lower($1) and i.item_type = 'stock' order by lower(i.code)`,
-                  [entry.itemCode],
-                )
-              ).rows.map((component) => ({ code: component.code, quantity: mul(entry.quantity, dec(component.quantity)) }))
-            : [{ code: entry.itemCode, quantity: entry.quantity }];
-        for (const part of parts) {
-          await postMovement(tx, {
-            source: SOURCE,
-            idempotencyKey: `${key}:stock:${entry.rowId}:${part.code}`.slice(0, 200),
-            movementType: "issue",
-            movementDate: date,
-            itemCode: part.code,
-            reference: order.name,
-            description: entry.description,
-            inventoryAccountCode: ctx.inventoryCode,
-            offsetAccountCode: ctx.costOfSalesCode,
-            quantity: toPlainString(part.quantity),
-          });
-        }
-      }
-    }
+    const journalId = await send(tx, {
+      rows,
+      lines: fulfilment.lines,
+      date,
+      orderName: order.name,
+      reference: `${order.name} sent`,
+      description: `${order.name}: sent on ${sentOn}`,
+      key: `sp:${input.storeDomain}:sent:${fulfilment.externalId}`.slice(0, 120),
+    });
     await tx.query(
       `insert into sales_platform_sent (connection_id, order_external_id, fulfilment_external_id, sent_on, journal_id) values ($1, $2, $3, $4, $5)`,
       [input.connectionId, order.externalId, fulfilment.externalId, sentOn, journalId],
@@ -313,3 +342,77 @@ export async function countSent(
   return { counted: number };
 }
 
+
+export type HeldOrder = { orderId: string; name: string; invoiceDate: string; held: string; lines: string[] };
+
+/** Orders still holding something to be sent, oldest first (SWS10): for Mark as sent. Only invoiced orders. */
+export async function listHeldOrders(tx: OrgTx, connectionId: string): Promise<HeldOrder[]> {
+  const result = await tx.query<{ order_external_id: string; name: string | null; invoice_date: string; held: string; lines: string[] }>(
+    `select h.order_external_id, d.name, i.invoice_date::text,
+            to_char(sum(h.amount - h.recognised_amount - h.refunded_amount), 'FM999999990.00') as held,
+            array_agg(h.description order by h.id) as lines
+       from sales_platform_held_lines h
+       join sales_platform_documents d on d.connection_id = h.connection_id and d.record_kind = 'order' and d.external_id = h.order_external_id
+       join sales_invoices i on i.id = d.invoice_id
+      where h.connection_id = $1 and not h.closed
+      group by h.order_external_id, d.name, i.invoice_date
+      order by i.invoice_date, h.order_external_id`,
+    [connectionId],
+  );
+  return result.rows.map((row) => ({ orderId: row.order_external_id, name: row.name ?? row.order_external_id, invoiceDate: row.invoice_date, held: row.held, lines: row.lines }));
+}
+
+/**
+ * Mark as sent (SWS10, decision 1570): for an order Shopify never marked
+ * fulfilled, everything it still holds counts as sent on `sentOn`, as a
+ * fulfilment would, with who did it in the sync log and audit trail.
+ */
+export async function markHeldOrderSent(tx: OrgTx, connectionId: string, orderIdInput: unknown, sentOnInput: unknown): Promise<HeldOrder> {
+  const orderId = requireString(orderIdInput, "orderId", { maxLength: 100 });
+  const sentOn = parseIsoDate(sentOnInput, "sentOn");
+  const found = await tx.query<{ name: string | null; invoice_date: string | null; store_domain: string }>(
+    `select d.name, i.invoice_date::text, d.store_domain
+       from sales_platform_documents d left join sales_invoices i on i.id = d.invoice_id
+      where d.connection_id = $1 and d.record_kind = 'order' and d.external_id = $2 for update of d`,
+    [connectionId, orderId],
+  );
+  const doc = found.rows[0];
+  if (!doc) throw new NotFoundError("That order isn't in Tohyee.");
+  const name = doc.name ?? orderId;
+  if (!doc.invoice_date) throw new ValidationError(`${name} isn't invoiced yet (it isn't paid), so it can't be marked as sent.`);
+  if (sentOn < doc.invoice_date) throw new ValidationError(`The day it was sent can't be before its invoice (${formatDate(doc.invoice_date)}).`);
+  const rows = await loadHeld(tx, connectionId, orderId);
+  const open = rows.filter((row) => !row.closed);
+  if (open.length === 0) throw new ConflictError(`${name} has nothing left to send.`);
+  const held = toFixedString(sum(open.map(stillHeld)), SCALE);
+  const lines = open.map((row) => row.description);
+  const journalId = await send(tx, {
+    rows,
+    lines: null,
+    date: sentOn,
+    orderName: name,
+    reference: `${name} marked sent`,
+    description: `${name}: marked as sent on ${sentOn} in Tohyee`,
+    key: `sp:${doc.store_domain}:marked-sent:${orderId}`.slice(0, 120),
+  });
+  await saveRows(tx, rows);
+  await tx.query(
+    `insert into sales_platform_sent (connection_id, order_external_id, fulfilment_external_id, sent_on, journal_id) values ($1, $2, $3, $4, $5)`,
+    [connectionId, orderId, `marked:${orderId}`, sentOn, journalId],
+  );
+  const who = tx.actor.email ?? "someone";
+  await writeLog(tx, connectionId, {
+    source: "connection",
+    action: "posted",
+    recordKind: "order",
+    externalId: orderId,
+    message: `${name} marked as sent on ${formatDate(sentOn)} by ${who}: ${held} moved from Income in advance to sales (${lines.join(", ")}).`,
+  });
+  await writeAuditEvent(tx, {
+    eventType: "sales_platform.order_marked_sent",
+    entityType: "sales_platform_connection",
+    entityId: connectionId,
+    details: { orderId, name, sentOn, held, journalId },
+  });
+  return { orderId, name, invoiceDate: doc.invoice_date, held, lines };
+}
