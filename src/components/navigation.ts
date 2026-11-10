@@ -185,8 +185,10 @@ export const MENUS: Menu[] = [
             { href: "/operations/reports?report=tb", label: "Trial balance" },
             { href: "/operations/reports?report=equity", label: "Changes in equity" },
             { href: "/operations/reports?report=cashflow", label: "Cash flows" },
+            { href: "/operations/reports?report=statements", label: "Annual financial statements" },
           ]),
           ...section("Detail", [
+            { href: "/operations/reports?report=ledger", label: "General ledger" },
             { href: "/operations/reports?report=transactions", label: "Account transactions" },
             { href: "/operations/reports?report=journals", label: "Journal report" },
             { href: "/operations/reports?report=bankrec", label: "Bank reconciliation" },
@@ -250,7 +252,9 @@ export const MENUS: Menu[] = [
           ...section("Year end", [
             { href: "/operations/period-close", label: "Period close" },
             { href: "/operations/reports/accountant-pack", label: "Year-end pack" },
-            { href: "/operations/reports/financial-statements", label: "Financial statements" },
+            // The statements themselves are a report now (decision 1561); this page keeps signing and performance reports.
+            { href: "/operations/reports?report=statements", label: "Financial statements" },
+            { href: "/operations/reports/financial-statements", label: "Signing and performance reports" },
           ]),
           // Products and services are also under Sales; Jess looked for them here (2 Oct 2026).
           ...section("Inventory", [
