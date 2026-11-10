@@ -168,6 +168,33 @@ describe("the farm sections open with no connection (#477)", () => {
   });
 });
 
+describe("an organisation that doesn't farm gets no farm pages offline", () => {
+  it("says it needs a connection, rather than opening another organisation's farm pages", async () => {
+    const browser = pretendBrowser();
+    browser.setSession(signedIn("user-a"));
+    // A farming organisation first: its pages are saved on this device.
+    await browser.message({ type: "context", userId: "user-a", organisationId: "farm-org", farming: true, online: true });
+    expect(screensMissing((await browser.status()).pages)).toEqual([]);
+    // Then the shop, which doesn't farm, and the connection drops.
+    await browser.message({ type: "context", userId: "user-a", organisationId: "shop-org", farming: false, online: true });
+    browser.setOnline(false);
+    for (const path of ["/operations", "/", "/operations/farm", "/operations/farming/soil", "/operations/invoices"]) {
+      const opened = await browser.navigate(path);
+      expect(opened.status, path).toBe(503);
+      expect(opened.html, path).toContain("<h1>You&#39;re offline</h1>");
+      expect(opened.html, path).toContain("needs a connection to Tohyee");
+      expect(opened.html, path).not.toMatch(/farm/i);
+    }
+    // The install page is still there.
+    expect((await browser.navigate("/get-tohyee")).status).toBe(200);
+    // Back in the farming organisation, its farm pages open again.
+    browser.setOnline(true);
+    await browser.message({ type: "context", userId: "user-a", organisationId: "farm-org", farming: true, online: true });
+    browser.setOnline(false);
+    expect((await browser.navigate("/operations/farm")).status).toBe(200);
+  });
+});
+
 describe("only Tohyee confirming the same account renews the offline session (#481)", () => {
   it("checks the session's account, not just that it answered", () => {
     expect(sessionCheck(200, { user: { id: "a" } }, "a")).toBe("verified");

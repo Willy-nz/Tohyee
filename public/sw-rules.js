@@ -118,11 +118,16 @@
   /**
    * The page shown when a page can't be opened: no connection and no copy
    * ("offline"), copies locked after 14 days ("locked"), or nobody has signed
-   * in on this device yet ("none"). Plain HTML with its own light and dark
+   * in on this device yet ("none"), or the organisation open doesn't farm
+   * ("not_farming": no farm pages from another organisation). Plain HTML with its own light and dark
    * colours, so it needs nothing else.
    */
   function offlinePageHtml(kind, saved) {
     var title = kind === "locked" ? "Sign in to open Tohyee's offline copies" : kind === "none" ? "Tohyee needs a connection the first time" : "You're offline";
+    // An organisation that doesn't farm has no offline pages: just say so.
+    if (kind === "not_farming") {
+      return pageHtml(title, "<p>This page needs a connection to Tohyee. Check the internet connection, then try again.</p>");
+    }
     var body =
       kind === "locked"
         ? "<p>It's been more than " + OFFLINE_SESSION_DAYS + " days since you last signed in to Tohyee with a connection, so what's saved on this device is locked. Nothing waiting to be sent has been lost.</p><p>Connect to the internet (or your farm's network), then open Tohyee and sign in.</p>"
@@ -142,6 +147,10 @@
     } else if (kind === "offline") {
       links = "<p>None yet: open the farm pages once with a connection.</p>";
     }
+    return pageHtml(title, body + links);
+  }
+
+  function pageHtml(title, content) {
     return (
       '<!doctype html><html lang="en-NZ"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' +
       escapeHtml(title) +
@@ -155,8 +164,7 @@
       '</style></head><body><main><section role="status"><h1>' +
       escapeHtml(title) +
       "</h1>" +
-      body +
-      links +
+      content +
       '<p><button type="button" onclick="location.reload()">Try again</button></p></section></main></body></html>'
     );
   }

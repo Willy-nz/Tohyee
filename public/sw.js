@@ -212,9 +212,11 @@ function offlineNavigation(pathname) {
   return readContext().then(function (ctx) {
     if (!ctx) return htmlResponse(R.offlinePageHtml("none", []));
     if (!R.sessionState(ctx.verifiedAt, Date.now()).open) return htmlResponse(R.offlinePageHtml("locked", []));
+    var path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+    // An organisation that doesn't farm: the saved pages are another organisation's farm, so none of them.
+    if (ctx.farming === false && path !== "/get-tohyee") return htmlResponse(R.offlinePageHtml("not_farming", []));
     return currentPageCache().then(function (name) {
       return caches.open(name).then(function (cache) {
-        var path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
         return cache.match(path).then(function (hit) {
           if (hit) return hit;
           // Opening the app's icon (start page) with no connection goes to the farm's Today.
@@ -344,7 +346,14 @@ self.addEventListener("message", function (event) {
           reply({ ok: false, reason: "other_account" });
           return;
         }
-        var next = { userId: data.userId, organisationId: data.organisationId || null, verifiedAt: sameUser ? ctx.verifiedAt : null, warmedAt: sameUser ? ctx.warmedAt || null : null };
+        var next = {
+          userId: data.userId,
+          organisationId: data.organisationId || null,
+          // Whether that organisation farms: false, no farm pages offline (another organisation's would show).
+          farming: typeof data.farming === "boolean" ? data.farming : null,
+          verifiedAt: sameUser ? ctx.verifiedAt : null,
+          warmedAt: sameUser ? ctx.warmedAt || null : null,
+        };
         if (verified) next.verifiedAt = new Date().toISOString();
         // Pages are fetched again at most every 30 minutes (each visit refreshes its own page anyway).
         var warmNow = verified && (data.force || !next.warmedAt || Date.now() - Date.parse(next.warmedAt) > 30 * 60000);
