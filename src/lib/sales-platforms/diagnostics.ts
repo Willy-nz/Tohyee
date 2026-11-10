@@ -344,6 +344,8 @@ async function connectionReport(tx: OrgTx, connection: SalesPlatformConnection, 
         chargebacks: connection.chargebacksAccountCode,
         reserve: connection.reserveAccountCode,
       },
+      // Sales when sent (SWS1): what's still to be sent is held here until Shopify marks it sent; null when it's off.
+      salesWhenSentHeldIn: connection.salesWhenSentAccountCode,
       taxRates: connection.taxCodes,
       untaxedTaxCode: connection.untaxedTaxCode,
       guestCheckouts: connection.guestContactName ? `to ${connection.guestContactName}` : "refused",

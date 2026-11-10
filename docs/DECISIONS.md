@@ -13749,6 +13749,25 @@ migration 0264.
       layout; one already saved as a list (decision 1567) stays a list and
       can't be the default. List reports also show a nil opening balance
       as 0.00 and dates as dates.
+### Shopify sales when sent (10 Nov 2026; decision 1569)
+
+Jess: "we are including sales in sales that have not been sent". She chose
+invoice on payment with the sale when sent, line by line. Examples
+SWS1-SWS9. Claude's calls on the details, not yet reviewed. Tenant
+migration 0265.
+
+1569. **Shopify sales count when they're sent.** With Sales when sent on
+      (a connection setting with an Income in advance account), a paid
+      order is still invoiced when it's paid, so GST is counted then (time
+      of supply: the earlier of the invoice and the payment), but its lines
+      that need shipping, and its shipping, go to Income in advance with no
+      item. When Shopify records a fulfilment, a journal moves each sent
+      line's share to its sales account, shipping goes with the first
+      thing sent, and a stock item comes out of stock at average cost on
+      the fulfilment's date. Refunds of unsent lines come out of Income in
+      advance. A line with nothing left to send has anything left held
+      moved to sales, so Income in advance clears. Customer deposits with
+      GST were the other choice and remain unbuilt.
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

@@ -2,6 +2,7 @@ import { ACCOUNTING_ON_SQL, accountingEnabled } from "@/lib/organisations/accoun
 import { randomBytes } from "node:crypto";
 import { parseAccountCodeInput } from "@/lib/accounts/service";
 import { writeAuditEvent } from "@/lib/audit";
+import { createAccount } from "@/lib/accounts/service";
 import { createBankAccount } from "@/lib/bank/accounts";
 import { createContact, updateContact } from "@/lib/contacts/service";
 import { parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
@@ -43,7 +44,7 @@ import { type ShopifyPartKey, partOffMessage, partOn } from "@/lib/sales-platfor
 import { itemNameFor, mergeField, priceCopyable } from "@/lib/sales-platforms/merge";
 import { oldestFirst, SHOPIFY_PAYMENTS_GATEWAY, startOfLocalDate } from "@/lib/sales-platforms/orders";
 import { markPayoutsForRecheck, payoutsRecheckFrom, savePayout } from "@/lib/sales-platforms/payout-store";
-import { type PostingContext, loadPosting, ordersToRetry, postOrder, postPayout, postedPayoutIds } from "@/lib/sales-platforms/posting";
+import { type PostingContext, loadPosting, ordersHeld, ordersToRetry, postOrder, postPayout, postedPayoutIds } from "@/lib/sales-platforms/posting";
 import { shopifyConnector } from "@/lib/sales-platforms/shopify";
 import { woocommerceConnector } from "@/lib/sales-platforms/woocommerce";
 import {
@@ -125,6 +126,7 @@ type ConnectionRow = {
   shipping_account_id: string | null;
   chargebacks_account_id: string | null;
   reserve_account_id: string | null;
+  sales_when_sent_account_id: string | null;
   untaxed_tax_code_id: string | null;
   granted_scopes: string[];
   orders_synced_until: string | null;
@@ -138,6 +140,7 @@ type ConnectionRow = {
   shipping_account_code: string | null;
   chargebacks_account_code: string | null;
   reserve_account_code: string | null;
+  sales_when_sent_account_code: string | null;
   untaxed_tax_code: string | null;
   tax_codes: Array<{ rate: string; taxCode: string }>;
   payment_methods: Array<{ method: string; title: string | null; accountCode: string | null; leftOwing: boolean }>;
@@ -152,12 +155,14 @@ const COLUMNS =
   "access_token_ciphertext, access_token_expires_at, webhook_key, webhook_subscription_ids, webhooks_note, sync_customers, " +
   "sync_products, status, customers_synced_until, products_synced_until, last_sync_at, last_successful_sync_at, last_error, failures, connected_by_email, " +
   "connected_at, disconnected_by_email, disconnected_at, post_to_accounts, start_date, clearing_account_id, payout_account_id, " +
-  "fees_account_id, sales_account_id, shipping_account_id, chargebacks_account_id, reserve_account_id, untaxed_tax_code_id, granted_scopes, " +
+  "fees_account_id, sales_account_id, shipping_account_id, chargebacks_account_id, reserve_account_id, sales_when_sent_account_id, untaxed_tax_code_id, granted_scopes, " +
   "orders_synced_until, payouts_synced_until, extras_synced_at, stats_synced_at, customer_scope, " +
   "(select count(*)::int from sales_platform_mappings v where v.connection_id = sales_platform_connections.id and v.record_kind = 'product_variant') as variants_linked, " +
   "(select count(*)::int from sales_platform_mappings v where v.connection_id = sales_platform_connections.id and v.record_kind = 'product_variant'" +
   " and coalesce(v.synced_values->>'sku', '') = '') as variants_without_sku, " +
-  ["clearing_account_id", "payout_account_id", "fees_account_id", "sales_account_id", "shipping_account_id", "chargebacks_account_id", "reserve_account_id"].map(accountCode).join(", ") +
+  ["clearing_account_id", "payout_account_id", "fees_account_id", "sales_account_id", "shipping_account_id", "chargebacks_account_id", "reserve_account_id", "sales_when_sent_account_id"]
+    .map(accountCode)
+    .join(", ") +
   ", (select t.code from tax_codes t where t.id = untaxed_tax_code_id) as untaxed_tax_code" +
   ", guest_contact_id::text, (select g.name from contacts g where g.id = guest_contact_id) as guest_contact_name" +
   ", (select coalesce(json_agg(json_build_object('rate', m.rate::text, 'taxCode', t.code) order by m.rate), '[]'::json)" +
@@ -201,6 +206,7 @@ function toConnection(row: ConnectionRow): SalesPlatformConnection {
     shippingAccountCode: row.shipping_account_code,
     chargebacksAccountCode: row.chargebacks_account_code,
     reserveAccountCode: row.reserve_account_code,
+    salesWhenSentAccountCode: row.sales_when_sent_account_code,
     paymentMethods: row.payment_methods,
     untaxedTaxCode: row.untaxed_tax_code,
     guestContactId: row.guest_contact_id,
@@ -799,6 +805,25 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
   const reserve =
     body.reserveAccountCode === undefined ? undefined : await chooseAccount(tx, body.reserveAccountCode, "reserveAccountCode", "reserve account", bankInBase(tx.baseCurrency));
 
+  // Sales when sent (SWS1-SWS9): Income in advance, a current liability; null turns it off. Shopify only.
+  let whenSent: AccountChoice | null | undefined;
+  const liability = (a: { account_class: string; account_type: string }) =>
+    a.account_class === "liability" && a.account_type !== "bank" ? null : "it isn't a liability account (Income in advance is one).";
+  if (body.newSalesWhenSentAccount !== undefined && body.newSalesWhenSentAccount !== null) {
+    if (body.salesWhenSentAccountCode !== undefined) throw new ValidationError("Choose an Income in advance account or add one, not both.");
+    const fresh = asRecord(body.newSalesWhenSentAccount, "newSalesWhenSentAccount");
+    const account = await createAccount(tx, {
+      code: fresh.code,
+      name: fresh.name ?? "Income in advance",
+      accountType: "current_liability",
+    });
+    whenSent = { id: account.id, code: account.code, name: account.name };
+    changes.push(`added account ${account.code} (${account.name})`);
+  } else if (body.salesWhenSentAccountCode !== undefined) {
+    whenSent = await chooseAccount(tx, body.salesWhenSentAccountCode, "salesWhenSentAccountCode", "Income in advance account", liability);
+  }
+  if (whenSent && row.platform !== "shopify") throw new ValidationError(`Sales when sent is for Shopify only for now; ${shop} orders count when they're paid.`);
+
   let untaxed: TaxCodeChoice | null | undefined;
   if (body.untaxedTaxCode !== undefined) {
     untaxed = await chooseTaxCode(tx, body.untaxedTaxCode, "untaxedTaxCode");
@@ -881,6 +906,7 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
     shipping: pick(shipping?.id ?? shipping, row.shipping_account_id),
     chargebacks: pick(chargebacks?.id ?? chargebacks, row.chargebacks_account_id),
     reserve: pick(reserve?.id ?? reserve, row.reserve_account_id),
+    whenSent: pick(whenSent?.id ?? whenSent, row.sales_when_sent_account_id),
     untaxed: pick(untaxed?.id ?? untaxed, row.untaxed_tax_code_id),
     guest: pick(guest?.id ?? guest, row.guest_contact_id),
   };
@@ -945,6 +971,9 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
   named(shipping, row.shipping_account_id, "shipping account");
   named(chargebacks, row.chargebacks_account_id, "chargebacks account");
   named(reserve, row.reserve_account_id, "reserve account");
+  if (whenSent !== undefined && (whenSent?.id ?? null) !== row.sales_when_sent_account_id) {
+    changes.push(whenSent ? `sales when sent: on, held in ${whenSent.code} ${whenSent.name} (orders brought in from now)` : "sales when sent: off (orders already held count when sent)");
+  }
   if (untaxed !== undefined && (untaxed?.id ?? null) !== row.untaxed_tax_code_id) changes.push(`untaxed sales: ${untaxed?.code ?? "none"}`);
   if (guest !== undefined && (guest?.id ?? null) !== row.guest_contact_id) changes.push(`guest checkouts: ${guest ? `to ${guest.name}` : "refused"}`);
   if (paymentMethods !== undefined) {
@@ -978,7 +1007,7 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
     `update sales_platform_connections
         set sync_customers = $2, sync_products = $3, post_to_accounts = $4, start_date = $5, clearing_account_id = $6, payout_account_id = $7,
             fees_account_id = $8, sales_account_id = $9, shipping_account_id = $10, untaxed_tax_code_id = $11, guest_contact_id = $12::bigint,
-            chargebacks_account_id = $13, reserve_account_id = $14, updated_at = now()
+            chargebacks_account_id = $13, reserve_account_id = $14, sales_when_sent_account_id = $15, updated_at = now()
       where id = $1`,
     [
       row.id,
@@ -995,6 +1024,7 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
       next.guest,
       next.chargebacks,
       next.reserve,
+      next.whenSent,
     ],
   );
   const message = changes.join("; ");
@@ -1661,6 +1691,8 @@ function orderParts(row: ConnectionRow): NonNullable<OrdersRequest["parts"]> {
     discounts: partOn(row.granted_scopes, "discounts"),
     fulfilments: partOn(row.granted_scopes, "fulfilments"),
     fulfilmentOrders: partOn(row.granted_scopes, "fulfilments") && row.granted_scopes.includes("read_merchant_managed_fulfillment_orders"),
+    // What's been sent (SWS2): read whenever posting is on, so orders already held are counted even after it's turned off.
+    sent: row.post_to_accounts,
   };
 }
 
@@ -1727,7 +1759,7 @@ export async function syncConnection(
     return {
       row: found,
       hasStats: (stats.rowCount ?? 0) > 0,
-      retryIds: posts(found) ? await ordersToRetry(tx, found.id) : [],
+      retryIds: posts(found) ? [...(await ordersToRetry(tx, found.id)), ...(await ordersHeld(tx, found.id))] : [],
       postedPayouts: posts(found) && readsPayouts(found) ? await postedPayoutIds(tx, found.platform, found.store_domain) : new Set<string>(),
       // SPC39: payouts to read again (refused before a fix, or "Try again"); the earliest one's day.
       recheckFrom: posts(found) && readsPayouts(found) ? await payoutsRecheckFrom(tx, found.id) : null,

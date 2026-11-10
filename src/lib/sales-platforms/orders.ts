@@ -12,6 +12,7 @@ import {
   isPositive,
   isZero,
   mul,
+  mulDiv,
   sub,
   sum,
   toFixedString,
@@ -59,6 +60,9 @@ export type PostingRules = {
 /** A variant linked to an item. */
 export type LinkedItem = { id: string; code: string; itemType: string; incomeAccountCode: string | null };
 
+/** The order line or shipping line a planned line came from (sales when sent, SWS1). */
+export type LineSource = { kind: "line" | "shipping"; externalId: string; requiresShipping: boolean };
+
 export type PlannedLine = {
   description: string;
   quantity: string;
@@ -66,6 +70,8 @@ export type PlannedLine = {
   accountCode: string;
   taxCode: string | null;
   itemId: string | null;
+  /** Where it came from; left off what's sent to the documents. */
+  source?: LineSource;
 };
 
 export type Refusal = { ok: false; reason: string };
@@ -75,6 +81,8 @@ export type OrderPlan =
       ok: true;
       amountsMode: AmountsMode;
       lines: PlannedLine[];
+      /** Each line's tax rate, in step with `lines`. */
+      rates: string[];
       total: string;
       /** Things the sync log should say (tax rounding, tax that's part of the sale). */
       notes: string[];
@@ -173,7 +181,17 @@ export function taxCodeFor(taxLines: readonly PlatformTaxLine[], rules: PostingR
   return { ok: true, code: rules.untaxedTaxCode, rate: "0" };
 }
 
-type Draft = { what: string; amount: Decimal; quantity: string; shopifyTax: Decimal; tax: { code: string | null; rate: string | null }; accountCode: string; itemId: string | null; description: string };
+type Draft = {
+  what: string;
+  amount: Decimal;
+  quantity: string;
+  shopifyTax: Decimal;
+  tax: { code: string | null; rate: string | null };
+  accountCode: string;
+  itemId: string | null;
+  description: string;
+  source: LineSource;
+};
 
 /**
  * The sales order's lines for an order (SPC11-SPC13, SPC16, SPC17, SPC23),
@@ -218,6 +236,7 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
     taxLines: readonly PlatformTaxLine[],
     accountCode: string,
     itemId: string | null,
+    source: LineSource,
   ): Draft | Refusal => {
     if (isNegative(gross)) return refuse(`${what} comes to less than nothing (${money(gross)}).`);
     const tax = taxCodeFor(taxLines, rules, overseas, what);
@@ -225,7 +244,7 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
     const shopifyTax = taxOf(taxLines);
     // Not GST registered: tax Shopify added on top is part of the sale (decision 53).
     const amount = amountsMode === "no_tax" && !order.taxesIncluded ? add(gross, shopifyTax) : gross;
-    return { what, amount, quantity, shopifyTax, tax: { code: tax.code, rate: tax.rate }, accountCode, itemId, description };
+    return { what, amount, quantity, shopifyTax, tax: { code: tax.code, rate: tax.rate }, accountCode, itemId, description, source };
   };
 
   for (const line of order.lines) {
@@ -239,6 +258,7 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
       line.taxLines,
       item?.incomeAccountCode ?? rules.salesAccountCode,
       item?.id ?? null,
+      { kind: "line", externalId: line.externalId, requiresShipping: line.requiresShipping !== false },
     );
     if ("ok" in draft) return draft;
     drafts.push(draft);
@@ -253,6 +273,7 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
       shipping.taxLines,
       rules.shippingAccountCode,
       null,
+      { kind: "shipping", externalId: shipping.externalId, requiresShipping: true },
     );
     if ("ok" in draft) return draft;
     drafts.push(draft);
@@ -277,7 +298,15 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
       notes.push(`${draft.what}: Tohyee works out GST of ${money(ours)} (per line, as on every invoice); ${rules.platformName ?? "Shopify"}'s tax line says ${money(draft.shopifyTax)}.`);
     }
     for (const part of parts) {
-      lines.push({ description: draft.description, quantity: part.quantity, unitPrice: part.unitPrice, accountCode: draft.accountCode, taxCode: draft.tax.code, itemId: draft.itemId });
+      lines.push({
+        description: draft.description,
+        quantity: part.quantity,
+        unitPrice: part.unitPrice,
+        accountCode: draft.accountCode,
+        taxCode: draft.tax.code,
+        itemId: draft.itemId,
+        source: draft.source,
+      });
       rates.push(draft.tax.rate ?? "0");
     }
   }
@@ -289,7 +318,7 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
   if (cmp(dec(total), dec(order.total)) !== 0) {
     return refuse(`${name}'s lines come to ${total} in Tohyee but ${rules.platformName ?? "Shopify"}'s order total is ${money(order.total)} (tips, duties or other charges aren't supported yet), so it isn't brought in.`);
   }
-  return { ok: true, amountsMode, lines, total, notes };
+  return { ok: true, amountsMode, lines, rates, total, notes };
 }
 
 // ---------------------------------------------------------------------------
@@ -335,7 +364,18 @@ export const PAID_STATUSES = ["PAID", "PARTIALLY_REFUNDED", "REFUNDED"];
 // ---------------------------------------------------------------------------
 // Refunds
 
-export type RefundPlan = { ok: true; lines: PlannedLine[]; total: string; refunded: string; date: string } | Refusal | { ok: "nothing"; reason: string };
+/**
+ * What an order still holds for sales when sent (SWS5, SWS6): each order line's
+ * quantity not yet sent or refunded, and its shipping lines not yet counted.
+ */
+export type RefundHeld = { accountCode: string; lines: ReadonlyMap<string, Decimal>; shipping: ReadonlySet<string> };
+/** A part of a refund taken from what's held: its credit note lines (indexes) and the quantity. */
+export type HeldUse = { kind: "line" | "shipping"; externalId: string; quantity: string; lineIndexes: number[] };
+
+export type RefundPlan =
+  | { ok: true; lines: PlannedLine[]; rates: Array<string | null>; amountsMode: AmountsMode; total: string; refunded: string; date: string; held: HeldUse[] }
+  | Refusal
+  | { ok: "nothing"; reason: string };
 
 /**
  * A refund's credit note lines (SPC14): each refunded line at Shopify's
@@ -349,6 +389,7 @@ export function planRefund(
   rules: PostingRules,
   items: ReadonlyMap<string, LinkedItem>,
   overseas: boolean,
+  held: RefundHeld | null = null,
 ): RefundPlan {
   const what = `${order.name}'s refund ${refund.externalId}`;
   const returned = refund.transactions.filter((t) => succeeded(t) && t.kind === "REFUND");
@@ -364,6 +405,7 @@ export function planRefund(
   const lines: PlannedLine[] = [];
   const rates: Array<string | null> = [];
   const byId = new Map<string, PlatformOrderLine>(order.lines.map((line) => [line.externalId, line]));
+  const uses: HeldUse[] = [];
   for (const entry of refund.lines) {
     if (!isPositive(dec(entry.quantity)) && isZero(dec(entry.subtotal))) continue;
     const line = byId.get(entry.lineItemId);
@@ -374,16 +416,37 @@ export function planRefund(
     const amount = amountsMode === "no_tax" && !order.taxesIncluded ? add(dec(entry.subtotal), dec(entry.tax)) : dec(entry.subtotal);
     // A restocked stock item comes back into stock at the sale's cost (ST5); anything else is a line without the item.
     const keepItem = item !== null && (item.itemType !== "stock" || entry.restocked);
-    for (const part of splitAmount(money(amount), isPositive(dec(entry.quantity)) ? entry.quantity : "1")) {
-      lines.push({
-        description: line.name,
-        quantity: part.quantity,
-        unitPrice: part.unitPrice,
-        accountCode: item?.incomeAccountCode ?? rules.salesAccountCode,
-        taxCode: tax.code,
-        itemId: keepItem ? item!.id : null,
-      });
-      rates.push(tax.rate);
+    // Still held (SWS5, SWS6): the part not yet sent comes out of Income in advance, without the item (it never left stock).
+    const unsent = held?.lines.get(line.externalId) ?? ZERO_DECIMAL;
+    const quantity = dec(entry.quantity);
+    const parts: Array<{ amount: Decimal; quantity: string; held: boolean; heldQuantity: string }> = [];
+    if (!isPositive(unsent)) {
+      parts.push({ amount, quantity: isPositive(quantity) ? entry.quantity : "1", held: false, heldQuantity: "0" });
+    } else if (!isPositive(quantity)) {
+      // An amount only (a goodwill refund) on a line still to be sent: all of it from what's held.
+      parts.push({ amount, quantity: "1", held: true, heldQuantity: "0" });
+    } else {
+      const fromHeld = cmp(quantity, unsent) <= 0 ? quantity : unsent;
+      const heldAmount = cmp(fromHeld, quantity) === 0 ? amount : mulDiv(amount, fromHeld, quantity, 2);
+      parts.push({ amount: heldAmount, quantity: toPlainString(fromHeld), held: true, heldQuantity: toPlainString(fromHeld) });
+      const restQuantity = sub(quantity, fromHeld);
+      if (isPositive(restQuantity)) parts.push({ amount: sub(amount, heldAmount), quantity: toPlainString(restQuantity), held: false, heldQuantity: "0" });
+    }
+    for (const portion of parts) {
+      const indexes: number[] = [];
+      for (const part of splitAmount(money(portion.amount), portion.quantity)) {
+        indexes.push(lines.length);
+        lines.push({
+          description: line.name,
+          quantity: part.quantity,
+          unitPrice: part.unitPrice,
+          accountCode: portion.held ? held!.accountCode : (item?.incomeAccountCode ?? rules.salesAccountCode),
+          taxCode: tax.code,
+          itemId: portion.held ? null : keepItem ? item!.id : null,
+        });
+        rates.push(tax.rate);
+      }
+      if (portion.held) uses.push({ kind: "line", externalId: line.externalId, quantity: portion.heldQuantity, lineIndexes: indexes });
     }
   }
   for (const entry of refund.shipping) {
@@ -392,11 +455,14 @@ export function planRefund(
     if (!tax.ok) return tax;
     const amount = amountsMode === "no_tax" && !order.taxesIncluded ? add(dec(entry.subtotal), dec(entry.tax)) : dec(entry.subtotal);
     if (isZero(amount)) continue;
+    // Shipping not yet counted (nothing sent yet) comes out of Income in advance (SWS5).
+    const shippingHeld = shipping !== null && held !== null && held.shipping.has(shipping.externalId);
+    if (shippingHeld) uses.push({ kind: "shipping", externalId: shipping!.externalId, quantity: "0", lineIndexes: [lines.length] });
     lines.push({
       description: `Shipping: ${shipping?.title ?? "shipping"}`,
       quantity: "1",
       unitPrice: money(amount),
-      accountCode: rules.shippingAccountCode,
+      accountCode: shippingHeld ? held!.accountCode : rules.shippingAccountCode,
       taxCode: tax.code,
       itemId: null,
     });
@@ -411,7 +477,7 @@ export function planRefund(
   if (cmp(dec(total), refunded) !== 0) {
     return refuse(`${what}'s lines come to ${total} but ${rules.platformName ?? "Shopify"} refunded ${money(refunded)}, so nothing was posted.`);
   }
-  return { ok: true, lines, total, refunded: money(refunded), date: localDate(at) };
+  return { ok: true, lines, rates, amountsMode, total, refunded: money(refunded), date: localDate(at), held: uses };
 }
 
 // ---------------------------------------------------------------------------

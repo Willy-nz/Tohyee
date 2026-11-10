@@ -12,6 +12,7 @@ import {
   type PlatformBalanceTransaction,
   type PlatformCustomer,
   type PlatformOrder,
+  type PlatformSent,
   type PlatformPayout,
   type PlatformRefund,
   type PlatformTaxLine,
@@ -423,6 +424,7 @@ export function shopifyOrderFromGraphql(node: unknown): PlatformOrder {
       discount: toPlainString(sum((Array.isArray(line.discountAllocations) ? line.discountAllocations : []).map((a) => dec(amountOf(record(a).allocatedAmountSet))))),
       taxLines: taxLines(line.taxLines),
       isGiftCard: line.isGiftCard === true,
+      requiresShipping: line.requiresShipping !== false,
     })),
     shipping: nodesOf(shippingLines).map((line) => ({
       externalId: shopifyId(line.id, "shipping line"),
@@ -434,6 +436,23 @@ export function shopifyOrderFromGraphql(node: unknown): PlatformOrder {
     transactions: transactions.map(transaction),
     refunds: refunds.map(refund),
     incomplete,
+    ...(Array.isArray(n.sentLines) ? { sent: n.sentLines.map(sentFulfilment) } : {}),
+  };
+}
+
+/** A fulfilment's lines (Fulfillment.fulfillmentLineItems: FulfillmentLineItem's lineItem and quantity), for sales when sent (SWS2). */
+function sentFulfilment(raw: unknown): PlatformSent {
+  const f = record(raw);
+  const items = record(f.fulfillmentLineItems);
+  return {
+    externalId: shopifyId(f.id, "fulfilment"),
+    status: text(f.status),
+    createdAt: timestamp(f.createdAt),
+    lines: nodesOf(items).map((node) => ({
+      lineItemId: shopifyId(record(node.lineItem).id, "order line"),
+      quantity: String(typeof node.quantity === "number" ? node.quantity : 0),
+    })),
+    incomplete: hasMore(items),
   };
 }
 
@@ -632,7 +651,7 @@ function orderQuery(parts: OrderParts): string {
     shippingAddress { firstName lastName name }
     lineItems(first: ${LINES_PER_ORDER}) {
       nodes {
-        id name sku quantity isGiftCard
+        id name sku quantity isGiftCard requiresShipping
         variant { id }
         originalTotalSet { ${MONEY} }
         discountAllocations { allocatedAmountSet { ${MONEY} } ${extra.allocation} }

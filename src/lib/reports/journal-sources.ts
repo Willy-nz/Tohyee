@@ -147,6 +147,7 @@ const ORIGIN_NAMES: Record<string, string> = {
   fx_revaluation: "FX revaluation",
   opening_balance: "Opening balances",
   payroll: "Payroll",
+  sales_when_sent: "Shopify sale sent",
 };
 
 /** The source of a journal from its row. `isReversal` marks a void (or a correction's reversal). */

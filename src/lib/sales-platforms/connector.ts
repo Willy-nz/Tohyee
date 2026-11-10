@@ -94,6 +94,19 @@ export type PlatformOrderLine = {
   discount: string;
   taxLines: PlatformTaxLine[];
   isGiftCard: boolean;
+  /** Whether it's sent (Shopify's requiresShipping); left out, it is (SWS4). */
+  requiresShipping?: boolean;
+};
+
+/** A fulfilment's lines, for sales when sent (SWS2-SWS8): what was sent, when. */
+export type PlatformSent = {
+  externalId: string;
+  /** SUCCESS counts; CANCELLED and the rest don't (SWS8). */
+  status: string | null;
+  createdAt: string | null;
+  lines: Array<{ lineItemId: string; quantity: string }>;
+  /** More lines than were asked for. */
+  incomplete: boolean;
 };
 
 export type PlatformShippingLine = {
@@ -157,6 +170,8 @@ export type PlatformOrder = {
   incomplete: string | null;
   /** Read-only extras (decisions 1237-1245), when their parts were asked for. Never posted. */
   extras?: PlatformOrderExtras;
+  /** What's been sent, when sales when sent is on (SWS2); undefined when it wasn't asked for. */
+  sent?: PlatformSent[];
 };
 
 /** One discount used on an order (SPD6): what Shopify allocated from it to the lines and shipping. */
@@ -309,7 +324,7 @@ export type OrdersRequest = {
   /** Orders to fetch again whatever their change time (ones that stopped part way). */
   retryIds: string[];
   /** Read-only extras to ask for with each order (Shopify; decisions 1240-1243). */
-  parts?: { discounts: boolean; fulfilments: boolean; fulfilmentOrders: boolean };
+  parts?: { discounts: boolean; fulfilments: boolean; fulfilmentOrders: boolean; sent?: boolean };
 };
 
 export type OrdersResult = { orders: PlatformOrder[]; until: string | null; notes: string[] };

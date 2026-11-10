@@ -30,7 +30,11 @@ export type LineFixture = {
   discount?: string;
   tax?: TaxFixture[];
   giftCard?: boolean;
+  /** Shopify's requiresShipping; left out, true. */
+  requiresShipping?: boolean;
 };
+/** A fulfilment and the lines it sent (Fulfillment.fulfillmentLineItems), for sales when sent (SWS2). */
+export type FulfilmentFixture = { id: number; createdAt: string; status?: string; lines: Array<{ lineId: number; quantity: number }> };
 export type ShippingFixture = { id: number; title: string; amount: string; tax?: TaxFixture[]; removed?: boolean };
 export type TransactionFixture = { id: number; kind: string; status?: string; gateway?: string; amount: string; processedAt: string; test?: boolean };
 export type RefundFixture = {
@@ -60,6 +64,7 @@ export type OrderFixture = {
   shipping?: ShippingFixture[];
   transactions: TransactionFixture[];
   refunds?: RefundFixture[];
+  fulfilments?: FulfilmentFixture[];
   test?: boolean;
 };
 export type BalanceTransactionFixture = { id: number; type: string; amount: string; fee: string; net: string; orderName?: string | null; adjustmentReason?: string | null };
@@ -139,6 +144,7 @@ export function orderNode(o: OrderFixture) {
         sku: line.sku,
         quantity: line.quantity,
         isGiftCard: line.giftCard === true,
+        requiresShipping: line.requiresShipping !== false,
         variant: line.variantId === null ? null : { id: gid("ProductVariant", line.variantId) },
         originalTotalSet: bag(line.originalTotal, currency),
         discountAllocations: line.discount ? [{ allocatedAmountSet: bag(line.discount, currency) }] : [],
@@ -158,6 +164,13 @@ export function orderNode(o: OrderFixture) {
     },
     transactions: o.transactions.map((t) => transactionNode(t, currency)),
     refunds: (o.refunds ?? []).map((r) => ({ id: gid("Refund", r.id) })),
+    // The alias the order query gives Fulfillment for sales when sent.
+    sentLines: (o.fulfilments ?? []).map((f) => ({
+      id: gid("Fulfillment", f.id),
+      status: f.status ?? "SUCCESS",
+      createdAt: f.createdAt,
+      fulfillmentLineItems: { nodes: f.lines.map((line) => ({ lineItem: { id: gid("LineItem", line.lineId) }, quantity: line.quantity })), pageInfo: { hasNextPage: false } },
+    })),
   };
 }
 
