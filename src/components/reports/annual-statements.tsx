@@ -396,7 +396,18 @@ export function AnnualStatementsReport({ organisationId }: { organisationId: str
     }
     const statement = data.statements.find((entry) => entry.key === page.key);
     if (!statement) return null;
-    return <StatementTable statement={statement} columns={data.columns} action={editing ? null : layoutFor(statement)?.button(data.yearEnd)} title={heading(statement.key, statement.title)} />;
+    return <StatementTable statement={statement} columns={data.columns} action={
+          editing && statement.base ? (
+            <>
+              <p className={ui.muted} style={{ margin: "0 0 8px" }}>
+                The heading can be typed here. The lines and their names come from the layout: change them with Edit layout, or give an account a reporting name under Accounting › Chart of accounts.
+              </p>
+              {layoutFor(statement)?.button(data.yearEnd)}
+            </>
+          ) : (
+            layoutFor(statement)?.button(data.yearEnd)
+          )
+        } title={heading(statement.key, statement.title)} />;
   }
 
   return (

@@ -68,7 +68,7 @@ export async function accountTotals(
   filter: TrackingFilter | null = null,
 ): Promise<AccountTotalsRow[]> {
   const result = await tx.query<AccountTotalsRow>(
-    `select a.id, a.code, a.name, a.account_class, a.account_type,
+    `select a.id, a.code, coalesce(a.reporting_name, a.name) as name, a.account_class, a.account_type,
             coalesce(sum(l.debit_amount), 0)::text as debits,
             coalesce(sum(l.credit_amount), 0)::text as credits
        from accounts a
@@ -128,7 +128,7 @@ export async function trialBalance(tx: OrgTx, input: { asAt?: unknown; trackingC
   const previousYearsEarnings = sub(earningsOf(all), earningsOf(thisYearRows));
   const retainedAccount = (
     await tx.query<{ id: string; code: string; name: string; account_class: AccountClass; account_type: AccountType }>(
-      "select id::text, code, name, account_class, account_type from accounts where system_key = 'retained_earnings' and account_class = 'equity'",
+      "select id::text, code, coalesce(reporting_name, name) as name, account_class, account_type from accounts where system_key = 'retained_earnings' and account_class = 'equity'",
     )
   ).rows[0];
   const netOf = (row: AccountTotalsRow | undefined) => (row ? sub(dec(row.debits), dec(row.credits)) : ZERO_DECIMAL);
@@ -445,7 +445,7 @@ export async function profitAndLossSplit(
        union all
        select v.id, r.root_id from tracking_values v join roots r on v.parent_id = r.id
      )
-     select a.id, a.code, a.name, a.account_class, a.account_type, r.root_id::text as bucket,
+     select a.id, a.code, coalesce(a.reporting_name, a.name) as name, a.account_class, a.account_type, r.root_id::text as bucket,
             coalesce(sum(l.debit_amount), 0)::text as debits,
             coalesce(sum(l.credit_amount), 0)::text as credits
        from accounts a

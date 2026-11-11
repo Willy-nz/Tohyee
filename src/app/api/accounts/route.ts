@@ -18,6 +18,7 @@ export const POST = route(async (request) => {
       name: body.name,
       accountType: body.accountType,
       description: body.description,
+      reportingName: body.reportingName,
       currencyCode: body.currencyCode,
       defaultTaxCode: body.defaultTaxCode,
     }),
