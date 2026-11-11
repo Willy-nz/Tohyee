@@ -227,6 +227,26 @@ describeWithDatabase("custom reports", () => {
     expect(figures.blocks.map((block) => block.id)).toEqual(["note", "main", "cash"]);
   });
 
+  it("LE3: a page break after a table or a note is kept and shown", async () => {
+    const w = await setup();
+    const report = await w.create("profit_and_loss");
+    const { figures } = await w.save(report, (layout) => {
+      (layout.blocks[0] as { pageBreakAfter?: boolean }).pageBreakAfter = true;
+      layout.blocks.push({ id: "note", kind: "text", text: "Figures are unaudited.", pageBreakAfter: true });
+      layout.blocks.push({ id: "last", kind: "text", text: "No break after this." });
+    });
+    expect(figures.blocks.map((block) => [block.id, (block as { pageBreakAfter?: boolean }).pageBreakAfter ?? false])).toEqual([
+      ["main", true],
+      ["note", true],
+      ["last", false],
+    ]);
+    await expect(
+      w.save(report, (layout) => {
+        (layout.blocks[0] as unknown as { pageBreakAfter: string }).pageBreakAfter = "yes";
+      }),
+    ).rejects.toThrow(/pageBreakAfter/);
+  });
+
   it("CR6: a balance sheet copy for two months equals the standard balance sheet", async () => {
     const w = await setup();
     const report = await w.create("balance_sheet");

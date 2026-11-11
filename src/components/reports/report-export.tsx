@@ -57,6 +57,8 @@ function tableData(target: ReportExportTableTarget): ReportExportTable | null {
             : undefined;
     rows.push({ cells, kind, ...(row.dataset.pageBreak === "after" ? { pageBreakAfter: true } : {}) });
   }
+  // A page break after the whole table (LE3): the table, or its block, says so.
+  if (rows.length > 0 && (table.dataset.pageBreak === "after" || table.closest<HTMLElement>("[data-block-page-break]"))) rows[rows.length - 1].pageBreakAfter = true;
   return { title: target.title, columns: headers, rows };
 }
 
