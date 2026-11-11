@@ -13778,6 +13778,15 @@ migration 0265.
       decides what's listed, so it works with Sales when sent off; with it
       on, the amounts held and Mark as sent are there too. The store's
       settings link to it instead of listing the orders.
+### Bank reconciliation: what's already in the bank's balance (11 Nov 2026; decision 1572)
+
+1572. **Items already in the bank's balance aren't "not yet on the
+      statement" (BK43, BK44).** Jess's report showed 807.77 not explained
+      when the books and bank agreed. An unreconciled item dated before the
+      bank's first line, or (when the balance is the feed's) after its last
+      line and on or before the feed balance's date, is listed under
+      "Already in the bank's balance" and not taken off. Claude's call on
+      the details, not yet reviewed.
 ### Revenue recognition setting (11 Nov 2026; decision 1573)
 
 1573. **Sales when sent is a revenue recognition choice in Settings.** Jess:

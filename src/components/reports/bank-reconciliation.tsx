@@ -183,6 +183,32 @@ export function BankReconciliationReportView({
                     <Money value={data.tohyeeNotInBank.total} />
                   </td>
                 </tr>
+                {data.inBankAlready.items.length > 0 ? (
+                  <>
+                    <tr className={ui.reportHeading}>
+                      <td colSpan={2}>Already in the bank&apos;s balance (not taken off)</td>
+                    </tr>
+                    {data.inBankAlready.items.map((item) => (
+                      <tr key={item.journalLineId} className={ui.reportSection}>
+                        <td>
+                          {formatDate(item.date)} · {originLabel(item.origin)} <Link href={journalHref(item.journalId)}>#{item.journalId}</Link>
+                          {item.description ? ` · ${item.description}` : ""}
+                          <span className={ui.muted}>
+                            {" "}
+                            (
+                            {item.why === "before_lines"
+                              ? "before the bank's lines start"
+                              : `after the last line${data.inBankAlready.lastLineDate ? ` (${formatDate(data.inBankAlready.lastLineDate)})` : ""}: probably in the feed's balance, its line not here yet`}
+                            )
+                          </span>
+                        </td>
+                        <td className={ui.num}>
+                          <Money value={item.amount} />
+                        </td>
+                      </tr>
+                    ))}
+                  </>
+                ) : null}
                 <tr className={ui.reportTotal}>
                   <td>Statement balance these explain</td>
                   <td className={ui.num}>
