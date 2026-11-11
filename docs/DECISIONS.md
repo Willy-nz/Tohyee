@@ -13896,6 +13896,16 @@ migration 0265.
       never voids". The limit is set on the AI page by admins and owners
       (tenant migration 0268). Not yet reviewed.
 
+### Doubled Shopify names and reference lines (12 Nov 2026; decision 1584)
+
+1584. **Small fixes from Jess's 11 Nov list (issues 4 and 8).** A Shopify
+      customer whose whole name is in both the first and last name fields
+      ("K A Monaghan K A Monaghan") comes in once; a last name that already
+      ends the first name isn't added again. An Analytics reference line
+      with a value and no kind is a constant line, and the guide for the AI
+      lists the kinds. Customers already brought in keep their names: fix
+      them on the contact. Not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
