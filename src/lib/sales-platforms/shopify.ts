@@ -197,8 +197,21 @@ function later(a: string | null, b: string | null): string | null {
 }
 
 /** First and last name as typed, with the spaces around and between them tidied (decision 1336: nothing else is changed). */
-function joinName(first: unknown, last: unknown): string | null {
-  return text([text(first), text(last)].filter(Boolean).join(" ").replace(/\s+/g, " "));
+/**
+ * First and last name as one. When Shopify has the whole name in both (or
+ * the last name already ends the first), it's used once: "K A Monaghan",
+ * not "K A Monaghan K A Monaghan" (Jess's issue 8, 11 Nov 2026).
+ */
+export function joinName(first: unknown, last: unknown): string | null {
+  const a = text(text(first)?.replace(/\s+/g, " "));
+  const b = text(text(last)?.replace(/\s+/g, " "));
+  if (a && b) {
+    const lowerA = a.toLowerCase();
+    const lowerB = b.toLowerCase();
+    if (lowerA === lowerB || lowerA.endsWith(` ${lowerB}`)) return a;
+    if (lowerB.startsWith(`${lowerA} `)) return b;
+  }
+  return text([a, b].filter(Boolean).join(" "));
 }
 
 /** A customer's name, or their email or phone when the store has no name (marked, decision 1336). */
