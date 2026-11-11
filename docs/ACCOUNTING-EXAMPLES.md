@@ -2499,6 +2499,33 @@ Tested in `tests/integration/void-journals.test.ts`.
 - **VJ5** Several at once: tick manual journals in the Journals list, then
   **Void selected** (up to 100), with the same preview. Viewers can't void.
 
+### Recoding spend and receive money in place (RC1-RC6; Jess, 11 Nov 2026, issue 11; the details are Claude's, not yet reviewed)
+
+Tested in `tests/integration/recode-bank-transactions.test.ts`. Two
+statement lines, 5 and 6 Jun 2026, -23.00 and -46.00, coded to 6140
+Printing and stationery (GST inclusive).
+
+- **RC1** On a bank account's Transactions tab, **Edit** on spend or
+  receive money changes its account, GST code, contact or description; on
+  several, Bank transactions › Recode (linked from that tab) finds them by
+  coded account, text and dates, ticks up to 100 and changes them together.
+  Bookkeepers and up; a Full access AI with `recode_bank_transactions`. The
+  existing Recode (a correcting journal, RCD1-RCD6) stays beside it.
+- **RC2** First a preview: each transaction, why any can't be recoded, and
+  what moves by month and account: 6140 to 6000 for June: 6000 **60.00**,
+  6140 **-60.00** (net of GST).
+- **RC3** Each is corrected as a whole on its own date: voided (kept) and
+  posted again with the new coding, linked to it. The statement line it was
+  reconciled with is reconciled with the new one. 6140 is then **0.00** and
+  6000 **60.00**; the bank is unchanged.
+- **RC4** One that isn't reconciled is voided and posted again the same way.
+- **RC5** Refused: a locked period, a voided one, nothing to change, a
+  split reconciliation or a line matched rather than coded (use Remove &
+  redo), a GST code change on amounts entered without GST (its total would
+  change), or a changed preview. A retry does nothing more.
+- **RC6** "Lines on" limits the change to lines on one account; blank
+  changes every line.
+
 ### Leaving out voided pairs (VP1-VP3; Jess, 11 Nov 2026, issue 10; the details are Claude's, not yet reviewed)
 
 Tested in `tests/integration/void-journals.test.ts`. In October 2026: A

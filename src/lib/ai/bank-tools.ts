@@ -1,3 +1,4 @@
+import { MAX_RECODE, planRecode, recodeBankTransactions } from "@/lib/bank/recode";
 import { randomBytes } from "node:crypto";
 import { BANK_ACCOUNT_CODE, BANK_ACCOUNT_ID, accountFromArgs } from "@/lib/ai/account-ref";
 import { boundedLimit, CURSOR, cursorOf, limitInput, pageAfter, pageByOffset, positionOf } from "@/lib/ai/limits";
@@ -761,6 +762,46 @@ export const BANK_WRITE_TOOLS: readonly AiTool[] = [
     },
     async run(tx, args, context) {
       return unmatchLines(savepointRunner(tx), args, context);
+    },
+  },
+  {
+    name: "recode_bank_transactions",
+    title: "Recode spend and receive money in place",
+    level: "full",
+    description: `Recodes up to ${MAX_RECODE} posted spend or receive money transactions in place (Jess, 11 Nov 2026), instead of posting recoding journals: change the account of their lines (all of them, or only those on fromAccountCode), and optionally the GST code, contact or description. Each is corrected on its own date: the old one is voided (the record kept) and the new one posted, linked to it, and a statement line it was reconciled with is reconciled with the new one. Refused in a locked period, for one in a split reconciliation or matched rather than coded (use remove_and_redo_bank_lines), and for a GST code change on amounts entered without GST. First call it without previewHash to see each transaction and the effect by account and month, and check it's what was asked; then call it again with the previewHash, the same bankTransactionIds and change, and a new idempotencyKey. Find them with list_bank_lines or by asking which ones.`,
+    inputSchema: schema(
+      {
+        bankTransactionIds: { type: "array", items: ID("bank transaction"), maxItems: MAX_RECODE },
+        change: {
+          type: "object",
+          properties: {
+            fromAccountCode: { type: "string", description: "Only lines on this account change; left out, every line." },
+            accountCode: { type: "string" },
+            taxCode: { type: "string" },
+            contactId: ID("contact"),
+            description: { type: "string" },
+          },
+        },
+        previewHash: { type: "string", description: "From the preview. Left out, nothing changes and the preview is the answer." },
+        idempotencyKey: IDEMPOTENCY,
+      },
+      ["bankTransactionIds", "change"],
+    ),
+    async run(tx, args, context) {
+      if (args.previewHash == null || args.previewHash === "") {
+        return {
+          preview: true,
+          ...(await planRecode(tx, { bankTransactionIds: args.bankTransactionIds, change: args.change })),
+          next: "Check this is what the person asked for. To go ahead, call recode_bank_transactions again with the same bankTransactionIds and change, this previewHash and a new idempotencyKey.",
+        };
+      }
+      return recodeBankTransactions(tx, {
+        bankTransactionIds: args.bankTransactionIds,
+        change: args.change,
+        previewHash: args.previewHash,
+        idempotencyKey: idempotencyKey(args.idempotencyKey),
+        source: context.source,
+      });
     },
   },
   {
