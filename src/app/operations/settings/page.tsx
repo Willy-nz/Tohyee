@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { RequireOrganisation } from "@/components/books";
 import { AERIAL_PHOTOS_SETTINGS } from "@/components/farm-imagery";
 import { LogoCard } from "@/components/organisation/logo-card";
+import { RevenueRecognitionCard } from "@/components/revenue-recognition";
 import { useApiData } from "@/components/hooks";
 import { Button, Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -305,6 +306,9 @@ function Settings({ organisationId }: { organisationId: string }) {
           />
         ) : null}
       </Card>
+      <div id="revenue-recognition">
+        <RevenueRecognitionCard organisationId={organisationId} />
+      </div>
       <LogoCard organisationId={organisationId} />
       <Card title="Period locks" description="Months are closed, and reopened, on Accounting › Period close. Nothing can be posted in a closed month.">
         {controls.error ? <Notice tone="error">{controls.error}</Notice> : null}
