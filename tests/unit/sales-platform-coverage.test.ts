@@ -31,6 +31,7 @@ const connection = (overrides: Partial<SalesPlatformConnection> = {}): SalesPlat
   disconnectedByEmail: null,
   disconnectedAt: null,
   postToAccounts: false,
+  stockItems: true,
   startDate: null,
   clearingAccountCode: null,
   payoutAccountCode: null,

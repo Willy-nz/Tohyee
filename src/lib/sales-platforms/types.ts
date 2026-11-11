@@ -75,6 +75,8 @@ export type SalesPlatformConnection = {
   disconnectedAt: string | null;
   /** Stage 2 (SPC11-SPC23): orders, refunds and payouts into the accounts. Nothing is fetched or posted while it's off. */
   postToAccounts: boolean;
+  /** SSD1: products Shopify tracks inventory for come in as stock items (true), or always as non-stock (made to order). */
+  stockItems: boolean;
   /** Only orders processed, and payouts issued, on or after this date (New Zealand time) come in. */
   startDate: string | null;
   clearingAccountCode: string | null;

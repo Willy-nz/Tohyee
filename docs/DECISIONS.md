@@ -13906,6 +13906,19 @@ migration 0265.
       own name, so it's still clear which account is which. Tenant migration
       0269. Claude's details, not yet reviewed.
 
+### Shopify products as stock or non-stock (12 Nov 2026; decision 1589)
+
+1589. **"Do you track stock in Shopify?" (SSD1-SSD3).** Jess's issue 6.
+      Connecting a Shopify store asks it; No makes every product a
+      non-stock item, so a made-to-order shop's orders never wait for
+      stock nobody counted. Yes (the default, and existing stores) keeps
+      SPC17. The answer can be changed under What comes in, and applies to
+      items brought in from then on. When orders fail for no stock on hand,
+      the store's settings show one warning listing them, with "Make these
+      products non-stock" (admins; only items that have never moved stock,
+      and it turns the setting off and retries the orders) or a link to
+      allow negative stock. Not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

@@ -20529,4 +20529,13 @@ create table ai_journal_void_settings (
 alter table accounts add column reporting_name text check (reporting_name is null or length(reporting_name) between 1 and 200);
 `,
   },
+  {
+    version: "0272",
+    name: "sales_platform_stock_items",
+    sql: `
+-- Whether a store's tracked products come in as stock items (SSD1, decision
+-- 1589). True keeps what happened before; a made-to-order shop says no.
+alter table sales_platform_connections add column stock_items boolean not null default true;
+`,
+  },
 ];

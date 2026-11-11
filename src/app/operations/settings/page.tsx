@@ -265,7 +265,7 @@ function SettingsForm({
           <textarea value={paymentDetails} onChange={(event) => setPaymentDetails(event.target.value)} maxLength={1000} rows={3} />
         </Field>
       </div>
-      <label className={ui.checkbox}>
+      <label className={ui.checkbox} id="inventory">
         <input type="checkbox" checked={allowNegativeStock} onChange={(event) => setAllowNegativeStock(event.target.checked)} />
         Allow negative stock: sell stock items before their bill is in. The sale is costed at the average (or the last or purchase
         cost); the bill that fills the shortfall puts any difference to cost of sales. It can&apos;t be turned off while anything is
