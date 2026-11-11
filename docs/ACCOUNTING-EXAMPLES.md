@@ -2442,6 +2442,27 @@ isn't reconciled.
   - In BK20, excluding the 28 May fee line (as if it were a duplicate): as at
     31 May the items explain **1,069.00** but the statement balance is still
     1,057.00, so **-12.00 is not explained** and the report says so.
+- **BK43** Already in the bank's balance (Jess, 11 Nov 2026: the report
+  showed 807.77 "not explained" when the books and the bank agreed). The
+  bank's lines start on 1 May (capital 100.00, balance **131.04**; a 5 May
+  fee -20.00, balance **111.04**, not yet in Tohyee). Tohyee has the 31.04
+  opening balance as a journal dated 27 April, before the first line. It
+  can't be on a statement line, and the bank's balance already includes it,
+  so it's listed under "already in the bank's balance (before its lines
+  start)", not "not yet on the statement". As at 31 May: Tohyee
+  **131.04**, in the bank -20.00, explaining **111.04**, the 5 May line's
+  balance: fully explained (not 31.04 unexplained).
+- **BK44** The bank feed's balance is newer than its last line. In BK43, a
+  776.73 Shopify payout is received in Tohyee on 10 May, and the feed's
+  balance fetched on 11 May is **887.77**, which includes it, but its line
+  hasn't arrived. Ledger items dated after the last line (5 May) and on or
+  before the feed balance's date are listed as "probably in the bank's
+  balance; its line hasn't arrived", not as not yet on the statement. As at
+  31 May: Tohyee **907.77**, in the bank -20.00, explaining **887.77**:
+  fully explained (not 807.77). A 50.00 receive money dated 12 May, after
+  the feed's balance, is still not yet on the statement: Tohyee 957.77 -
+  20.00 - 50.00 = **887.77**. Only when the balance is the feed's; a line's
+  running balance is as BK20.
 
 ### Bulk coding ("cash coding") (examples not yet approved by Jess)
 

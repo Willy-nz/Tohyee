@@ -65,6 +65,14 @@ export type TohyeeNotInBankItem = {
   reconciledOn: string | null;
 };
 
+/**
+ * In Tohyee, not on a statement line, but already in the bank's balance
+ * (BK43, BK44): dated before the bank's first line ("before_lines"), or,
+ * when the balance is the feed's, after its last line and on or before the
+ * feed balance's date ("after_last_line": its line hasn't arrived yet).
+ */
+export type InBankAlreadyItem = TohyeeNotInBankItem & { why: "before_lines" | "after_last_line" };
+
 export type BankReconciliationReport = {
   account: { id: string; code: string; name: string; accountType: "bank" | "credit_card" };
   asAt: string;
@@ -79,6 +87,8 @@ export type BankReconciliationReport = {
   baseLedgerBalance: string;
   bankNotInTohyee: { items: BankNotInTohyeeItem[]; total: string };
   tohyeeNotInBank: { items: TohyeeNotInBankItem[]; total: string };
+  /** Not on a statement line but already in the bank's balance (BK43, BK44): not taken off. */
+  inBankAlready: { items: InBankAlreadyItem[]; total: string; lastLineDate: string | null };
   /** Tohyee's balance + in the bank not in Tohyee - in Tohyee not in the bank. */
   expectedStatementBalance: string;
   /** Statement balance - expected; null when the statement balance isn't known. */
@@ -267,10 +277,32 @@ export async function bankReconciliationReport(
     reconciledOn: row.reconciled_on,
   }));
   const ledgerBalance = money(ledger.balance);
-  const bankTotal = total(bankItems.map((item) => item.amount));
-  const tohyeeTotal = total(tohyeeItems.map((item) => item.amount));
-  const expected = money(toFixedString(sub(add(dec(ledgerBalance), dec(bankTotal)), dec(tohyeeTotal)), 2));
   const statement = await statementBalance(tx, account.id, asAt);
+  // Already in the bank's balance (BK43, BK44): before its first line, or after its last line up to the feed balance's date.
+  const span = (
+    await tx.query<{ first: string | null; last: string | null }>(
+      `select min(line_date)::text as first, max(line_date) filter (where line_date <= $2)::text as last
+         from bank_statement_lines where account_id = $1 and status <> 'deleted'`,
+      [account.id, asAt],
+    )
+  ).rows[0];
+  const feedDate = statement.source?.kind === "feed_balance" ? statement.source.date : null;
+  const already = (item: TohyeeNotInBankItem): InBankAlreadyItem["why"] | null => {
+    if (item.reconciledOn || statement.balance === null) return null;
+    if (span.first && item.date < span.first) return "before_lines";
+    if (feedDate && span.last && item.date > span.last && item.date <= feedDate) return "after_last_line";
+    return null;
+  };
+  const inBankAlready: InBankAlreadyItem[] = [];
+  const notYet: TohyeeNotInBankItem[] = [];
+  for (const item of tohyeeItems) {
+    const why = already(item);
+    if (why) inBankAlready.push({ ...item, why });
+    else notYet.push(item);
+  }
+  const bankTotal = total(bankItems.map((item) => item.amount));
+  const tohyeeTotal = total(notYet.map((item) => item.amount));
+  const expected = money(toFixedString(sub(add(dec(ledgerBalance), dec(bankTotal)), dec(tohyeeTotal)), 2));
   const notExplained = statement.balance === null ? null : money(toFixedString(sub(dec(statement.balance), dec(expected)), 2));
   return {
     account: { id: account.id, code: account.code, name: account.name, accountType: account.accountType },
@@ -282,7 +314,8 @@ export async function bankReconciliationReport(
     ledgerBalance,
     baseLedgerBalance: money(state.baseBalance),
     bankNotInTohyee: { items: bankItems, total: bankTotal },
-    tohyeeNotInBank: { items: tohyeeItems, total: tohyeeTotal },
+    tohyeeNotInBank: { items: notYet, total: tohyeeTotal },
+    inBankAlready: { items: inBankAlready, total: total(inBankAlready.map((item) => item.amount)), lastLineDate: span.last },
     expectedStatementBalance: expected,
     notExplained,
     explained: notExplained !== null && isZero(dec(notExplained)),

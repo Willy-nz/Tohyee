@@ -488,6 +488,75 @@ describeWithDatabase("quicker bank reconciliation", () => {
     });
   });
 
+  it("BK43-BK44: what's already in the bank's balance isn't counted as not yet on the statement", async () => {
+    const world = await setup();
+    await world.importFile(`Date,Amount,Payee,Particulars,Code,Reference,Balance
+01/05/2026,100.00,J KELLY,CAPITAL,,,131.04
+05/05/2026,-20.00,BANK FEE,,,,111.04
+`);
+    const journal = (date: string, amount: string, reference: string) =>
+      world.asUser(bookkeeper, (tx) =>
+        postJournal(tx, {
+          idempotencyKey: key("j"),
+          postingDate: date,
+          reference,
+          lines: [
+            { accountCode: "1000", debitAmount: amount },
+            { accountCode: "3000", creditAmount: amount },
+          ],
+        }),
+      );
+    // BK43: the opening balance before the bank's lines start, and the capital matched to its line.
+    await journal("2026-04-27", "31.04", "Opening balance");
+    const { journal: capital } = await journal("2026-05-01", "100.00", "Capital");
+    const capitalLine = (await world.sql("select id::text from ledger_journal_lines where journal_id = $1 and account_id = $2", [capital.id, world.bank.id])).rows[0]
+      .id as string;
+    await world.reconcile((await world.lineOn("100.00")).id, { kind: "match", journalLineIds: [capitalLine] });
+    const report = () => world.asUser(viewer, (tx) => bankReconciliationReport(tx, { accountId: world.bank.id, asAt: "2026-05-31" }));
+    expect(await report()).toMatchObject({
+      statementBalance: "111.04",
+      ledgerBalance: "131.04",
+      bankNotInTohyee: { total: "-20.00" },
+      tohyeeNotInBank: { items: [], total: "0.00" },
+      inBankAlready: { items: [{ reference: "Opening balance", amount: "31.04", why: "before_lines" }], total: "31.04" },
+      expectedStatementBalance: "111.04",
+      explained: true,
+    });
+
+    // BK44: a payout received on 10 May; the feed's balance on 11 May includes it, but its line hasn't arrived.
+    const receive = (date: string, amount: string) =>
+      world.asUser(bookkeeper, (tx) =>
+        createBankTransaction(tx, {
+          idempotencyKey: key("receive"),
+          kind: "receive",
+          accountId: world.bank.id,
+          contactId: world.kobe.id,
+          date,
+          amountsMode: "exclusive",
+          lines: [{ description: "Payout", accountCode: "4000", taxCode: null, amount }],
+        }),
+      );
+    await receive("2026-05-10", "776.73");
+    // 10:00 on 11 May in New Zealand is 22:00 on 10 May UTC.
+    await world.sql("update bank_account_settings set statement_balance = 887.77, statement_balance_at = '2026-05-10T22:00:00Z' where account_id = $1", [world.bank.id]);
+    expect(await report()).toMatchObject({
+      statementBalance: "887.77",
+      statementBalanceSource: { kind: "feed_balance", date: "2026-05-11" },
+      ledgerBalance: "907.77",
+      tohyeeNotInBank: { total: "0.00" },
+      inBankAlready: { total: "807.77" },
+      expectedStatementBalance: "887.77",
+      explained: true,
+    });
+    expect((await report()).inBankAlready.items.map((item) => [item.amount, item.why])).toEqual([
+      ["31.04", "before_lines"],
+      ["776.73", "after_last_line"],
+    ]);
+    // After the feed's balance, it's not yet on the statement as before.
+    await receive("2026-05-12", "50.00");
+    expect(await report()).toMatchObject({ tohyeeNotInBank: { total: "50.00" }, inBankAlready: { total: "807.77" }, expectedStatementBalance: "887.77", explained: true });
+  });
+
   it("BK21: statement balance not known, from a bank feed balance, and a difference that isn't explained", async () => {
     const world = await setup();
     await world.importFile(CSV);
