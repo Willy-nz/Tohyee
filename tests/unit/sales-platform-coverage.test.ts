@@ -41,6 +41,7 @@ const connection = (overrides: Partial<SalesPlatformConnection> = {}): SalesPlat
   chargebacksAccountCode: null,
   reserveAccountCode: null,
   salesWhenSentAccountCode: null,
+  giftCardAccountCode: null,
   paymentMethods: [],
   guestContactId: null,
   guestContactName: null,

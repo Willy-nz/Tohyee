@@ -86,6 +86,8 @@ export type SalesPlatformConnection = {
   shippingAccountCode: string | null;
   /** Sales when sent's Income in advance account (SWS1), or null when it's off. */
   salesWhenSentAccountCode: string | null;
+  /** Where Shopify gift cards sold are held until they're spent (GC1-GC5), or null to refuse orders with gift cards. */
+  giftCardAccountCode: string | null;
   /** Where a disputed amount goes (SPC25). */
   chargebacksAccountCode: string | null;
   /** The bank account money Shopify holds back sits in (SPC28). */

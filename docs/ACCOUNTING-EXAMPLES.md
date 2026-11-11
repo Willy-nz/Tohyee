@@ -6589,9 +6589,10 @@ are New Zealand dates (NZDT, UTC+13).
 - **SPC23** Refused rather than guessed (logged, nothing posted): a test
   order; an order without a customer (guest checkout) when no contact is
   chosen for them (SPC24); an order in another
-  currency (store or presentment not NZD); an order with a gift card line;
+  currency (store or presentment not NZD); an order with a gift card line,
+  or a payment by a gift card, until gift cards are set up (GC1-GC5);
   a paid order whose total Tohyee can't reproduce (e.g. with a tip or
-  duties); a payment by a gift card; a partly paid order (it waits); a
+  duties); a partly paid order (it waits); a
   refund with an order adjustment; a payout that's a withdrawal.
 
 - **SPC24** Guest checkouts (decision 317). An admin chooses the
@@ -6938,6 +6939,40 @@ warning with a fix. Made-up store, same as SPC17.
   warning goes. A stock item that has had stock in or out isn't changed;
   allowing negative stock (or entering the stock on hand) is the way
   through for those.
+
+### Shopify gift cards (GC1-GC5; Jess, 11 Nov 2026, issue 7; the details are Claude's, not yet reviewed)
+
+A gift card sold isn't a sale: the money is owed to whoever holds the card
+until it's spent. Shopify marks gift card products (`isGiftCard`) and
+payments made with one (gateway `gift_card`). An admin chooses a current
+liability to hold them in; until then both are refused, as before (SPC23).
+Made-up store, as SPC11.
+
+**Question for Jess (law):** these examples put no GST on the gift card when
+it's sold and count GST on what it's spent on, as Shopify's tax lines do.
+Whether that's right for every voucher (GST Act s 5(11G)-(11H)) is yours to
+confirm.
+
+- **GC1** Order **#1301** (5301), Aroha, 1 × "Gift card - $50" at 50.00,
+  no tax, paid by card through Shopify Payments: invoice **Dr 1100 50.00 /
+  Cr 2360 50.00**, tax code NONE (no GST, not on the GST return), no item;
+  payment **Dr 1010 50.00 / Cr 1100 50.00**. Nothing is held for sending.
+- **GC2** Order **#1302**, 2 × Large candle 46.00 (GST 6.00), paid 30.00
+  with a gift card and 16.00 by card: invoice as SPC11 (**Dr 1100 46.00 / Cr
+  4000 40.00 / Cr 2100 6.00**); a credit note "#1302 gift card" (NONE)
+  **Dr 2360 30.00 / Cr 1100 30.00** applied to the invoice; payment **Dr
+  1010 16.00 / Cr 1100 16.00**. 2360 now holds 20.00.
+- **GC3** Order **#1303**, 1 × Large candle 23.00, paid wholly with a gift
+  card: the invoice and a 23.00 gift card credit note; no payment. 2360
+  holds -3.00 (a card sold before the start date was spent).
+- **GC4** #1301's gift card is refunded (50.00 back to the customer's
+  card): a credit note **Dr 2360 50.00 / Cr 1100 50.00** (NONE), refunded
+  from 1010. A refund back onto a gift card is still refused.
+- **GC5** The account must be a liability that isn't a bank account or the
+  store's Income in advance account; "Add 2360 Gift cards" makes one.
+  Choosing it tries again, at the next sync, every order whose last try was
+  refused for a gift card (#1301 above). Stop puts back the refusal for new
+  orders; what's posted stays.
 
 ### WooCommerce orders into the accounts (item 7 part 2, approved by Jess, 5 Oct 2026)
 

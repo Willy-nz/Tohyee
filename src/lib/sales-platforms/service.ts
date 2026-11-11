@@ -128,6 +128,7 @@ type ConnectionRow = {
   chargebacks_account_id: string | null;
   reserve_account_id: string | null;
   sales_when_sent_account_id: string | null;
+  gift_card_account_id: string | null;
   untaxed_tax_code_id: string | null;
   granted_scopes: string[];
   orders_synced_until: string | null;
@@ -142,6 +143,7 @@ type ConnectionRow = {
   chargebacks_account_code: string | null;
   reserve_account_code: string | null;
   sales_when_sent_account_code: string | null;
+  gift_card_account_code: string | null;
   untaxed_tax_code: string | null;
   tax_codes: Array<{ rate: string; taxCode: string }>;
   payment_methods: Array<{ method: string; title: string | null; accountCode: string | null; leftOwing: boolean }>;
@@ -156,12 +158,12 @@ const COLUMNS =
   "access_token_ciphertext, access_token_expires_at, webhook_key, webhook_subscription_ids, webhooks_note, sync_customers, " +
   "sync_products, status, customers_synced_until, products_synced_until, last_sync_at, last_successful_sync_at, last_error, failures, connected_by_email, " +
   "connected_at, disconnected_by_email, disconnected_at, post_to_accounts, stock_items, start_date, clearing_account_id, payout_account_id, " +
-  "fees_account_id, sales_account_id, shipping_account_id, chargebacks_account_id, reserve_account_id, sales_when_sent_account_id, untaxed_tax_code_id, granted_scopes, " +
+  "fees_account_id, sales_account_id, shipping_account_id, chargebacks_account_id, reserve_account_id, sales_when_sent_account_id, gift_card_account_id, untaxed_tax_code_id, granted_scopes, " +
   "orders_synced_until, payouts_synced_until, extras_synced_at, stats_synced_at, customer_scope, " +
   "(select count(*)::int from sales_platform_mappings v where v.connection_id = sales_platform_connections.id and v.record_kind = 'product_variant') as variants_linked, " +
   "(select count(*)::int from sales_platform_mappings v where v.connection_id = sales_platform_connections.id and v.record_kind = 'product_variant'" +
   " and coalesce(v.synced_values->>'sku', '') = '') as variants_without_sku, " +
-  ["clearing_account_id", "payout_account_id", "fees_account_id", "sales_account_id", "shipping_account_id", "chargebacks_account_id", "reserve_account_id", "sales_when_sent_account_id"]
+  ["clearing_account_id", "payout_account_id", "fees_account_id", "sales_account_id", "shipping_account_id", "chargebacks_account_id", "reserve_account_id", "sales_when_sent_account_id", "gift_card_account_id"]
     .map(accountCode)
     .join(", ") +
   ", (select t.code from tax_codes t where t.id = untaxed_tax_code_id) as untaxed_tax_code" +
@@ -209,6 +211,7 @@ function toConnection(row: ConnectionRow): SalesPlatformConnection {
     chargebacksAccountCode: row.chargebacks_account_code,
     reserveAccountCode: row.reserve_account_code,
     salesWhenSentAccountCode: row.sales_when_sent_account_code,
+    giftCardAccountCode: row.gift_card_account_code,
     paymentMethods: row.payment_methods,
     untaxedTaxCode: row.untaxed_tax_code,
     guestContactId: row.guest_contact_id,
@@ -831,6 +834,21 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
   }
   if (whenSent && row.platform !== "shopify") throw new ValidationError(`Sales when sent is for Shopify only for now; ${shop} orders count when they're paid.`);
 
+  // Gift cards (GC1-GC5, decision 1590): sold into a liability, redeemed out of it. Null refuses gift cards as before. Shopify only.
+  let giftCards: AccountChoice | null | undefined;
+  if (body.newGiftCardAccount !== undefined && body.newGiftCardAccount !== null) {
+    if (body.giftCardAccountCode !== undefined) throw new ValidationError("Choose a gift card account or add one, not both.");
+    const fresh = asRecord(body.newGiftCardAccount, "newGiftCardAccount");
+    const account = await createAccount(tx, { code: fresh.code, name: fresh.name ?? "Gift cards", accountType: "current_liability" });
+    giftCards = { id: account.id, code: account.code, name: account.name };
+    changes.push(`added account ${account.code} (${account.name})`);
+  } else if (body.giftCardAccountCode !== undefined) {
+    giftCards = await chooseAccount(tx, body.giftCardAccountCode, "giftCardAccountCode", "gift card account", (a) =>
+      a.account_class === "liability" && a.account_type !== "bank" ? null : "it isn't a liability account (gift cards sold are owed to whoever holds them).",
+    );
+  }
+  if (giftCards && row.platform !== "shopify") throw new ValidationError(`Gift cards are for Shopify only for now.`);
+
   let untaxed: TaxCodeChoice | null | undefined;
   if (body.untaxedTaxCode !== undefined) {
     untaxed = await chooseTaxCode(tx, body.untaxedTaxCode, "untaxedTaxCode");
@@ -914,9 +932,13 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
     chargebacks: pick(chargebacks?.id ?? chargebacks, row.chargebacks_account_id),
     reserve: pick(reserve?.id ?? reserve, row.reserve_account_id),
     whenSent: pick(whenSent?.id ?? whenSent, row.sales_when_sent_account_id),
+    giftCards: pick(giftCards?.id ?? giftCards, row.gift_card_account_id),
     untaxed: pick(untaxed?.id ?? untaxed, row.untaxed_tax_code_id),
     guest: pick(guest?.id ?? guest, row.guest_contact_id),
   };
+  if (next.giftCards !== null && next.giftCards === next.whenSent) {
+    throw new ValidationError("Use a different account for gift cards than for Income in advance, so each can be checked against Shopify.");
+  }
   if (next.clearing !== null && next.clearing === next.payout) {
     throw new ValidationError("The clearing account and the account payouts arrive in must be different accounts.");
   }
@@ -985,6 +1007,9 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
   if (whenSent !== undefined && (whenSent?.id ?? null) !== row.sales_when_sent_account_id) {
     changes.push(whenSent ? `sales when sent: on, held in ${whenSent.code} ${whenSent.name} (orders brought in from now)` : "sales when sent: off (orders already held count when sent)");
   }
+  if (giftCards !== undefined && (giftCards?.id ?? null) !== row.gift_card_account_id) {
+    changes.push(giftCards ? `gift cards: sold into ${giftCards.code} ${giftCards.name}, redeemed out of it` : "gift cards: refused");
+  }
   if (untaxed !== undefined && (untaxed?.id ?? null) !== row.untaxed_tax_code_id) changes.push(`untaxed sales: ${untaxed?.code ?? "none"}`);
   if (guest !== undefined && (guest?.id ?? null) !== row.guest_contact_id) changes.push(`guest checkouts: ${guest ? `to ${guest.name}` : "refused"}`);
   if (paymentMethods !== undefined) {
@@ -1018,7 +1043,7 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
     `update sales_platform_connections
         set sync_customers = $2, sync_products = $3, post_to_accounts = $4, start_date = $5, clearing_account_id = $6, payout_account_id = $7,
             fees_account_id = $8, sales_account_id = $9, shipping_account_id = $10, untaxed_tax_code_id = $11, guest_contact_id = $12::bigint,
-            chargebacks_account_id = $13, reserve_account_id = $14, sales_when_sent_account_id = $15, updated_at = now()
+            chargebacks_account_id = $13, reserve_account_id = $14, sales_when_sent_account_id = $15, gift_card_account_id = $16, updated_at = now()
       where id = $1`,
     [
       row.id,
@@ -1036,8 +1061,23 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
       next.chargebacks,
       next.reserve,
       next.whenSent,
+      next.giftCards,
     ],
   );
+  if (next.giftCards !== null && next.giftCards !== row.gift_card_account_id) {
+    // GC5: orders refused for a gift card are tried again at the next sync, now there's somewhere to hold it.
+    const retried = await tx.query(
+      `insert into sales_platform_documents (platform, store_domain, record_kind, external_id, connection_id, state, retry)
+       select $2, $3, 'order', l.external_id, $1, 'open', true
+         from (select distinct on (external_id) external_id, action, message from sales_platform_sync_log
+                where connection_id = $1 and record_kind = 'order' and external_id is not null order by external_id, id desc) l
+        where l.action = 'failed' and l.message ilike '%gift card%'
+       on conflict (platform, store_domain, record_kind, external_id) do update set retry = true, updated_at = now()
+        where sales_platform_documents.state = 'open'`,
+      [row.id, row.platform, row.store_domain],
+    );
+    if ((retried.rowCount ?? 0) > 0) changes.push(`${retried.rowCount} order${retried.rowCount === 1 ? "" : "s"} refused for a gift card tried again at the next sync`);
+  }
   const message = changes.join("; ");
   await writeLog(tx, row.id, { source: "connection", action: "settings", message: `${message.charAt(0).toUpperCase()}${message.slice(1)}.` });
   await writeAuditEvent(tx, {

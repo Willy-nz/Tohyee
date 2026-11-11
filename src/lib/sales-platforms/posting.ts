@@ -5,9 +5,10 @@ import { approveCreditNote, createCreditNote } from "@/lib/credit-notes/service"
 import { refundCreditNote } from "@/lib/credit-notes/refunds";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { HttpError } from "@/lib/errors";
+import type { AmountsMode } from "@/lib/invoices/amounts";
 import { recordPayment } from "@/lib/invoices/payments";
 import { approveInvoice, getInvoice, voidInvoice } from "@/lib/invoices/service";
-import { cmp, dec, isPositive } from "@/lib/money/decimal";
+import { cmp, dec, type Decimal, isPositive, sub } from "@/lib/money/decimal";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { approveSalesOrder, cancelSalesOrder, createSalesOrder, invoiceSalesOrder } from "@/lib/sales-orders/service";
 import type { PlatformCustomer, PlatformOrder, PlatformPayout } from "@/lib/sales-platforms/connector";
@@ -97,7 +98,52 @@ type ConnectionSettingsRow = {
   reserve_code: string | null;
   guest_contact_id: string | null;
   when_sent_code: string | null;
+  gift_card_code: string | null;
 };
+
+/**
+ * GC2: what gift cards paid for an order, taken out of the gift card account
+ * as a credit note (no GST: the order's own lines carry it) applied to the
+ * order's invoice.
+ */
+async function redeemGiftCards(
+  tx: OrgTx,
+  posting: Posting,
+  input: { order: PlatformOrder; id: string; invoiceId: string; contactId: string; date: string; amount: Decimal; amountsMode: AmountsMode },
+): Promise<void> {
+  const { creditNote } = await createCreditNote(tx, {
+    source: SOURCE,
+    idempotencyKey: keyFor(posting, "order", input.id, "gift-card"),
+    contactId: input.contactId,
+    creditNoteDate: input.date,
+    reference: `${input.order.name} gift card`,
+    amountsMode: input.amountsMode,
+    lines: [
+      {
+        description: `Paid with a gift card (${input.order.name})`,
+        quantity: "1",
+        unitPrice: money(input.amount),
+        accountCode: posting.giftCardAccountCode!,
+        taxCode: input.amountsMode === "no_tax" ? null : posting.giftCardTaxCode,
+      },
+    ],
+  });
+  await approveCreditNote(tx, creditNote.id, { source: SOURCE, idempotencyKey: keyFor(posting, "order", input.id, "gift-card-approve") });
+  await applyCreditNote(tx, creditNote.id, {
+    source: SOURCE,
+    idempotencyKey: keyFor(posting, "order", input.id, "gift-card-apply"),
+    applicationDate: input.date,
+    applications: [{ invoiceId: input.invoiceId, amount: money(input.amount) }],
+  });
+}
+
+/** The no-GST code gift cards go on (GC1): NONE if it's there and active, else another active out-of-scope code. */
+async function outOfScopeTaxCode(tx: OrgTx): Promise<string | null> {
+  const found = await tx.query<{ code: string }>(
+    "select code from tax_codes where category = 'out_of_scope' and is_active and rate = 0 order by (upper(code) = 'NONE') desc, code limit 1",
+  );
+  return found.rows[0]?.code ?? null;
+}
 
 /**
  * The posting settings, or null when posting is off (nothing is fetched or
@@ -109,8 +155,10 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
     `select c.id, c.platform, c.store_domain, c.post_to_accounts, c.start_date::text as start_date, c.clearing_account_id,
             clearing.code as clearing_code, payout.code as payout_code, fees.code as fees_code, sales.code as sales_code,
             shipping.code as shipping_code, untaxed.code as untaxed_code, c.guest_contact_id::text,
-            chargebacks.code as chargebacks_code, reserve.code as reserve_code, when_sent.code as when_sent_code
+            chargebacks.code as chargebacks_code, reserve.code as reserve_code, when_sent.code as when_sent_code,
+            gift_card.code as gift_card_code
        from sales_platform_connections c
+       left join accounts gift_card on gift_card.id = c.gift_card_account_id
        left join accounts when_sent on when_sent.id = c.sales_when_sent_account_id
        left join accounts clearing on clearing.id = c.clearing_account_id
        left join accounts payout on payout.id = c.payout_account_id
@@ -152,6 +200,8 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
     reserveAccountCode: row.reserve_code,
     guestContactId: row.guest_contact_id,
     salesWhenSentAccountCode: row.platform === "shopify" ? row.when_sent_code : null,
+    giftCardAccountCode: row.platform === "shopify" ? row.gift_card_code : null,
+    giftCardTaxCode: row.platform === "shopify" && row.gift_card_code ? await outOfScopeTaxCode(tx) : null,
     baseCurrency: tx.baseCurrency,
     gstRegistered: settings.gstRegistered,
     gstRegistration: {
@@ -615,8 +665,12 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       return;
     }
     const payments = orderPayments(order);
-    if (!owing && payments.giftCard) {
-      await refuse(`${order.name} was paid (at least partly) with a gift card; gift cards aren't supported yet, so it isn't invoiced.`);
+    if (!owing && payments.giftCard && !posting.giftCardAccountCode) {
+      await refuse(`${order.name} was paid (at least partly) with a gift card; choose where gift cards are held in the Shopify settings to bring it in.`);
+      return;
+    }
+    if (!owing && payments.giftCard && !posting.giftCardTaxCode && posting.gstRegistered) {
+      await refuse(`${order.name} was paid with a gift card, but there's no active "no GST (out of scope)" tax code to take it out of ${posting.giftCardAccountCode} with.`);
       return;
     }
     if (!owing && cmp(payments.amount, dec(order.total)) !== 0) {
@@ -643,16 +697,22 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
         dueDate: invoiceDate,
       });
       const approved = await approveInvoice(tx, invoice.id, { source: SOURCE, idempotencyKey: keyFor(posting, "order", id, "invoice-approve") });
-      if (owing) return { invoice: approved.invoice, payment: null };
+      if (owing) return { invoice: approved.invoice, payment: null, fromCards: null };
+      // GC2: what a gift card paid comes out of what's held for gift cards, as credit applied to the invoice; the rest is a payment.
+      const fromCards = payments.giftCardAmount;
+      if (isPositive(fromCards)) await redeemGiftCards(tx, posting, { order, id, invoiceId: invoice.id, contactId: doc!.contact_id!, date: invoiceDate, amount: fromCards, amountsMode: invoice.amountsMode });
+      const rest = sub(dec(order.total), fromCards);
+      const cards = isPositive(fromCards) ? `${money(fromCards)} out of ${posting.giftCardAccountCode}` : null;
+      if (!isPositive(rest)) return { invoice: approved.invoice, payment: null, fromCards: cards };
       const { payment } = await recordPayment(tx, invoice.id, {
         source: SOURCE,
         idempotencyKey: keyFor(posting, "order", id, "payment"),
         paymentDate: invoiceDate,
-        amount: money(order.total),
+        amount: money(rest),
         bankAccountCode: target.accountCode!,
         reference: `${shop} ${order.name}`,
       });
-      return { invoice: approved.invoice, payment };
+      return { invoice: approved.invoice, payment, fromCards: cards };
     });
     if (!invoiced.ok) {
       await wait(`${order.name} couldn't be invoiced: ${errorText(invoiced.error)}`);
@@ -674,8 +734,10 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       documentType: "invoice",
       documentId: invoiced.value.invoice.id,
       message: invoiced.value.payment
-        ? `Invoiced ${order.name} as ${invoiced.value.invoice.invoiceNumber} (${money(invoiced.value.invoice.total)}) and recorded its payment into ${target.accountCode} on ${invoiceDate}.`
-        : `Invoiced ${order.name} as ${invoiced.value.invoice.invoiceNumber} (${money(invoiced.value.invoice.total)}) on ${invoiceDate}, left owing for the bank feed to match.`,
+        ? `Invoiced ${order.name} as ${invoiced.value.invoice.invoiceNumber} (${money(invoiced.value.invoice.total)}) and recorded its payment into ${target.accountCode} on ${invoiceDate}${invoiced.value.fromCards ? `, with ${invoiced.value.fromCards} paid by gift card` : ""}.`
+        : invoiced.value.fromCards
+          ? `Invoiced ${order.name} as ${invoiced.value.invoice.invoiceNumber} (${money(invoiced.value.invoice.total)}) on ${invoiceDate}, paid with a gift card (${invoiced.value.fromCards}).`
+          : `Invoiced ${order.name} as ${invoiced.value.invoice.invoiceNumber} (${money(invoiced.value.invoice.total)}) on ${invoiceDate}, left owing for the bank feed to match.`,
     });
     doc = await findDocument(tx, posting, kind, id);
     if (!doc || doc.invoice_id === null) return;

@@ -20565,4 +20565,13 @@ create table bank_transaction_recodes (
 alter table sales_platform_connections add column stock_items boolean not null default true;
 `,
   },
+  {
+    version: "0273",
+    name: "sales_platform_gift_cards",
+    sql: `
+-- Where a Shopify store's gift cards sold are held until they're spent (GC1-GC5,
+-- decision 1590). Null: orders with gift cards are refused, as before.
+alter table sales_platform_connections add column gift_card_account_id bigint references accounts(id);
+`,
+  },
 ];

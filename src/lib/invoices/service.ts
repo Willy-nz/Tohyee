@@ -610,8 +610,8 @@ async function resolveDraft(
 
   const accounts = await tx.query<{ id: string; code: string; name: string; account_class: string; is_active: boolean; held: boolean }>(
     `select a.id, a.code, a.name, a.account_class, a.is_active,
-            -- A store's Income in advance account (sales when sent, SWS1, SWS5) takes invoice and credit note lines too.
-            (exists (select 1 from sales_platform_connections c where c.sales_when_sent_account_id = a.id)
+            -- A store's Income in advance account (sales when sent, SWS1, SWS5) and gift card account (GC1-GC4) take invoice and credit note lines too.
+            (exists (select 1 from sales_platform_connections c where c.sales_when_sent_account_id = a.id or c.gift_card_account_id = a.id)
               or exists (select 1 from sales_platform_held_lines h where h.held_account_id = a.id)) as held
        from accounts a where lower(a.code) = any($1::text[])`,
     [[...new Set(draft.lines.map((line) => line.accountCode.toLowerCase()))]],
