@@ -4472,6 +4472,28 @@ expenses **80.00** / Cr 1000, so June's net profit is **590.00**.
   list them first in the report picker; another person's stars aren't
   shown. Starring something that isn't a report is refused.
 
+### The layout editor (LE1-LE3; Jess, 11 Nov 2026, from a screenshot of the editor she's used to; Claude's details, not yet reviewed)
+
+Tested in `tests/integration/custom-reports.test.ts` (LE3); LE1 and LE2 are
+screen behaviour, checked by hand. Nothing posts.
+
+- **LE1** A draft layout opens as an editor: one toolbar along the top with
+  Text, Table, Section, Columns, Page break, then Up, Down and Delete, then
+  Export (PDF, spreadsheet), and at the end Cancel and **Update layout**
+  (which saves). The report is on the left; clicking a row, a table or a
+  note, or a column heading, picks it, and its **Details** show on the
+  right: a row's name, what it adds up, hide it, a new page after it, its
+  note; a table's or note's page break; the columns. Up, Down and Delete
+  act on what's picked. Text and Table add after what's picked; Section
+  adds a heading after the picked row (in its table, or the first table).
+  Cancel puts everything back to the last save.
+- **LE2** The **Preview** tab beside Details shows the report as it prints,
+  with the unsaved changes: hidden rows and empty groups left out.
+- **LE3** Page break works on a row (as before) and now on a whole table or
+  note too: printing and the PDF start a new page after it. On screen the
+  editor shows a dashed "Page break" line. A page break must be true or
+  left out; anything else is refused.
+
 ### Comparing periods, % of trading income and tracking filters (RX1-RX7)
 
 As Xero does, not yet reviewed (decisions 1353-1355, Jess's 4 Nov 2026

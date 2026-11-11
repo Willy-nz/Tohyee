@@ -13846,6 +13846,18 @@ migration 0265.
       and saves it with Save as draft or Save as final. The notes keep their
       own Save button, as before. Claude's layout, not yet reviewed.
 
+### The layout editor (11 Nov 2026; decision 1579)
+
+1579. **One toolbar, the report on the left, Details and Preview on the
+      right (LE1-LE3).** Jess asked for the editor to look like the one in
+      her screenshot, as people like what's familiar. The tools that were in
+      menus (columns, add table, add note) are now on the toolbar, which
+      acts on whatever is picked; a row's form opens in Details instead of
+      above the report. Tables and notes can have a page break after them.
+      The new column types she listed (Date, Budget, Formula, Notes,
+      Percentage, Variance) come next: they change how columns are stored.
+      Claude's details, not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

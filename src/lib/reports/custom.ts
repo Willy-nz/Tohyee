@@ -255,13 +255,14 @@ export async function parseLayout(tx: OrgTx, base: FinancialReportBase, input: u
     if (typeof id !== "string" || !ID_PATTERN.test(id)) throw new ValidationError("Each table and note needs an id of letters, numbers, - or _.");
     if (ids.has(id)) throw new ValidationError(`Two rows or blocks share the id ${id}.`);
     ids.add(id);
+    const extras = bool(block.pageBreakAfter, "pageBreakAfter") ? { pageBreakAfter: true } : {};
     if (block.kind === "text") {
-      return { id, kind: "text", text: text(block.text, "A note", LIMITS.noteLength, { required: true }) };
+      return { id, kind: "text", text: text(block.text, "A note", LIMITS.noteLength, { required: true }), ...extras };
     }
     if (block.kind !== "table") throw new ValidationError("A block is a table or a note.");
     const rows = list(block.rows, "A table's rows", LIMITS.rowsPerTable).map((row) => parseRow(base, row, ids));
     checkFormulas(rows);
-    return { id, kind: "table", title: text(block.title, "A table's title", LIMITS.labelLength, { required: false }), rows };
+    return { id, kind: "table", title: text(block.title, "A table's title", LIMITS.labelLength, { required: false }), rows, ...extras };
   });
   const codes = new Set(
     blocks.flatMap((block) => (block.kind === "table" ? block.rows.flatMap((row) => (row.kind === "group" ? [...row.accountCodes, ...(row.exceptCodes ?? [])] : [])) : [])),
@@ -427,7 +428,8 @@ export async function computeCustomReport(
   const inGroups = new Set<string>();
   const inSeveralGroups: CustomReportFigures["inSeveralGroups"] = [];
   const blocks: ComputedBlock[] = layout.blocks.map((block): ComputedBlock => {
-    if (block.kind === "text") return { id: block.id, kind: "text", text: block.text };
+    const blockExtras = block.pageBreakAfter ? { pageBreakAfter: true } : {};
+    if (block.kind === "text") return { id: block.id, kind: "text", text: block.text, ...blockExtras };
     const rowsById = new Map(block.rows.map((row) => [row.id, row]));
     const memo = new Map<string, Values>();
     const groupsOfAccount = new Map<string, string[]>();
@@ -499,7 +501,7 @@ export async function computeCustomReport(
       const account = accounts.find((entry) => entry.id === accountId)!;
       inSeveralGroups.push({ tableTitle: block.title, code: account.code, name: account.name, groups });
     }
-    return { id: block.id, kind: "table", title: block.title, rows };
+    return { id: block.id, kind: "table", title: block.title, rows, ...blockExtras };
   });
 
   const notInReport = accounts

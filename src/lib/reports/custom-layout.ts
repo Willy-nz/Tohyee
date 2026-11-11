@@ -239,9 +239,12 @@ export function standardEquityLayout(periodEnd: string): EquityLayout {
   };
 }
 
+/** A page break after a table or note when printed or made a PDF (LE3, decision 1579). */
+export type BlockExtras = { pageBreakAfter?: boolean };
+
 export type ReportBlock =
-  | { id: string; kind: "table"; title: string; rows: ReportRow[] }
-  | { id: string; kind: "text"; text: string };
+  | ({ id: string; kind: "table"; title: string; rows: ReportRow[] } & BlockExtras)
+  | ({ id: string; kind: "text"; text: string } & BlockExtras);
 
 /** Profit and loss only: count just the lines tagged with this value or a value under it (TC8). */
 export type ReportTrackingFilter = { categoryId: string; valueId: string };
@@ -322,8 +325,8 @@ export type ComputedRow = RowExtras & {
 };
 
 export type ComputedBlock =
-  | { id: string; kind: "table"; title: string; rows: ComputedRow[] }
-  | { id: string; kind: "text"; text: string };
+  | ({ id: string; kind: "table"; title: string; rows: ComputedRow[] } & BlockExtras)
+  | ({ id: string; kind: "text"; text: string } & BlockExtras);
 
 export type CustomReportFigures = {
   title: string;
