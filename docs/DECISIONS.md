@@ -13881,20 +13881,6 @@ migration 0265.
       are profit and loss only, as before. Up to 10 added columns. Claude's
       details, not yet reviewed.
 
-### Sales when sent for orders invoiced without it (12 Nov 2026; decision 1583)
-
-1583. **Hold after invoicing (SWS12-SWS14).** Jess's issue 12: about 25
-      Glimmers orders had sales orders from before Sales when sent was on,
-      so their invoices went straight to sales. An order whose sales order
-      came before it, invoiced after, is now held when it's invoiced; orders
-      invoiced earlier can be chosen on Settings › Revenue recognition. Both
-      leave the invoice alone (it may be paid and in a payout) and post one
-      journal per order moving the unsent share from sales to Income in
-      advance, as Jess suggested; only what's still to send is held, and
-      fulfilments already counted aren't counted again. Stock came off with
-      the invoice, so it doesn't move again when sent. Tenant migration
-      0270. An AI tool for it isn't built yet. Not yet reviewed.
-
 ### The AI voiding journals it posted (11 Nov 2026; decision 1581)
 
 1581. **void_own_journal (AJV1-AJV6).** Jess set the rules: only manual
@@ -13910,17 +13896,29 @@ migration 0265.
       never voids". The limit is set on the AI page by admins and owners
       (tenant migration 0268). Not yet reviewed.
 
-### Void for manual journals (12 Nov 2026; decision 1585)
+### Reporting names (12 Nov 2026; decision 1582)
 
-1585. **Void posts only the reversal (VJ1-VJ5).** Jess's issue 9: a manual
-      journal that shouldn't exist could only be "edited", which always adds
-      a new version. Void posts the exact reversal, linked to the original,
-      on its own date or a chosen one, with the reason in its description,
-      as a correction's reversal does. Bookkeepers and up, one or several
-      after a preview by account. Manual journals and replacements only;
-      refused in locked periods and on reconciled journals, as corrections
-      are. Hiding voided pairs from lists is issue 10, next. Not yet
-      reviewed.
+1582. **An account's reporting name (RN1-RN3).** Jess asked for reporting
+      names as an option for each code. One per account, used on the
+      financial reports and statements (profit and loss, balance sheet,
+      changes in equity, custom layouts, annual statements) in place of the
+      account's name; transaction lists and the ledger keep the account's
+      own name, so it's still clear which account is which. Tenant migration
+      0269. Claude's details, not yet reviewed.
+
+### Sales when sent for orders invoiced without it (12 Nov 2026; decision 1583)
+
+1583. **Hold after invoicing (SWS12-SWS14).** Jess's issue 12: about 25
+      Glimmers orders had sales orders from before Sales when sent was on,
+      so their invoices went straight to sales. An order whose sales order
+      came before it, invoiced after, is now held when it's invoiced; orders
+      invoiced earlier can be chosen on Settings › Revenue recognition. Both
+      leave the invoice alone (it may be paid and in a payout) and post one
+      journal per order moving the unsent share from sales to Income in
+      advance, as Jess suggested; only what's still to send is held, and
+      fulfilments already counted aren't counted again. Stock came off with
+      the invoice, so it doesn't move again when sent. Tenant migration
+      0270. An AI tool for it isn't built yet. Not yet reviewed.
 
 ### Doubled Shopify names and reference lines (12 Nov 2026; decision 1584)
 
@@ -13932,15 +13930,17 @@ migration 0265.
       lists the kinds. Customers already brought in keep their names: fix
       them on the contact. Not yet reviewed.
 
-### Reporting names (12 Nov 2026; decision 1582)
+### Void for manual journals (12 Nov 2026; decision 1585)
 
-1582. **An account's reporting name (RN1-RN3).** Jess asked for reporting
-      names as an option for each code. One per account, used on the
-      financial reports and statements (profit and loss, balance sheet,
-      changes in equity, custom layouts, annual statements) in place of the
-      account's name; transaction lists and the ledger keep the account's
-      own name, so it's still clear which account is which. Tenant migration
-      0269. Claude's details, not yet reviewed.
+1585. **Void posts only the reversal (VJ1-VJ5).** Jess's issue 9: a manual
+      journal that shouldn't exist could only be "edited", which always adds
+      a new version. Void posts the exact reversal, linked to the original,
+      on its own date or a chosen one, with the reason in its description,
+      as a correction's reversal does. Bookkeepers and up, one or several
+      after a preview by account. Manual journals and replacements only;
+      refused in locked periods and on reconciled journals, as corrections
+      are. Hiding voided pairs from lists is issue 10, next. Not yet
+      reviewed.
 
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
