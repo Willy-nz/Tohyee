@@ -13788,6 +13788,17 @@ migration 0265.
       "Already in the bank's balance" and not taken off. Claude's call on
       the details, not yet reviewed.
 
+### 1575. Clicking an amount in the annual financial statements
+
+Jess, 11 Nov 2026: "Should be able to click a number and go to what makes it
+up even when not in edit mode." The statements of financial performance and
+position now link each amount that comes from accounts to Account
+transactions for those accounts, over that column's financial year: the same
+dates the profit and loss and balance sheet layouts already use for their own
+links. Lines built by adding other lines, nil amounts and the changes in
+equity and cash flows statements aren't linked, because there's no one set of
+accounts behind them to show. Worked example FS8, not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

@@ -147,6 +147,9 @@ describeWithDatabase("annual financial statements report", () => {
       ["total", "Result", "1650.00", "1000.00"],
     ]);
     expect(statement(report, "performance").paragraphs).toEqual(["Made-up figures for a test."]);
+    // FS8: a group's line carries its accounts; a formula row doesn't.
+    expect(line(report, "performance", "Sales")?.accountIds).toHaveLength(1);
+    expect(line(report, "performance", "Result")?.accountIds).toBeUndefined();
     expect(statement(report, "performance").layout).toEqual({
       reportId: made.id,
       title: "Board layout",
@@ -188,6 +191,19 @@ describeWithDatabase("annual financial statements report", () => {
       current: "1650.00",
       prior: "1000.00",
     });
+  });
+
+  it("FS8: amounts from accounts carry their accounts and each year's dates; totals and the other statements don't", async () => {
+    const report = await build();
+    const accountId = await run(async (tx) => (await tx.query<{ id: string }>("select id from accounts where code = '4000'")).rows[0].id);
+    const performance = statement(report, "performance");
+    expect(performance.drill).toEqual({ current: { from: "2026-04-01", to: "2027-03-31" }, prior: { from: "2025-04-01", to: "2026-03-31" } });
+    const sales = performance.lines.find((entry) => entry.current === "3000.00" && !entry.kind)!;
+    expect(sales.accountIds).toEqual([accountId]);
+    expect(line(report, "performance", "Net profit")?.accountIds).toBeUndefined();
+    expect(statement(report, "position").drill).toEqual(performance.drill);
+    expect(statement(report, "equity").drill).toBeNull();
+    expect(statement(report, "cash_flows").drill).toBeNull();
   });
 
   it("FS7: saved notes are the report's notes", async () => {
