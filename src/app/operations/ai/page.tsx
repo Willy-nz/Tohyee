@@ -412,11 +412,64 @@ function AiConnect({ organisationId }: { organisationId: string }) {
   );
 }
 
+/** AJV5: how long after posting the AI may void a journal it posted itself. */
+function JournalVoidLimit({ organisationId }: { organisationId: string }) {
+  const { can } = useWorkspace();
+  const settings = useApiData<{ maxDays: number | null }>("/api/ai/journal-void-settings", { organisationId });
+  const [typed, setTyped] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  if (!settings.data) return null;
+  const value = typed ?? (settings.data.maxDays === null ? "" : String(settings.data.maxDays));
+  async function save() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = await api<{ maxDays: number | null }>("/api/ai/journal-void-settings", { method: "PUT", body: { organisationId, maxDays: value.trim() === "" ? null : Number(value) } });
+      setTyped(null);
+      setMessage(saved.maxDays === null ? "No time limit." : `The AI can void its own journals for ${saved.maxDays} days after posting them.`);
+      settings.reload();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card
+      title="Journals the AI posted"
+      description="With Full access, an AI can void a manual journal it posted itself, never one a person posted or an invoice, bill or payment. It shows what it will reverse first, keeps the original, and can't void in a locked period or a journal matched to a bank line."
+    >
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {message ? <Notice tone="success">{message}</Notice> : null}
+      <div className={ui.inlineForm}>
+        <Field label="Only within this many days of posting" hint="Blank: no limit.">
+          <input type="number" min={1} max={3650} value={value} disabled={!can("admin") || busy} onChange={(event) => setTyped(event.target.value)} />
+        </Field>
+        {can("admin") ? (
+          <Button onClick={() => void save()} disabled={busy}>
+            {busy ? "Saving…" : "Save"}
+          </Button>
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
 export default function AiPage() {
   return (
     <Page>
       <PageHeader title="AI" />
-      <RequireOrganisation>{(organisationId) => <AiConnect key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
+      <RequireOrganisation>
+        {(organisationId) => (
+          <>
+            <AiConnect key={organisationId} organisationId={organisationId} />
+            <JournalVoidLimit key={`void-${organisationId}`} organisationId={organisationId} />
+          </>
+        )}
+      </RequireOrganisation>
       <p className={ui.muted}>
         Chat with your AI in its own app. What it makes here, and the files you leave for it, are in{" "}
         <Link href="/operations/ai/workspace">AI dashboards and data</Link>; what it knows about the farm is in the{" "}
