@@ -13787,6 +13787,7 @@ migration 0265.
       line and on or before the feed balance's date, is listed under
       "Already in the bank's balance" and not taken off. Claude's call on
       the details, not yet reviewed.
+
 ### Revenue recognition setting (11 Nov 2026; decision 1573)
 
 1573. **Sales when sent is a revenue recognition choice in Settings.** Jess:
@@ -13797,16 +13798,16 @@ migration 0265.
       advance account). The store's page says which and links there.
       Behaviour is unchanged (SWS1-SWS11).
 
-### 1575. Clicking an amount in the annual financial statements
+### Clicking amounts in the annual financial statements (11 Nov 2026; decision 1575)
 
-Jess, 11 Nov 2026: "Should be able to click a number and go to what makes it
-up even when not in edit mode." The statements of financial performance and
-position now link each amount that comes from accounts to Account
-transactions for those accounts, over that column's financial year: the same
-dates the profit and loss and balance sheet layouts already use for their own
-links. Lines built by adding other lines, nil amounts and the changes in
-equity and cash flows statements aren't linked, because there's no one set of
-accounts behind them to show. Worked example FS8, not yet reviewed.
+1575. **Click an amount in the annual financial statements (FS8).** Jess:
+      "Should be able to click a number and go to what makes it up even
+      when not in edit mode." In the statements of financial performance
+      and position, an amount from accounts links to Account transactions
+      for those accounts over that column's financial year, the dates the
+      layouts' own links use. Lines made by adding other lines, nil amounts,
+      and the changes in equity and cash flows statements aren't linked:
+      there's no one set of accounts behind them. Not yet reviewed.
 
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
