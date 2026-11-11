@@ -13881,6 +13881,20 @@ migration 0265.
       are profit and loss only, as before. Up to 10 added columns. Claude's
       details, not yet reviewed.
 
+### Sales when sent for orders invoiced without it (12 Nov 2026; decision 1583)
+
+1583. **Hold after invoicing (SWS12-SWS14).** Jess's issue 12: about 25
+      Glimmers orders had sales orders from before Sales when sent was on,
+      so their invoices went straight to sales. An order whose sales order
+      came before it, invoiced after, is now held when it's invoiced; orders
+      invoiced earlier can be chosen on Settings › Revenue recognition. Both
+      leave the invoice alone (it may be paid and in a payout) and post one
+      journal per order moving the unsent share from sales to Income in
+      advance, as Jess suggested; only what's still to send is held, and
+      fulfilments already counted aren't counted again. Stock came off with
+      the invoice, so it doesn't move again when sent. Tenant migration
+      0270. An AI tool for it isn't built yet. Not yet reviewed.
+
 ### The AI voiding journals it posted (11 Nov 2026; decision 1581)
 
 1581. **void_own_journal (AJV1-AJV6).** Jess set the rules: only manual
