@@ -38,6 +38,7 @@ export type RegisterDisposal = {
   assetNumber: string;
   name: string;
   typeName: string;
+  purchaseDate: string;
   disposalDate: string;
   cost: string;
   accumulatedDepreciation: string;
@@ -128,6 +129,7 @@ export async function fixedAssetRegister(tx: OrgTx, input: { asOf: unknown }): P
           assetNumber: row.asset_number,
           name: row.name,
           typeName: row.type_name,
+          purchaseDate: row.purchase_date,
           disposalDate: row.disposal_date!,
           cost: fixed(cost),
           accumulatedDepreciation: fixed(accumulated),

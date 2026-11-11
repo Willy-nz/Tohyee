@@ -3,7 +3,8 @@ import type { SessionUser } from "@/lib/auth/sessions";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { postJournal } from "@/lib/ledger/journals";
 import { createCustomReport } from "@/lib/reports/custom";
-import { buildFinancialStatements, type FinancialStatements, saveStatementNotes } from "@/lib/reports/financial-statements";
+import { saveAnnualDocument } from "@/lib/reports/annual-document";
+import { buildFinancialStatements, type FinancialStatements, financialStatementsPdf, saveStatementNotes } from "@/lib/reports/financial-statements";
 import { setLayoutDefault } from "@/lib/reports/report-layouts";
 import { createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, key, startTestServer, type TestServer } from "../helpers/test-server";
 
@@ -204,6 +205,59 @@ describeWithDatabase("annual financial statements report", () => {
     expect(statement(report, "position").drill).toEqual(performance.drill);
     expect(statement(report, "equity").drill).toBeNull();
     expect(statement(report, "cash_flows").drill).toBeNull();
+  });
+
+  it("FS9-FS11: the pages in order, with the default cover and compilation report, as a draft", async () => {
+    const report = await build();
+    expect(report.pages.map((page) => page.key)).toEqual(["cover", "contents", "compilation", "performance", "position", "equity", "cash_flows", "notes"]);
+    expect(report.depreciation).toBeNull();
+    expect(report.document.saved).toBe(false);
+    expect(report.document.status).toBe("draft");
+    const texts = report.document.texts;
+    expect([texts.coverTitle, texts.coverSubtitle, texts.coverPeriod, texts.coverNote]).toEqual([report.name, "Financial statements", "For the year ended 31 March 2027", "Prepared with Tohyee"]);
+    expect(texts.compilationSections.map((section) => section.heading)).toEqual([
+      "Scope and purpose of engagement",
+      "Responsibilities",
+      "No audit or review engagement undertaken",
+      "Disclaimer of liability",
+      "Independence",
+    ]);
+    expect(texts.compilationSections[0].body).toContain("SES-2");
+    expect(texts.compilationSignOff).toBe("[Firm name]\n[Town], New Zealand\n[Date]");
+    const pdf = await run((tx) => financialStatementsPdf(tx, { yearEnd: "2027-03-31" }, new Date("2027-04-20T00:00:00Z")));
+    expect(Buffer.from(pdf.bytes.slice(0, 4)).toString()).toBe("%PDF");
+  });
+
+  it("FS13: saved words are kept for that year end, as a draft or final; renamed headings rename the contents", async () => {
+    const before = await build();
+    await expect(run((tx) => saveAnnualDocument(tx, { yearEnd: "2027-03-31", status: "maybe", texts: before.document.texts, name: before.name }))).rejects.toThrow("draft or as final");
+    const saved = await run((tx) =>
+      saveAnnualDocument(tx, {
+        yearEnd: "2027-03-31",
+        status: "final",
+        texts: { ...before.document.texts, coverNote: "", compilation: false, titles: { notes: "Notes", performance: "Profit and loss" } },
+        name: before.name,
+      }),
+    );
+    expect(saved).toMatchObject({ saved: true, status: "final" });
+    const report = await build();
+    expect(report.document.texts.coverNote).toBe("");
+    expect(report.pages.map((page) => [page.key, page.title])).toEqual([
+      ["cover", report.name],
+      ["contents", "Contents"],
+      ["performance", "Profit and loss"],
+      ["position", "Statement of financial position"],
+      ["equity", "Statement of changes in equity"],
+      ["cash_flows", "Statement of cash flows"],
+      ["notes", "Notes"],
+    ]);
+    expect(statement(report, "performance").title).toBe("Profit and loss");
+    const other = await run((tx) => buildFinancialStatements(tx, { yearEnd: "2026-03-31" }, new Date("2027-04-20T00:00:00Z")));
+    expect(other.document).toMatchObject({ saved: false, status: "draft" });
+    const pdf = await run((tx) => financialStatementsPdf(tx, { yearEnd: "2027-03-31" }, new Date("2027-04-20T00:00:00Z")));
+    expect(pdf.bytes.length).toBeGreaterThan(1000);
+    // Back to the defaults for the tests after.
+    await run((tx) => tx.query("delete from annual_statement_documents"));
   });
 
   it("FS7: saved notes are the report's notes", async () => {

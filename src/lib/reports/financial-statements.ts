@@ -16,6 +16,10 @@ import { type LayoutBase, runDefaultCashFlowLayout, runDefaultEquityLayout, runD
 import { cashFlowStatement, changesInEquity, type StatementRow } from "@/lib/reports/statements";
 import { statementAmount, statementValue } from "@/lib/reports/statement-format";
 import { requireArray, requireString } from "@/lib/validation";
+import { fixedAssetRegister } from "@/lib/fixed-assets/register";
+import { type DepreciationSchedule, depreciationSchedule } from "@/lib/fixed-assets/schedule";
+import { currencyMinorUnits } from "@/lib/money/currency";
+import { type AnnualDocument, getAnnualDocument } from "@/lib/reports/annual-document";
 
 export { statementAmount, statementValue };
 
@@ -205,7 +209,16 @@ export type FinancialStatements = {
   preparedOn: string;
   statements: FinancialStatement[];
   notes: StatementNotes;
+  /** The cover, compilation report and headings, as saved for this year end or the defaults (FS9-FS13). */
+  document: AnnualDocument;
+  /** The year's depreciation schedule; null when there are no fixed assets in it (FS12). */
+  depreciation: DepreciationSchedule | null;
+  /** The pages in order, cover first, with their headings: the contents are made from these (FS9). */
+  pages: AnnualPage[];
 };
+
+export type AnnualPageKey = "cover" | "contents" | "compilation" | FinancialStatement["key"] | "notes" | "depreciation";
+export type AnnualPage = { key: AnnualPageKey; title: string };
 
 function nzLong(iso: string): string {
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -615,6 +628,20 @@ export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unkn
     ? { ...cashFlowsStandard, layout: { reportId: cfLayout.report.id, title: cfLayout.report.title }, ...cashFlowLines(cfLayout.figures, yearEnd, priorEnd) }
     : cashFlowsStandard;
 
+  const document = await getAnnualDocument(tx, { yearEnd, name: organisation.displayName });
+  const titles = document.texts.titles;
+  const statements = [performance, position, equity, cashFlows].map((statement) => (titles[statement.key] ? { ...statement, title: titles[statement.key] } : statement));
+  const register = await fixedAssetRegister(tx, { asOf: yearEnd });
+  const depreciation = depreciationSchedule(register, currencyMinorUnits(tx.baseCurrency));
+  const pages: AnnualPage[] = [
+    { key: "cover", title: document.texts.coverTitle || organisation.displayName },
+    { key: "contents", title: titles.contents ?? "Contents" },
+    ...(document.texts.compilation ? [{ key: "compilation" as const, title: titles.compilation ?? "Compilation report" }] : []),
+    ...statements.map((statement) => ({ key: statement.key, title: statement.title })),
+    { key: "notes", title: titles.notes ?? "Notes to the financial statements" },
+    ...(depreciation ? [{ key: "depreciation" as const, title: titles.depreciation ?? "Depreciation schedule" }] : []),
+  ];
+
   return {
     name: organisation.displayName,
     heading: "Special purpose financial statements",
@@ -623,8 +650,11 @@ export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unkn
     columns: { current: yearEnd.slice(0, 4), prior: priorEnd.slice(0, 4) },
     currencyCode: tx.baseCurrency,
     preparedOn: now.toISOString().slice(0, 10),
-    statements: [performance, position, equity, cashFlows],
+    statements,
     notes,
+    document,
+    depreciation,
+    pages,
   };
 }
 
@@ -636,31 +666,63 @@ export async function financialStatementsPdf(tx: OrgTx, input: { yearEnd: unknow
   const { name, notes } = report;
   const yearEnd = report.yearEnd;
 
+  const { document, pages } = report;
+  const texts = document.texts;
   const writer = await PdfWriter.create({
     title: `${name} financial statements for the year ended ${nzLong(yearEnd)}`,
     author: name,
     footer: `${name} · Financial statements for the year ended ${nzLong(yearEnd)}`,
+    stamp: document.status === "draft" ? "DRAFT" : undefined,
   });
-  writer.space(120);
-  writer.text(name, { size: 22, bold: true, gap: 8 });
-  writer.text(report.heading, { size: 15, bold: true, gap: 4 });
-  writer.text(report.period, { size: 13, gap: 30 });
-  writer.text("Contents", { size: 12, bold: true, gap: 4 });
-  for (const entry of [...report.statements.map((statement) => statement.title), "Notes to the financial statements"]) writer.text(entry, { gap: 2 });
-  writer.space(30);
-  writer.text(`Prepared with Tohyee on ${report.preparedOn} (UTC). Amounts are in ${report.currencyCode}.`, { muted: true });
-  if (!notes.saved) writer.text("The notes are drafts that haven't been checked: see the notes.", { muted: true });
+  const titleOf = (key: AnnualPageKey) => pages.find((page) => page.key === key)?.title ?? "";
+  const pageHeading = (title: string, subtitle: string) => {
+    writer.text(name, { size: 12, bold: true, gap: 2 });
+    writer.text(title, { size: 14, bold: true, gap: 2 });
+    writer.text(subtitle, { muted: true, gap: 10 });
+  };
 
+  // 1. The cover (FS10): each line left off when blank.
+  writer.space(160);
+  if (texts.coverTitle) writer.text(texts.coverTitle, { size: 22, bold: true, gap: 8 });
+  if (texts.coverSubtitle) writer.text(texts.coverSubtitle, { size: 15, bold: true, gap: 4 });
+  if (texts.coverPeriod) writer.text(texts.coverPeriod, { size: 13, gap: 30 });
+  if (texts.coverNote) {
+    writer.space(Math.max(0, writer.room - 40));
+    writer.text(texts.coverNote, { muted: true });
+  }
+
+  // 2. The contents (FS9), filled in at the end, once each page's number is known.
+  writer.newPage();
+  const contentsPage = writer.pageCount;
+  const starts: Array<{ title: string; page: number }> = [];
+  const start = (key: AnnualPageKey) => {
+    writer.newPage();
+    starts.push({ title: titleOf(key), page: writer.pageCount });
+  };
+
+  // 3. The compilation report (FS11).
+  if (texts.compilation) {
+    start("compilation");
+    if (texts.compilationTitle) writer.text(texts.compilationTitle, { size: 14, bold: true, gap: 12 });
+    for (const section of texts.compilationSections) {
+      if (section.heading) writer.text(section.heading, { size: 11, bold: true, gap: 3 });
+      for (const paragraph of section.body.split(/\n{2,}/)) writer.text(paragraph.trim(), { gap: 8 });
+    }
+    if (texts.compilationSignOff) {
+      writer.space(16);
+      writer.text(texts.compilationSignOff);
+    }
+  }
+
+  // 4. The statements.
   const columns: Column[] = [
     { header: "", width: 3, align: "left" },
     { header: report.columns.current, width: 1, align: "right" },
     { header: report.columns.prior, width: 1, align: "right" },
   ];
   for (const statement of report.statements) {
-    writer.newPage();
-    writer.text(name, { size: 12, bold: true, gap: 2 });
-    writer.text(statement.title, { size: 14, bold: true, gap: 2 });
-    writer.text(statement.subtitle, { muted: true, gap: 10 });
+    start(statement.key);
+    pageHeading(statement.title, statement.subtitle);
     writer.table(
       columns,
       statement.lines.map((line) =>
@@ -674,14 +736,10 @@ export async function financialStatementsPdf(tx: OrgTx, input: { yearEnd: unknow
     for (const paragraph of statement.paragraphs) writer.text(paragraph, { gap: 6 });
   }
 
-  writer.newPage();
-  writer.text(name, { size: 12, bold: true, gap: 2 });
-  writer.text("Notes to the financial statements", {
-    size: 14,
-    bold: true,
-    gap: 2,
-  });
-  writer.text(report.period, { muted: true, gap: 10 });
+  // 5. The notes.
+  start("notes");
+  pageHeading(titleOf("notes"), report.period);
+  writer.text(`Amounts are in ${report.currencyCode}.`, { muted: true, gap: 8 });
   if (!notes.saved) {
     writer.text(
       "DRAFT: these notes are Tohyee's starting drafts. Fill in the parts in [square brackets] and have them checked before the statements are used.",
@@ -696,6 +754,52 @@ export async function financialStatementsPdf(tx: OrgTx, input: { yearEnd: unknow
     });
     for (const paragraph of note.body.split(/\n{2,}/)) writer.text(paragraph.trim(), { gap: 6 });
     writer.space(4);
+  });
+
+  // 6. The depreciation schedule, last (FS12).
+  if (report.depreciation) {
+    start("depreciation");
+    pageHeading(titleOf("depreciation"), report.period);
+    const money = (value: string) => statementAmount(value);
+    const scheduleColumns: Column[] = [
+      { header: "Asset", width: 3, align: "left" },
+      { header: "Rate", width: 1.1, align: "left" },
+      { header: "Cost", width: 1.3, align: "right" },
+      { header: "Opening", width: 1.3, align: "right" },
+      { header: "Additions", width: 1.3, align: "right" },
+      { header: "Disposals", width: 1.3, align: "right" },
+      { header: "Depreciation", width: 1.4, align: "right" },
+      { header: "Closing", width: 1.3, align: "right" },
+    ];
+    const rows: string[][] = [];
+    const kinds: Array<"section" | "total" | "normal"> = [];
+    const amounts = (entry: { cost: string; opening: string; additions: string; disposals: string; depreciation: string; closing: string }) =>
+      [entry.cost, entry.opening, entry.additions, entry.disposals, entry.depreciation, entry.closing].map(money);
+    for (const group of report.depreciation.groups) {
+      rows.push([group.typeName, "", "", "", "", "", "", ""]);
+      kinds.push("section");
+      for (const asset of group.assets) {
+        rows.push([asset.disposedOn ? `${asset.name} (disposed of ${nzLong(asset.disposedOn)})` : asset.name, asset.rate, ...amounts(asset)]);
+        kinds.push("normal");
+      }
+      rows.push([`Total ${group.typeName}`, "", ...amounts(group.totals)]);
+      kinds.push("total");
+    }
+    rows.push(["Total", "", ...amounts(report.depreciation.totals)]);
+    kinds.push("total");
+    writer.table(scheduleColumns, rows, { width: CONTENT_WIDTH, rowKinds: kinds });
+  }
+
+  writer.onPage(contentsPage, () => {
+    writer.text(titleOf("contents"), { size: 14, bold: true, gap: 12 });
+    writer.table(
+      [
+        { header: "", width: 5, align: "left" },
+        { header: "Page", width: 1, align: "right" },
+      ],
+      starts.map((entry) => [entry.title, String(entry.page)]),
+      { width: CONTENT_WIDTH },
+    );
   });
 
   const safe = name
