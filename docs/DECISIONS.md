@@ -13787,6 +13787,15 @@ migration 0265.
       line and on or before the feed balance's date, is listed under
       "Already in the bank's balance" and not taken off. Claude's call on
       the details, not yet reviewed.
+### Revenue recognition setting (11 Nov 2026; decision 1573)
+
+1573. **Sales when sent is a revenue recognition choice in Settings.** Jess:
+      the store page was "a weird place" with "weird wording"; it's about
+      when revenue is recognised, when fulfilled or when paid "like a game
+      sale would be". Settings › Organisation has a Revenue recognition card:
+      for each Shopify store, When paid or When fulfilled (with its Income in
+      advance account). The store's page says which and links there.
+      Behaviour is unchanged (SWS1-SWS11).
 
 ### 1575. Clicking an amount in the annual financial statements
 
