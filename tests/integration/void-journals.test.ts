@@ -8,7 +8,9 @@ import { coreQuery } from "@/lib/db/transactions";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { correctJournal, getJournal, getJournalDetails, postJournal } from "@/lib/ledger/journals";
 import { updatePeriodControls } from "@/lib/ledger/period-controls";
+import { listJournals } from "@/lib/ledger/journals";
 import { planVoidJournals, voidJournals } from "@/lib/ledger/void-journals";
+import { accountTransactions } from "@/lib/reports/account-transactions";
 import { apiRequest, createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, key, sessionCookieFor, startTestServer, type TestServer } from "../helpers/test-server";
 
 const ORG = "void-journals";
@@ -114,6 +116,59 @@ describeWithDatabase("voiding manual journals", () => {
 
     const plain = await journal("2026-08-05", "6010", "3000", "9.00");
     await expect(run((tx) => voidJournals(tx, { journalIds: [plain], previewHash: "stale", idempotencyKey: key("v") }))).rejects.toThrow("Preview it again");
+  });
+
+  it("VP1-VP3: voided and corrected pairs left out of the journal list and the ledger reports when asked", async () => {
+    const voidOne = async (id: string, voidDate?: string) => {
+      const plan = await run((tx) => planVoidJournals(tx, { journalIds: [id], voidDate }));
+      return run((tx) => voidJournals(tx, { journalIds: [id], voidDate, previewHash: plan.hash, idempotencyKey: key("v") }));
+    };
+    const a = await journal("2026-10-02", "6030", "3000", "11.00");
+    await voidOne(a);
+    const b = await journal("2026-10-03", "6030", "3000", "12.00");
+    const corrected = await run((tx) =>
+      correctJournal(tx, {
+        idempotencyKey: key("c"),
+        originalJournalId: b,
+        postingDate: "2026-10-03",
+        reference: "Recode B",
+        lines: [
+          { accountCode: "6030", debitAmount: "13.00", creditAmount: "0" },
+          { accountCode: "3000", debitAmount: "0", creditAmount: "13.00" },
+        ],
+      }),
+    );
+    const c = await journal("2026-10-04", "6030", "3000", "14.00");
+    const d = await journal("2026-10-30", "6030", "3000", "15.00");
+    await voidOne(d, "2026-11-02");
+
+    // VP1-VP2: the list.
+    const all = await run((tx) => listJournals(tx, { kind: "journals", postingDateFrom: "2026-10-01", postingDateTo: "2026-10-31", limit: 50 }));
+    expect(all.journals.map((entry) => [entry.id, entry.voided ?? null]).sort()).toEqual(
+      [
+        [a, "voided"],
+        [b, "corrected"],
+        [corrected.replacementJournal.id, null],
+        [c, null],
+        [d, "voided"],
+      ].sort(),
+    );
+    const hidden = await run((tx) => listJournals(tx, { kind: "journals", postingDateFrom: "2026-10-01", postingDateTo: "2026-10-31", limit: 50, hideVoided: "1" }));
+    expect(hidden.journals.map((entry) => entry.id).sort()).toEqual([corrected.replacementJournal.id, c].sort());
+
+    // VP3: account transactions for October. D's void is in November, so D stays.
+    const account = (await run((tx) => tx.query<{ id: string }>("select id::text from accounts where code = '6030'"))).rows[0].id;
+    const full = await run((tx) => accountTransactions(tx, { accountId: account, from: "2026-10-01", to: "2026-10-31" }));
+    const short = await run((tx) => accountTransactions(tx, { accountId: account, from: "2026-10-01", to: "2026-10-31", hideVoidedPairs: "1" }));
+    expect(full.hiddenPairs).toBe(0);
+    expect(full.accounts[0].lines).toHaveLength(7);
+    expect(short.hiddenPairs).toBe(2);
+    expect(short.accounts[0].lines.map((line) => [line.journalId, line.debit])).toEqual([
+      [corrected.replacementJournal.id, "13.00"],
+      [c, "14.00"],
+      [d, "15.00"],
+    ]);
+    expect(short.accounts[0].closing).toBe(full.accounts[0].closing);
   });
 
   it("VJ5: bookkeepers and up; viewers can't", async () => {
