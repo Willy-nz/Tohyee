@@ -8,6 +8,7 @@ import { correctJournal } from "@/lib/ledger/journals";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { getOrganisation } from "@/lib/organisations/registry";
 import { connectStore, syncConnection, updateConnectionSettings } from "@/lib/sales-platforms/service";
+import { applyWhenSentToInvoiced, ordersToApplyWhenSent } from "@/lib/sales-platforms/apply-when-sent";
 import { listOrdersToSend } from "@/lib/sales-platforms/to-send";
 import { listHeldOrders, markHeldOrderSent } from "@/lib/sales-platforms/when-sent";
 import { setSalesPlatformFetchForTests } from "@/lib/sales-platforms/shopify";
@@ -285,6 +286,53 @@ describeWithDatabase("Shopify sales when sent", () => {
     expect(await books(w)).toEqual({ held: "0.00", sales: "-260.00", cogs: "40.00", stock: "0.00" });
     // Not a liability account, or a WooCommerce store: refused.
     await expect(w.as((tx) => updateConnectionSettings(tx, w.connectionId, { salesWhenSentAccountCode: "4000" }))).rejects.toThrow("isn't a liability account");
+  });
+
+  it("SWS12: a sales order made before it was on is held when it's invoiced, with stock off at the invoice", async () => {
+    const w = await setup({ whenSent: false });
+    // Placed 1 Nov, not paid yet: a sales order, no invoice.
+    w.state.orders.push(order({ financialStatus: "PENDING", transactions: [] }));
+    await w.sync("2026-11-01T02:00:00Z");
+    expect(await books(w)).toEqual({ held: "0.00", sales: "0.00", cogs: "0.00", stock: "20.00" });
+    await w.as((tx) => updateConnectionSettings(tx, w.connectionId, { newSalesWhenSentAccount: { code: "2350", name: "Income in advance" } }));
+    // Paid 2 Nov: invoiced, and what's to be sent (all of it) moves to Income in advance.
+    Object.assign(w.state.orders[0], {
+      financialStatus: "PAID",
+      updatedAt: "2026-11-02T01:00:00Z",
+      transactions: [{ id: 9701, kind: "SALE", amount: "149.50", processedAt: "2026-11-02T01:00:00Z" }],
+    });
+    await w.sync("2026-11-02T02:00:00Z");
+    expect(await books(w)).toEqual({ held: "-130.00", sales: "0.00", cogs: "20.00", stock: "0.00" });
+    expect((await invoiceOf(w, "7001")).total).toBe("149.50");
+    // The pendant is sent 3 Nov: 100.00 and the shipping 10.00 to sales (SWS2); its stock already came off with the invoice.
+    w.state.orders[0].fulfilments = [{ id: 9901, createdAt: "2026-11-02T22:00:00Z", lines: [{ lineId: 8001, quantity: 1 }] }];
+    await w.sync("2026-11-03T02:00:00Z");
+    expect(await books(w)).toEqual({ held: "-20.00", sales: "-110.00", cogs: "20.00", stock: "0.00" });
+  });
+
+  it("SWS13-SWS14: Apply to orders already invoiced holds only what's still to send; the invoice is unchanged", async () => {
+    const w = await setup({ whenSent: false });
+    // Invoiced to sales 1 Nov while it was off; the pendant was sent that night.
+    w.state.orders.push(order({ fulfilmentStatus: "PARTIALLY_FULFILLED", fulfilments: [{ id: 9901, createdAt: "2026-11-01T09:00:00Z", lines: [{ lineId: 8001, quantity: 1 }] }] }));
+    await w.sync("2026-11-01T02:00:00Z");
+    await w.sync("2026-11-01T10:00:00Z");
+    expect(await books(w)).toEqual({ held: "0.00", sales: "-130.00", cogs: "20.00", stock: "0.00" });
+    // Turning it on doesn't touch #1001 by itself.
+    await w.as((tx) => updateConnectionSettings(tx, w.connectionId, { newSalesWhenSentAccount: { code: "2350", name: "Income in advance" } }));
+    await w.sync("2026-11-02T02:00:00Z");
+    expect((await books(w)).held).toBe("0.00");
+    const preview = await w.as((tx) => ordersToApplyWhenSent(tx, w.connectionId));
+    expect(preview.orders.map((entry) => [entry.name, entry.total, entry.shopifyStatus])).toEqual([["#1001", "149.50", "PARTIALLY_FULFILLED"]]);
+    expect(await w.as((tx) => applyWhenSentToInvoiced(tx, { connectionId: w.connectionId, orderIds: ["7001"] }))).toEqual({ marked: 1 });
+    await w.sync("2026-11-02T03:00:00Z");
+    // Only the kit (20.00) is still to send: the pendant was sent, so the shipping went with it.
+    expect(await books(w)).toEqual({ held: "-20.00", sales: "-110.00", cogs: "20.00", stock: "0.00" });
+    expect((await invoiceOf(w, "7001")).total).toBe("149.50");
+    expect((await w.as((tx) => ordersToApplyWhenSent(tx, w.connectionId))).orders).toEqual([]);
+    // The kit is sent 4 Nov; the pendant's earlier fulfilment isn't counted again.
+    w.state.orders[0].fulfilments!.push({ id: 9902, createdAt: "2026-11-03T22:00:00Z", lines: [{ lineId: 8002, quantity: 1 }] });
+    await w.sync("2026-11-04T02:00:00Z");
+    expect(await books(w)).toEqual({ held: "0.00", sales: "-130.00", cogs: "20.00", stock: "0.00" });
   });
 
   it("SWS10: an order Shopify never marked sent can be marked sent in Tohyee", async () => {

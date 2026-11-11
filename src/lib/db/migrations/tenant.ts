@@ -20529,4 +20529,13 @@ create table ai_journal_void_settings (
 alter table accounts add column reporting_name text check (reporting_name is null or length(reporting_name) between 1 and 200);
 `,
   },
+  {
+    version: "0270",
+    name: "apply_when_sent",
+    sql: `
+-- Orders chosen with "Apply Sales when sent to orders already invoiced"
+-- (SWS13, decision 1583): the next sync holds what's still to be sent.
+alter table sales_platform_documents add column apply_when_sent boolean not null default false;
+`,
+  },
 ];

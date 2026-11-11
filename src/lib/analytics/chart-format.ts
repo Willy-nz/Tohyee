@@ -484,8 +484,9 @@ function parseReferenceLines(input: unknown): ReferenceLine[] | undefined {
   const lines = input.map((entry, index): ReferenceLine => {
     const raw = object(entry);
     const what = `Reference line ${index + 1}`;
-    const kind = oneOf(raw.kind, REFERENCE_KINDS, what);
-    if (!kind) throw new ValidationError(`${what}: choose what kind of line it is.`);
+    // A line with just a value is a constant line (Jess's issue 4, 11 Nov 2026).
+    const kind = oneOf(raw.kind, REFERENCE_KINDS, what) ?? (raw.value !== undefined && raw.value !== null ? "constant" : undefined);
+    if (!kind) throw new ValidationError(`${what}: choose what kind of line it is (${REFERENCE_KINDS.join(", ")}).`);
     const value = numberText(raw.value, `${what} value`);
     const to = numberText(raw.to, `${what} end`);
     if ((kind === "constant" || kind === "target" || kind === "band") && value === undefined) throw new ValidationError(`${what}: give it a value.`);

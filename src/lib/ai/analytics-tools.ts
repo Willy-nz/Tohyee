@@ -123,7 +123,7 @@ function buildingGuide() {
     heights: [...TILE_HEIGHTS],
     format:
       `Optional. Common keys: palette (${Object.keys(PALETTES).join(", ")}), labels { show }, legend { show: auto|show|hide, position }, stack (none, stacked, percent), smooth, markers, valueAxis { title }, ` +
-      "kpi { target, change: both|amount|percent, downIsGood }, table { totals, banded }, referenceLines [{ value, label }], negativeRed. Leave it out for Tohyee's look.",
+      "kpi { target, change: both|amount|percent, downIsGood }, table { totals, banded }, referenceLines [{ kind: constant|target|average|median|min|max|percentile|band (constant when only value is given), value, to (band), percentile (1-99), label, style: solid|dashed|dotted }], negativeRed. Leave it out for Tohyee's look.",
     books:
       "The books' ledger (tohyee_ledger_lines) stores amount as debit less credit, so income and liabilities are negative: use the table's savedValues (e.g. revenue) or negate: true with a where on account_type.",
   };

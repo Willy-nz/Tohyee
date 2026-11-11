@@ -13906,6 +13906,42 @@ migration 0265.
       own name, so it's still clear which account is which. Tenant migration
       0269. Claude's details, not yet reviewed.
 
+### Sales when sent for orders invoiced without it (12 Nov 2026; decision 1583)
+
+1583. **Hold after invoicing (SWS12-SWS14).** Jess's issue 12: about 25
+      Glimmers orders had sales orders from before Sales when sent was on,
+      so their invoices went straight to sales. An order whose sales order
+      came before it, invoiced after, is now held when it's invoiced; orders
+      invoiced earlier can be chosen on Settings › Revenue recognition. Both
+      leave the invoice alone (it may be paid and in a payout) and post one
+      journal per order moving the unsent share from sales to Income in
+      advance, as Jess suggested; only what's still to send is held, and
+      fulfilments already counted aren't counted again. Stock came off with
+      the invoice, so it doesn't move again when sent. Tenant migration
+      0270. An AI tool for it isn't built yet. Not yet reviewed.
+
+### Doubled Shopify names and reference lines (12 Nov 2026; decision 1584)
+
+1584. **Small fixes from Jess's 11 Nov list (issues 4 and 8).** A Shopify
+      customer whose whole name is in both the first and last name fields
+      ("K A Monaghan K A Monaghan") comes in once; a last name that already
+      ends the first name isn't added again. An Analytics reference line
+      with a value and no kind is a constant line, and the guide for the AI
+      lists the kinds. Customers already brought in keep their names: fix
+      them on the contact. Not yet reviewed.
+
+### Void for manual journals (12 Nov 2026; decision 1585)
+
+1585. **Void posts only the reversal (VJ1-VJ5).** Jess's issue 9: a manual
+      journal that shouldn't exist could only be "edited", which always adds
+      a new version. Void posts the exact reversal, linked to the original,
+      on its own date or a chosen one, with the reason in its description,
+      as a correction's reversal does. Bookkeepers and up, one or several
+      after a preview by account. Manual journals and replacements only;
+      refused in locked periods and on reconciled journals, as corrections
+      are. Hiding voided pairs from lists is issue 10, next. Not yet
+      reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

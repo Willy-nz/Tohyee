@@ -110,10 +110,93 @@ function StoreRecognition({ organisationId, connection, onChanged }: { organisat
           </select>
         </Field>
       ) : (
-        <p className={ui.muted} style={{ margin: 0 }}>
-          <Link href="/operations/to-send">Sales › To send</Link> shows the orders not yet fulfilled and what&apos;s held for each.
-        </p>
+        <>
+          <p className={ui.muted} style={{ margin: 0 }}>
+            <Link href="/operations/to-send">Sales › To send</Link> shows the orders not yet fulfilled and what&apos;s held for each.
+          </p>
+          <ApplyToInvoiced organisationId={organisationId} connectionId={connection.id} />
+        </>
       )}
+    </div>
+  );
+}
+
+type OrderToApply = { orderId: string; name: string | null; invoiceNumber: string; invoiceDate: string; total: string; shopifyStatus: string | null; chosen: boolean };
+
+/**
+ * SWS13: orders invoiced in full to sales before Sales when sent applied to
+ * them, not yet sent. Choosing them holds what's still to be sent at the next
+ * sync: one journal each, the invoice and its payment unchanged.
+ */
+function ApplyToInvoiced({ organisationId, connectionId }: { organisationId: string; connectionId: string }) {
+  const confirm = useConfirm();
+  const preview = useApiData<{ held: string | null; orders: OrderToApply[] }>(`/api/sales-platforms/connections/${connectionId}/apply-when-sent`, { organisationId });
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const waiting = (preview.data?.orders ?? []).filter((order) => !order.chosen);
+  const marked = (preview.data?.orders ?? []).length - waiting.length;
+  if (!preview.data || (waiting.length === 0 && marked === 0)) return null;
+  const total = waiting.reduce((sum, order) => sum + Math.round(Number(order.total) * 100), 0);
+  async function apply() {
+    if (!(await confirm(`Apply Sales when sent to these ${waiting.length} orders? At the next sync, what each still has to send moves from sales to ${preview.data!.held}, in one journal per order on its invoice date. The invoices and payments don't change.`))) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await api<{ marked: number }>(`/api/sales-platforms/connections/${connectionId}/apply-when-sent`, {
+        method: "POST",
+        body: { organisationId, orderIds: waiting.map((order) => order.orderId) },
+      });
+      setMessage({ tone: "success", text: `${result.marked} orders will be held at the next sync. The sync log says what moved for each.` });
+      preview.reload();
+    } catch (caught) {
+      setMessage({ tone: "error", text: errorMessage(caught) });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+      {marked > 0 ? <p className={ui.muted} style={{ margin: 0 }}>{marked} orders are waiting for the next sync to be held.</p> : null}
+      {waiting.length > 0 ? (
+        <Notice tone="warning">
+          {waiting.length} {waiting.length === 1 ? "order was" : "orders were"} invoiced to sales before this applied, and Shopify hasn&apos;t marked {waiting.length === 1 ? "it" : "them"} fully sent
+          (invoices total {(total / 100).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}).{" "}
+          <button type="button" className={ui.linkButton} onClick={() => setOpen(!open)}>
+            {open ? "Hide them" : "See them"}
+          </button>
+          {open ? (
+            <table className={ui.table} style={{ marginTop: 8 }}>
+              <thead>
+                <tr>
+                  <th>Order</th>
+                  <th>Invoice</th>
+                  <th>Date</th>
+                  <th>Shopify says</th>
+                  <th className={ui.num}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {waiting.map((order) => (
+                  <tr key={order.orderId}>
+                    <td>{order.name ?? order.orderId}</td>
+                    <td>{order.invoiceNumber}</td>
+                    <td>{order.invoiceDate}</td>
+                    <td>{(order.shopifyStatus ?? "").toLowerCase().replace(/_/g, " ")}</td>
+                    <td className={ui.num}>{order.total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+          <div style={{ marginTop: 8 }}>
+            <button type="button" className={`${ui.button} ${ui.secondary}`} disabled={busy} onClick={() => void apply()}>
+              {busy ? "Working…" : "Apply Sales when sent to these orders"}
+            </button>
+          </div>
+        </Notice>
+      ) : null}
     </div>
   );
 }
