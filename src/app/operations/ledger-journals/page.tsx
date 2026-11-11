@@ -468,9 +468,11 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
   const accounts = useAccounts(organisationId);
   // Manual journals by default, 100 a page (decision 1564).
   const [filters, setFilters] = useState<Filters>({ from: "", to: "", reference: "", kind: "journals" });
+  // VP1: voided or corrected journals and their reversals are left out unless asked for.
+  const [showVoided, setShowVoided] = useState(false);
   const [applied, setApplied] = useState<Filters>(filters);
   const [page, setPage] = useState(1);
-  const list = useApiData<{ journals: Journal[]; page: number; pages: number; total: number }>("/api/ledger/journals", {
+  const list = useApiData<{ journals: Array<Journal & { voided?: "voided" | "corrected" }>; page: number; pages: number; total: number }>("/api/ledger/journals", {
     organisationId,
     postingDateFrom: applied.from,
     postingDateTo: applied.to,
@@ -478,6 +480,7 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
     kind: applied.kind,
     page: String(page),
     pageSize: "100",
+    hideVoided: showVoided ? null : "1",
   });
   const [selected, setSelected] = useState<string | null>(initialJournalId);
   // Void (VJ1-VJ5): ticked journals, and the ones being voided.
@@ -665,6 +668,17 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
               <option value="replacement">Replacements</option>
             </select>
           </Field>
+          <label className={ui.checkbox} style={{ alignSelf: "end" }}>
+            <input
+              type="checkbox"
+              checked={showVoided}
+              onChange={(event) => {
+                setPage(1);
+                setShowVoided(event.target.checked);
+              }}
+            />{" "}
+            Show voided and reversals
+          </label>
           <Button type="submit" variant="secondary">
             Filter
           </Button>
@@ -731,6 +745,12 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
                     <td className={ui.muted}>{journal.description}</td>
                     <td>
                       <KindBadge journal={journal} />
+                      {journal.voided ? (
+                        <>
+                          {" "}
+                          <Badge tone="neutral">{journal.voided === "voided" ? "Voided" : "Corrected"}</Badge>
+                        </>
+                      ) : null}
                     </td>
                     <td className={ui.num}>
                       <Money value={journal.totalDebit} />

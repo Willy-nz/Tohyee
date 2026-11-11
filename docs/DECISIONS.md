@@ -13942,6 +13942,15 @@ migration 0265.
       are. Hiding voided pairs from lists is issue 10, next. Not yet
       reviewed.
 
+### Leaving out voided pairs (12 Nov 2026; decision 1586)
+
+1586. **Voided and corrected pairs out of the way (VP1-VP3).** Jess's
+      issue 10. The Journals list leaves out a reversed journal and its
+      reversal unless asked; the ledger reports leave out a journal and its
+      reversal only when both are inside the dates, so no period total
+      changes. Off by default everywhere but on screen, so the accountant
+      pack and API keep every line. Not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

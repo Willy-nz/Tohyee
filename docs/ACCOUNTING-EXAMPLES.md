@@ -2499,6 +2499,26 @@ Tested in `tests/integration/void-journals.test.ts`.
 - **VJ5** Several at once: tick manual journals in the Journals list, then
   **Void selected** (up to 100), with the same preview. Viewers can't void.
 
+### Leaving out voided pairs (VP1-VP3; Jess, 11 Nov 2026, issue 10; the details are Claude's, not yet reviewed)
+
+Tested in `tests/integration/void-journals.test.ts`. In October 2026: A
+(11.00) voided on its date; B (12.00) corrected on its date to 13.00; C
+(14.00); D (15.00) voided on 2 Nov.
+
+- **VP1** The Journals list leaves out voided or corrected journals and
+  their reversals unless **Show voided and reversals** is ticked: it shows
+  B's replacement and C (D's reversal isn't in October, but D has one, so
+  D is left out too).
+- **VP2** Ticked, voided journals show **Voided** and corrected ones
+  **Corrected**.
+- **VP3** Account transactions and the general ledger have **Leave out
+  voided pairs**, on by default on screen: a journal and its reversal both
+  within the dates are left out (A and B with theirs: 2 pairs, said above
+  the report), so October shows B's replacement 13.00, C 14.00 and D 15.00.
+  D stays because its void is outside the dates, so the period's figures
+  don't change. Balances are the same either way. The API, the accountant
+  pack and exports from other places keep everything unless asked.
+
 ### The AI voiding journals it posted (AJV1-AJV6; Jess, 11 Nov 2026; the details are Claude's, not yet reviewed)
 
 Tested in `tests/integration/ai-journal-void.test.ts`. 31 March year end.
