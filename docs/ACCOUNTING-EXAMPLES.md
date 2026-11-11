@@ -18775,10 +18775,26 @@ statements, with figures from the same functions as the report screens
 - **FS2** Notes start from drafts suited to the organisation: reporting
   entity, basis of preparation, changes in policies, GST (registered or
   not), and inventory, property plant and equipment, and livestock when
-  they're used, then income tax. Parts the preparer must fill in or confirm
+  they're used, then income tax and FS15's notes. Parts the preparer must fill in or confirm
   are in [square brackets]. Until notes are saved, the PDF marks them
   "DRAFT". Saved notes replace the drafts, and saving an empty list goes
   back to the drafts.
+- **FS15** (Jess, 11 Nov 2026: default wording "most NZ accountants" use;
+  checked against the Tax Administration (Financial Statements) Order 2014
+  on legislation.govt.nz, 11 Nov 2026; Claude's wording, not yet reviewed)
+  The special purpose drafts cover the Order's minimum requirements. The
+  basis note names the Order (a small company, not in a group and with
+  income and expenditure each of $30,000 or less, is exempt; trusts follow
+  the Domestic Trusts Order 2022), says the statements are accrual and
+  double-entry, and that last year's figures are shown. The GST note says
+  whether amounts include GST. New notes at the end: interest and dividends
+  received shown grossed up for resident withholding tax and imputation
+  credits; a reconciliation to taxable income; transactions with associated
+  persons (interest on their loans, advances to them, their services,
+  rents and leases, intangible property); and the movements in
+  shareholders' equity and current accounts. The fixed asset schedule the
+  Order asks for is FS12's depreciation schedule. The figures in the new
+  notes are [square bracket] placeholders: Tohyee doesn't fill them in yet.
 - **FS3** Amounts print as in printed statements: 1,234.56; negatives in
   brackets, (300.00); nothing as "-".
 
