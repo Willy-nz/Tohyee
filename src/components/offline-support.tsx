@@ -6,6 +6,7 @@ import { setOfflineReader } from "@/lib/client/api";
 import { forgetAccount, isInstalled, recordOnlineSignIn, registerServiceWorker, tellServiceWorker } from "@/lib/offline/device";
 import { answerOffline, refreshPacks, type RefreshProgress } from "@/lib/offline/packs";
 import { clearFarmTiles, keepFarmTiles, keepsPhotosByItself } from "@/lib/farming/imagery-device";
+import { useModules } from "@/components/modules";
 import { importOldSafetyDrafts } from "@/components/offline-queue";
 import { PACK_REFRESH_MINUTES } from "@/lib/offline/pack-inventory";
 import { sessionCheck, type SessionCheck } from "@/lib/offline/account";
@@ -162,6 +163,9 @@ export async function refreshFarmPacks(userId: string, organisationId: string, o
 export function OfflineSupport({ userId, organisationId }: { userId: string; organisationId: string | null }) {
   const online = useOnline();
   const changed = useAccountChanged();
+  // Whether this organisation farms (null until known): one that doesn't gets no farm pages offline.
+  const modules = useModules(organisationId);
+  const farming = modules ? modules.farming === true : null;
   const [unsent, setUnsent] = useState(0);
 
   // Another tab signing in as someone else holds this one (decision 1051).
@@ -218,13 +222,13 @@ export function OfflineSupport({ userId, organisationId }: { userId: string; org
       }
       const verified = check === "verified";
       if (verified) await recordOnlineSignIn(window.location.origin, userId, new Date()).catch(() => undefined);
-      if (registration) await tellServiceWorker({ type: "context", userId, organisationId, online: verified });
-      if (!cancelled && organisationId) await refreshFarmPacks(userId, organisationId);
+      if (registration) await tellServiceWorker({ type: "context", userId, organisationId, online: verified, ...(farming === null ? {} : { farming }) });
+      if (!cancelled && organisationId && farming !== false) await refreshFarmPacks(userId, organisationId);
     })();
     return () => {
       cancelled = true;
     };
-  }, [userId, organisationId]);
+  }, [userId, organisationId, farming]);
 
   // Screens' reads answered from the device when Tohyee can't be reached; packs refreshed when the connection comes back.
   useEffect(() => {
@@ -310,8 +314,17 @@ export function OfflineSupport({ userId, organisationId }: { userId: string; org
   if (online) return null;
   return (
     <div className={styles.banner} role="status" data-print="hide">
-      <strong>You&apos;re offline.</strong> Farm pages and farm information kept on this device still open.
-      {unsent ? ` ${unsent} record${unsent === 1 ? " is" : "s are"} waiting on this device to be sent.` : " Anything you record waits on this device until Tohyee can be reached."}
+      {farming === false ? (
+        <>
+          <strong>You&apos;re offline.</strong> Tohyee needs a connection to open or save anything here. Check the internet connection, then try again.
+          {unsent ? ` ${unsent} record${unsent === 1 ? " is" : "s are"} waiting on this device to be sent.` : ""}
+        </>
+      ) : (
+        <>
+          <strong>You&apos;re offline.</strong> Farm pages and farm information kept on this device still open.
+          {unsent ? ` ${unsent} record${unsent === 1 ? " is" : "s are"} waiting on this device to be sent.` : " Anything you record waits on this device until Tohyee can be reached."}
+        </>
+      )}
     </div>
   );
 }
