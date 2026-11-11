@@ -25,7 +25,12 @@ export type ReportTableColumnKind =
   | "variance"
   | "variance_percent"
   | "difference"
-  | "budget_difference";
+  | "budget_difference"
+  // Added with Add column (LE4-LE9).
+  | "date"
+  | "formula"
+  | "notes"
+  | "percentage";
 
 export type ReportTableColumn = {
   key: string;
@@ -315,7 +320,7 @@ function equityTable(report: { id: string; title: string; kind: string; publishe
   };
 }
 
-const COLUMN_KINDS = new Set<ReportTableColumnKind>(["period", "total", "year_to_date", "percent", "split", "actual", "budget", "variance", "variance_percent", "difference", "budget_difference"]);
+const COLUMN_KINDS = new Set<ReportTableColumnKind>(["period", "total", "year_to_date", "percent", "split", "actual", "budget", "variance", "variance_percent", "difference", "budget_difference", "date", "formula", "notes", "percentage"]);
 
 /**
  * What's wrong with an answer that should be a ReportTable (empty when

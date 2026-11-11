@@ -1800,3 +1800,9 @@
     display: none;
   }
 }
+
+.layoutNotesCell {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  white-space: normal;
+}

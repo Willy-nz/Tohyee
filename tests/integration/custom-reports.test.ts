@@ -6,6 +6,7 @@ import type { SessionUser } from "@/lib/auth/sessions";
 import { createContact, updateContact } from "@/lib/contacts/service";
 import { createCustomField } from "@/lib/custom-fields/service";
 import { createCustomerGroup } from "@/lib/customers/service";
+import { createBudget, setBudgetAmounts } from "@/lib/budgets/service";
 import { coreQuery } from "@/lib/db/transactions";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { approveInvoice, createInvoice } from "@/lib/invoices/service";
@@ -225,6 +226,53 @@ describeWithDatabase("custom reports", () => {
       layout.blocks.unshift(note);
     }));
     expect(figures.blocks.map((block) => block.id)).toEqual(["note", "main", "cash"]);
+  });
+
+  it("LE4-LE9: added date, budget, formula, notes, percentage and variance columns", async () => {
+    const w = await setup();
+    const plan = (await w.as((tx) => createBudget(tx, { idempotencyKey: key("b"), name: "Plan" }))).budget;
+    await w.as((tx) => setBudgetAmounts(tx, plan.id, { version: plan.version, amounts: [{ accountCode: "4000", month: "2026-06", amount: "1000.00" }] }));
+    const report = await w.create("profit_and_loss");
+    const { figures } = await w.save(report, (layout) => {
+      layout.columns.added = [
+        { id: "may", kind: "date", heading: "May", from: "2026-05-01", to: "2026-05-31" },
+        { id: "plan", kind: "budget", budgetId: plan.id, from: "2026-06-01", to: "2026-06-30" },
+        { id: "both", kind: "formula", heading: "Jun + May", terms: [{ column: "p0", sign: 1 }, { column: "a_may", sign: 1 }] },
+        { id: "note", kind: "notes" },
+        { id: "share", kind: "percentage", column: "p0", ofRowId: "revenue" },
+        { id: "change", kind: "variance", heading: "Change", first: "p0", second: "a_may" },
+        { id: "changePct", kind: "variance", heading: "Change %", first: "p0", second: "a_may", percentOfSecond: true },
+        { id: "vsPlan", kind: "variance", first: "p0", second: "a_plan" },
+      ];
+      mainRows(layout).find((row) => row.id === "revenue")!.cells = { a_note: "See note 2" };
+    });
+    expect(figures.columns.map((column) => column.label)).toEqual(["Jun 2026", "May", "Budget (Plan)", "Jun + May", "Notes", "%", "Change", "Change %", "Variance"]);
+    expect(figures.columns.find((column) => column.key === "a_may")).toMatchObject({ kind: "date", drillFrom: "2026-05-01" });
+    expect(rowsOf(figures)).toEqual({
+      Revenue: ["1200.00", "1500.00", "1000.00", "2700.00", "See note 2", "100.0", "-300.00", "-20.0", "200.00"],
+      "Cost of sales": ["300.00", "400.00", "0.00", "700.00", null, "25.0", "-100.00", "-25.0", "300.00"],
+      "Gross profit": ["900.00", "1100.00", "1000.00", "2000.00", null, "75.0", "-200.00", "-18.2", "-100.00"],
+      "Other income": ["20.00", "0.00", "0.00", "20.00", null, "1.7", "20.00", null, "20.00"],
+      Expenses: ["250.00", "0.00", "0.00", "250.00", null, "20.8", "250.00", null, "250.00"],
+      "Net profit": ["670.00", "1100.00", "1000.00", "1770.00", null, "55.8", "-430.00", "-39.1", "-330.00"],
+    });
+    // Refused: a column used before it's added, a missing row, a budget on a balance sheet.
+    await expect(
+      w.save(report, (layout) => {
+        layout.columns.added = [{ id: "x", kind: "variance", first: "p0", second: "a_later" }];
+      }),
+    ).rejects.toThrow("choose the second column from the columns before it");
+    await expect(
+      w.save(report, (layout) => {
+        layout.columns.added = [{ id: "x", kind: "percentage", column: "p0", ofRowId: "nowhere" }];
+      }),
+    ).rejects.toThrow("row isn't in the report");
+    const sheet = await w.create("balance_sheet");
+    await expect(
+      w.save(sheet, (layout) => {
+        layout.columns.added = [{ id: "x", kind: "budget", budgetId: plan.id, from: "2026-06-01", to: "2026-06-30" }];
+      }),
+    ).rejects.toThrow("A balance sheet has no budget column");
   });
 
   it("LE3: a page break after a table or a note is kept and shown", async () => {

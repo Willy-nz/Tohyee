@@ -13870,6 +13870,17 @@ migration 0265.
       Percentage, Variance) come next: they change how columns are stored.
       Claude's details, not yet reviewed.
 
+### Add column (11 Nov 2026; decision 1580)
+
+1580. **Date, Budget, Formula, Notes, Percentage and Variance columns
+      (LE4-LE9).** Jess listed these for the layout editor's Add column.
+      They're kept as a list after the usual columns, so existing layouts
+      don't change. Each can use the money columns before it; a Percentage
+      is of one row in the same table; a Variance can be shown as a % of its
+      second column; a Notes column holds text typed for each row. Budgets
+      are profit and loss only, as before. Up to 10 added columns. Claude's
+      details, not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

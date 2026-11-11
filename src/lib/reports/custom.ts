@@ -25,6 +25,8 @@ import {
   type ReportBlock,
   type ReportColumn,
   type ReportColumnsSetting,
+  type AddedColumn,
+  addedColumnKey,
   type ReportRow,
   type ReportValues,
   type StoredCustomReportLayout,
@@ -41,6 +43,7 @@ import {
 } from "@/lib/reports/custom-layout";
 import { accountTotals, type AccountTotalsRow, earningsOf, financialYearEndMonth, naturalAmount, type TrackingFilter } from "@/lib/reports/financial";
 import { budgetTotals } from "@/lib/budgets/service";
+import { columnHeading } from "@/lib/reports/report-dates";
 import { valueWithDescendants } from "@/lib/tracking/service";
 import { optionalSource, requireId, requireIdempotencyKey } from "@/lib/validation";
 import { type CashFlowFigures, computeCashFlowLayout, parseCashFlowLayout } from "@/lib/reports/cash-flow-layout";
@@ -116,6 +119,12 @@ export function parseColumns(base: FinancialReportBase, input: unknown): ReportC
   const budgetDifference = bool(raw.budgetDifference, "budgetDifference");
   if (budgetId && base === "balance_sheet") throw new ValidationError("A balance sheet has no budget column: budgets hold profit and loss accounts only.");
   if (budgetDifference && !budgetId) throw new ValidationError("A difference to budget column needs a budget column.");
+  const keys = new Set<string>(Array.from({ length: periodCount }, (_, index) => `p${index}`));
+  if (difference) keys.add("diff");
+  if (yearToDate) keys.add("ytd");
+  if (budgetId) keys.add("bud");
+  if (budgetId && budgetDifference) keys.add("bdiff");
+  const added = parseAddedColumns(base, raw.added, keys);
   return {
     periodEnd,
     periodLength: periodLength as PeriodLength,
@@ -124,7 +133,82 @@ export function parseColumns(base: FinancialReportBase, input: unknown): ReportC
     percent,
     yearToDate,
     ...(budgetId ? { budgetId, budgetDifference } : {}),
+    ...(added.length > 0 ? { added } : {}),
   };
+}
+
+/**
+ * Columns added with Add column (LE4-LE9, decision 1580). `amounts` holds the
+ * keys of the columns before them that hold amounts; each added column can
+ * use those and the amount columns added before it. A Percentage's row is
+ * checked once the rows are known.
+ */
+function parseAddedColumns(base: FinancialReportBase, input: unknown, amounts: Set<string>): AddedColumn[] {
+  const ids = new Set<string>();
+  return list(input, "The added columns", LIMITS.addedColumns).map((entry, index): AddedColumn => {
+    const raw = record(entry, "An added column");
+    const what = `Added column ${index + 1}`;
+    const id = raw.id;
+    if (typeof id !== "string" || !ID_PATTERN.test(id) || ids.has(id)) throw new ValidationError(`${what} needs an id of its own.`);
+    ids.add(id);
+    const heading = text(raw.heading, `${what}'s heading`, LIMITS.labelLength, { required: false });
+    const common = { id, ...(heading ? { heading } : {}) };
+    const usable = (value: unknown, which: string) => {
+      if (typeof value !== "string" || !amounts.has(value)) throw new ValidationError(`${what}: choose the ${which} from the columns before it.`);
+      return value;
+    };
+    const dates = () => {
+      const to = parseIsoDate(raw.to, `${what}'s end date`);
+      if (base === "balance_sheet") return { from: null, to };
+      const from = parseIsoDate(raw.from, `${what}'s start date`);
+      if (from > to) throw new ValidationError(`${what} starts after it ends.`);
+      return { from, to };
+    };
+    let column: AddedColumn;
+    switch (raw.kind) {
+      case "date":
+        column = { ...common, kind: "date", ...dates() };
+        break;
+      case "budget": {
+        if (base === "balance_sheet") throw new ValidationError("A balance sheet has no budget column: budgets hold profit and loss accounts only.");
+        const { from, to } = dates();
+        column = { ...common, kind: "budget", budgetId: requireId(raw.budgetId, `${what}'s budget`), from: from!, to };
+        break;
+      }
+      case "formula": {
+        const terms = list(raw.terms, `${what}'s columns`, LIMITS.termsPerFormula).map((term) => {
+          const t = record(term, "A formula's column");
+          if (t.sign !== 1 && t.sign !== -1) throw new ValidationError(`${what}: each column is added (1) or taken away (-1).`);
+          return { column: usable(t.column, "columns"), sign: t.sign as 1 | -1 };
+        });
+        if (terms.length === 0) throw new ValidationError(`${what}: add at least one column to the formula.`);
+        column = { ...common, kind: "formula", terms };
+        break;
+      }
+      case "notes":
+        column = { ...common, kind: "notes" };
+        break;
+      case "percentage": {
+        if (typeof raw.ofRowId !== "string" || !ID_PATTERN.test(raw.ofRowId)) throw new ValidationError(`${what}: choose the row it's a % of.`);
+        column = { ...common, kind: "percentage", column: usable(raw.column, "column"), ofRowId: raw.ofRowId };
+        break;
+      }
+      case "variance":
+        column = {
+          ...common,
+          kind: "variance",
+          first: usable(raw.first, "first column"),
+          second: usable(raw.second, "second column"),
+          ...(bool(raw.percentOfSecond, "percentOfSecond") ? { percentOfSecond: true } : {}),
+        };
+        break;
+      default:
+        throw new ValidationError(`${what} is a date, budget, formula, notes, percentage or variance column.`);
+    }
+    // Later columns can use this one when it holds money.
+    if (column.kind === "date" || column.kind === "budget" || column.kind === "formula" || (column.kind === "variance" && !column.percentOfSecond)) amounts.add(addedColumnKey(column));
+    return column;
+  });
 }
 
 function parseRow(base: FinancialReportBase, input: unknown, ids: Set<string>): ReportRow {
@@ -137,11 +221,23 @@ function parseRow(base: FinancialReportBase, input: unknown, ids: Set<string>): 
   const row = parseRowBody(base, raw, id, label);
   // What any row can carry (decision 1360): hidden, a page break after it, a note.
   const note = text(raw.note, `The note on ${label}`, LIMITS.rowNoteLength, { required: false });
+  const cells: Record<string, string> = {};
+  if (raw.cells != null) {
+    const given = record(raw.cells, `${label}'s notes columns`);
+    const entries = Object.entries(given);
+    if (entries.length > LIMITS.addedColumns) throw new ValidationError(`${label} has too many notes columns.`);
+    for (const [key, value] of entries) {
+      if (!/^a_[A-Za-z0-9_-]{1,40}$/.test(key)) throw new ValidationError(`${label}'s notes column ${key} isn't a notes column.`);
+      const cell = text(value, `${label}'s note in a notes column`, LIMITS.cellLength, { required: false });
+      if (cell) cells[key] = cell;
+    }
+  }
   return {
     ...row,
     ...(bool(raw.hidden, "hidden") ? { hidden: true } : {}),
     ...(bool(raw.pageBreakAfter, "pageBreakAfter") ? { pageBreakAfter: true } : {}),
     ...(note ? { note } : {}),
+    ...(Object.keys(cells).length > 0 ? { cells } : {}),
   };
 }
 
@@ -277,6 +373,19 @@ export async function parseLayout(tx: OrgTx, base: FinancialReportBase, input: u
     const budget = await tx.query("select 1 from budgets where id = $1", [columns.budgetId]);
     if (budget.rowCount === 0) throw new ValidationError("There's no such budget.");
   }
+  for (const added of columns.added ?? []) {
+    if (added.kind === "budget") {
+      const budget = await tx.query("select 1 from budgets where id = $1", [added.budgetId]);
+      if (budget.rowCount === 0) throw new ValidationError("There's no such budget.");
+    }
+    if (added.kind === "percentage" && !ids.has(added.ofRowId)) throw new ValidationError("A percentage column's row isn't in the report.");
+  }
+  // A row's text only goes in a Notes column that exists.
+  const notesKeys = new Set((columns.added ?? []).filter((added) => added.kind === "notes").map(addedColumnKey));
+  for (const block of blocks) {
+    if (block.kind !== "table") continue;
+    for (const row of block.rows) for (const key of Object.keys(row.cells ?? {})) if (!notesKeys.has(key)) delete row.cells![key];
+  }
   let filter: CustomReportLayout["filter"] = null;
   if (raw.filter != null) {
     const f = record(raw.filter, "The filter");
@@ -325,8 +434,9 @@ export async function computeCustomReport(
   const money = (value: Decimal) => toFixedString(value, scale);
   const yearEndMonth = await financialYearEndMonth(tx);
   const setting: ReportColumnsSetting = options.columns
-    ? { ...layout.columns, difference: false, percent: false, yearToDate: false, budgetId: undefined, budgetDifference: false }
+    ? { ...layout.columns, difference: false, percent: false, yearToDate: false, budgetId: undefined, budgetDifference: false, added: undefined }
     : layout.columns;
+  const added = setting.added ?? [];
   let trackingFilter: TrackingFilter | null = null;
   let filterLabel: string | null = null;
   if (options.filter !== undefined) {
@@ -355,19 +465,46 @@ export async function computeCustomReport(
     budgetAmounts = await budgetTotals(tx, setting.budgetId, first.from!, first.to!);
     amountColumns.push({ key: "bud", kind: "budget", label: `Budget (${found.rows[0]?.name ?? `#${setting.budgetId}`})`, from: first.from, to: first.to });
   }
+  // Added date and budget columns hold amounts too (LE5, LE6).
+  const budgetMaps = new Map<string, Map<string, Decimal>>();
+  if (budgetAmounts) budgetMaps.set("bud", budgetAmounts);
+  for (const column of added) {
+    const key = addedColumnKey(column);
+    if (column.kind === "date") {
+      const label = column.heading || columnHeading(column.from, column.to);
+      amountColumns.push({ key, kind: "date", label, from: column.from, to: column.to });
+    } else if (column.kind === "budget") {
+      const found = await tx.query<{ name: string }>("select name from budgets where id = $1", [column.budgetId]);
+      budgetMaps.set(key, await budgetTotals(tx, column.budgetId, column.from, column.to));
+      amountColumns.push({ key, kind: "budget", label: column.heading || `Budget (${found.rows[0]?.name ?? `#${column.budgetId}`})`, from: column.from, to: column.to });
+    }
+  }
   // Period and year to date amounts open their accounts' transactions: a profit
   // and loss from the column's start, a balance sheet from its financial year's (decision 1356).
   for (const column of amountColumns) {
-    if (column.kind === "period" || column.kind === "year_to_date") {
+    if (column.kind === "period" || column.kind === "year_to_date" || column.kind === "date") {
       column.drillFrom = base === "balance_sheet" ? financialYearStart(column.to!, yearEndMonth) : column.from;
     }
   }
   const columns: ReportColumn[] = [...amountColumns.filter((c) => c.kind === "period")];
   if (setting.difference) columns.push({ key: "diff", kind: "difference", label: "Difference", from: null, to: null });
   if (setting.percent) columns.push({ key: "pct", kind: "percent", label: "%", from: null, to: null });
-  columns.push(...amountColumns.filter((c) => c.kind === "budget"));
+  columns.push(...amountColumns.filter((c) => c.kind === "budget" && c.key === "bud"));
   if (budgetAmounts && setting.budgetDifference) columns.push({ key: "bdiff", kind: "budget_difference", label: "Actual less budget", from: null, to: null });
   columns.push(...amountColumns.filter((c) => c.kind === "year_to_date"));
+  // Added columns, in their order, after the rest (LE4).
+  for (const column of added) {
+    const key = addedColumnKey(column);
+    if (column.kind === "date" || column.kind === "budget") {
+      columns.push(amountColumns.find((entry) => entry.key === key)!);
+      continue;
+    }
+    const label =
+      column.heading ||
+      (column.kind === "formula" ? "Formula" : column.kind === "notes" ? "Notes" : column.kind === "percentage" ? "%" : column.percentOfSecond ? "Variance %" : "Variance");
+    const format = column.kind === "notes" ? ("text" as const) : column.kind === "percentage" || (column.kind === "variance" && column.percentOfSecond) ? ("percent" as const) : undefined;
+    columns.push({ key, kind: column.kind, label, from: null, to: null, ...(format ? { format } : {}) });
+  }
 
   const accountsResult = await tx.query<{ id: string; code: string; name: string; account_class: AccountClass; account_type: AccountType }>(
     "select id, code, name, account_class, account_type from accounts order by code",
@@ -385,7 +522,7 @@ export async function computeCustomReport(
   const earnings = new Map<string, { previous: Decimal; current: Decimal }>();
   for (const column of amountColumns) {
     if (column.kind === "budget") {
-      amounts.set(column.key, budgetAmounts ?? new Map());
+      amounts.set(column.key, budgetMaps.get(column.key) ?? new Map());
       continue;
     }
     const totals: AccountTotalsRow[] = await accountTotals(tx, column.from, column.to!, trackingFilter);
@@ -403,14 +540,18 @@ export async function computeCustomReport(
   type Values = Map<string, Decimal | null>;
   type Format = "money" | "number" | "percent";
   const shown = (value: Decimal | null, format: Format) => (value == null ? null : format === "percent" ? toFixedString(value, 1) : money(value));
-  const withDerived = (values: Values, format: Format = "money"): ReportValues => {
+  /** `rowValues` gives another row's amounts in this table, for a Percentage column; `cells`, a row's Notes text. */
+  type Context = { rowValues?: (rowId: string) => Values | null; cells?: Record<string, string> };
+  const withDerived = (values: Values, format: Format = "money", context: Context = {}): ReportValues => {
     const out: ReportValues = {};
+    const numbers = new Map(values);
     for (const column of amountColumns) out[column.key] = shown(values.get(column.key) ?? (format === "money" ? ZERO_DECIMAL : null), format);
     if (setting.difference) {
       const first = values.get("p0") ?? null;
       const second = values.get("p1") ?? null;
       const difference = first == null || second == null ? null : sub(first, second);
       out.diff = shown(difference, format);
+      numbers.set("diff", difference);
       if (setting.percent) {
         // A change in a % is in points, so it has no % change of its own.
         out.pct = difference == null || second == null || isZero(second) || format === "percent" ? null : toFixedString(divide(mul(difference, dec("100")), abs(second), 1), 1);
@@ -419,7 +560,37 @@ export async function computeCustomReport(
     if (budgetAmounts && setting.budgetDifference) {
       const actual = values.get("p0") ?? null;
       const budget = values.get("bud") ?? null;
-      out.bdiff = actual == null || budget == null ? null : shown(sub(actual, budget), format);
+      const budgetDifference = actual == null || budget == null ? null : sub(actual, budget);
+      out.bdiff = shown(budgetDifference, format);
+      numbers.set("bdiff", budgetDifference);
+    }
+    // Added columns, in order (LE7-LE9): each can use the amounts before it.
+    const percentOf = (part: Decimal | null, whole: Decimal | null) => (part == null || whole == null || isZero(whole) ? null : toFixedString(divide(mul(part, dec("100")), abs(whole), 1), 1));
+    for (const column of added) {
+      const key = addedColumnKey(column);
+      if (column.kind === "formula") {
+        let total: Decimal | null = ZERO_DECIMAL;
+        for (const term of column.terms) {
+          const part = numbers.get(term.column) ?? null;
+          total = total == null || part == null ? null : term.sign === 1 ? add(total, part) : sub(total, part);
+        }
+        numbers.set(key, total);
+        out[key] = shown(total, format);
+      } else if (column.kind === "variance") {
+        const first = numbers.get(column.first) ?? null;
+        const second = numbers.get(column.second) ?? null;
+        const variance = first == null || second == null ? null : sub(first, second);
+        if (column.percentOfSecond) out[key] = format === "percent" ? null : percentOf(variance, second);
+        else {
+          numbers.set(key, variance);
+          out[key] = shown(variance, format);
+        }
+      } else if (column.kind === "percentage") {
+        const whole = context.rowValues?.(column.ofRowId)?.get(column.column) ?? null;
+        out[key] = format === "money" ? percentOf(numbers.get(column.column) ?? null, whole) : null;
+      } else if (column.kind === "notes") {
+        out[key] = context.cells?.[key] ?? null;
+      }
     }
     return out;
   };
@@ -470,6 +641,10 @@ export async function computeCustomReport(
       memo.set(row.id, values);
       return values;
     };
+    const rowValues = (rowId: string) => {
+      const found = rowsById.get(rowId);
+      return found && found.kind !== "heading" ? valuesOf(found) : null;
+    };
     const rows = block.rows.map((row): ComputedRow => {
       const extras = { ...(row.hidden ? { hidden: true } : {}), ...(row.pageBreakAfter ? { pageBreakAfter: true } : {}), ...(row.note ? { note: row.note } : {}) };
       if (row.kind === "heading") return { id: row.id, kind: "heading", label: row.label, values: {}, showAccounts: false, lines: [], ...extras };
@@ -480,7 +655,7 @@ export async function computeCustomReport(
           inGroups.add(account.id);
           if (!hasAmount(account.id)) continue;
           groupsOfAccount.set(account.id, [...(groupsOfAccount.get(account.id) ?? []), row.label]);
-          lines.push({ code: account.code, name: account.name, values: withDerived(accountValues(account)), accountId: String(account.id) });
+          lines.push({ code: account.code, name: account.name, values: withDerived(accountValues(account), "money", { rowValues }), accountId: String(account.id) });
         }
       }
       const format = formatOf(row);
@@ -488,7 +663,7 @@ export async function computeCustomReport(
         id: row.id,
         kind: row.kind,
         label: row.label,
-        values: withDerived(valuesOf(row), format),
+        values: withDerived(valuesOf(row), format, { rowValues, cells: row.cells }),
         ...(format === "money" ? {} : { format }),
         ...extras,
         showAccounts: row.kind === "group" && row.showAccounts,
