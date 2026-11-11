@@ -13837,6 +13837,18 @@ migration 0265.
       editing comes next. Claude's wording, not yet reviewed by an
       accountant.
 
+### Notes for IRD's minimum requirements (11 Nov 2026; decision 1578)
+
+1578. **The draft notes cover the Tax Administration (Financial Statements)
+      Order 2014 (FS15).** Read on legislation.govt.nz: accrual and
+      double-entry, the valuation basis, policies and changes, GST
+      inclusive or exclusive, comparatives, grossed-up interest and
+      dividends, a reconciliation to taxable income, a tax-based fixed asset
+      schedule, and amounts with associated persons and shareholders'
+      current accounts. The drafts said "Domestic Companies" Order, which
+      isn't its name; fixed. The new notes are placeholders to fill in.
+      Claude's wording, not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

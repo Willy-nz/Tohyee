@@ -55,8 +55,10 @@ export async function draftNotes(tx: OrgTx): Promise<StatementNote[]> {
       title: "Basis of preparation",
       body:
         "These are special purpose financial statements, prepared for the owners and for income tax purposes. They aren't general purpose financial statements. " +
-        "[Name the framework they follow: for example the Special Purpose Financial Reporting Framework for use by For-Profit Entities, issued by Chartered Accountants Australia and New Zealand. A company also meets the minimum requirements of the Tax Administration (Financial Statements—Domestic Companies) Order 2014.] " +
-        `Amounts are in ${tx.baseCurrency} on the historical cost basis, except where a note says otherwise.`,
+        "[Name the framework they follow: for example the Special Purpose Financial Reporting Framework for use by For-Profit Entities, issued by Chartered Accountants Australia and New Zealand.] " +
+        "[For a company: they meet the minimum requirements of the Tax Administration (Financial Statements) Order 2014, which a small company (not in a group, with income and expenditure each of $30,000 or less) doesn't have to. For a trust: the Tax Administration (Financial Statements—Domestic Trusts) Order 2022.] " +
+        "They are prepared on the accrual basis using double-entry records, on the assumption that the business will carry on. " +
+        `Amounts are in ${tx.baseCurrency} on the historical cost basis, except where a note says otherwise, and last year's figures are shown beside this year's.`,
     },
     {
       title: "Changes in accounting policies",
@@ -91,10 +93,28 @@ export async function draftNotes(tx: OrgTx): Promise<StatementNote[]> {
           : "All livestock is shown as a non-current asset."),
     });
   }
-  notes.push({
-    title: "Income tax",
-    body: "[Say how income tax is accounted for: for example, income tax expense is the tax payable on the year's taxable income.]",
-  });
+  notes.push(
+    {
+      title: "Income tax",
+      body: "[Say how income tax is accounted for: for example, income tax expense is the tax payable on the year's taxable income.]",
+    },
+    {
+      title: "Interest and dividends received",
+      body: "Interest received is shown before resident withholding tax was taken off, and dividends received before resident withholding tax and with any imputation credits attached added on. [Edit this if there were none.]",
+    },
+    {
+      title: "Reconciliation to taxable income",
+      body: "Net profit before tax: [amount]\n\nPlus expenses that aren't deductible: [list, for example entertainment not deductible and fines]\n\nLess income that isn't taxable: [list]\n\nTaxable income: [amount]",
+    },
+    {
+      title: "Transactions with associated persons",
+      body: "[For a company: show amounts with associated persons that are individuals, trusts or non-resident companies: interest paid on their loans; loans or other advances made to them; payments for their services, such as wages, salaries and management fees; rent or lease payments for land or other assets; and payments for intangible property, such as royalties. Or say there were none.]",
+    },
+    {
+      title: "Shareholders' equity and current accounts",
+      body: "[For a company: reconcile the movements in shareholders' equity, and in any loans or current accounts with shareholders and associated persons, from the start of the year to the end: opening balance, money put in, money taken out, interest, the year's profit allocated, closing balance.]",
+    },
+  );
   return notes;
 }
 

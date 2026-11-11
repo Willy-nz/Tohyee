@@ -44,7 +44,10 @@ describeWithDatabase("year-end financial statements", () => {
   it("FS2: draft notes until saved; saving replaces them, and an empty list goes back to drafts", async () => {
     const drafts = await run((tx) => getStatementNotes(tx));
     expect(drafts.saved).toBe(false);
-    expect(drafts.notes.map((note) => note.title)).toEqual(["Reporting entity", "Basis of preparation", "Changes in accounting policies", "Goods and services tax (GST)", "Property, plant and equipment", "Income tax"]);
+    expect(drafts.notes.map((note) => note.title)).toEqual(["Reporting entity", "Basis of preparation", "Changes in accounting policies", "Goods and services tax (GST)", "Property, plant and equipment", "Income tax",
+      // FS15: what the Tax Administration (Financial Statements) Order 2014 needs.
+      "Interest and dividends received", "Reconciliation to taxable income", "Transactions with associated persons", "Shareholders' equity and current accounts"]);
+    expect(drafts.notes[1].body).toContain("Tax Administration (Financial Statements) Order 2014");
     expect(drafts.notes[0].body).toMatch(/\[describe the entity/);
     const saved = await run((tx) => saveStatementNotes(tx, { notes: [{ title: "Reporting entity", body: "A company." }, { title: "Basis of preparation", body: "Special purpose." }] }));
     expect(saved).toEqual({ saved: true, notes: [{ title: "Reporting entity", body: "A company." }, { title: "Basis of preparation", body: "Special purpose." }] });
