@@ -22,6 +22,7 @@ import {
 import { integrationsSummary } from "@/lib/sales-platforms/summary";
 import { useConfirm } from "@/components/confirm-dialog";
 import { CustomerMatches } from "@/components/customer-matches";
+import { GiftCardSetting } from "@/components/gift-card-setting";
 import { ShopifyPartsList, ShopifyScopesCard, StockSection } from "@/components/sales-platform-extras";
 import { CustomerChoiceField, type SetupStep, SkuNote, StoreSetup } from "@/components/store-setup";
 import { type CustomerChoice, CUSTOMER_CHOICES, customerChoiceOf, customerChoiceSettings } from "@/lib/sales-platforms/setup";
@@ -648,6 +649,9 @@ export function ConnectionCard({
             Revenue is recognised {connection.salesWhenSentAccountCode ? `when fulfilled (held in ${connection.salesWhenSentAccountCode} until then)` : "when paid"}.{" "}
             <Link href="/operations/settings#revenue-recognition">Change it in Settings</Link>
           </span>
+        ) : null}
+        {connected && connection.platform === "shopify" && connection.postToAccounts ? (
+          <GiftCardSetting organisationId={organisationId} connection={connection} isAdmin={isAdmin} onChanged={onChanged} />
         ) : null}
         {connected ? (
           <details className={styles.more}>

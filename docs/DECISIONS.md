@@ -13942,6 +13942,18 @@ migration 0265.
       are. Hiding voided pairs from lists is issue 10, next. Not yet
       reviewed.
 
+### Shopify gift cards (12 Nov 2026; decision 1590)
+
+1590. **Gift cards held in a liability until spent (GC1-GC5).** Jess's
+      issue 7. With a gift card account chosen, a Shopify gift card sold
+      goes to it with no GST, and a payment by gift card comes out of it as
+      a credit note applied to the order's invoice; the order's own lines
+      carry the sale and its GST. Without one, orders with gift cards are
+      refused as before. Choosing the account retries the refused orders.
+      Products sold as vouchers that aren't Shopify gift cards are still
+      ordinary sales. The GST timing is for Jess to confirm. Not yet
+      reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

@@ -20538,4 +20538,13 @@ alter table accounts add column reporting_name text check (reporting_name is nul
 alter table sales_platform_documents add column apply_when_sent boolean not null default false;
 `,
   },
+  {
+    version: "0273",
+    name: "sales_platform_gift_cards",
+    sql: `
+-- Where a Shopify store's gift cards sold are held until they're spent (GC1-GC5,
+-- decision 1590). Null: orders with gift cards are refused, as before.
+alter table sales_platform_connections add column gift_card_account_id bigint references accounts(id);
+`,
+  },
 ];

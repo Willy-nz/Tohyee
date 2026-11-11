@@ -53,6 +53,9 @@ export type PostingRules = {
   taxCodes: ReadonlyArray<{ rate: string; code: string; codeRate: string }>;
   salesAccountCode: string;
   shippingAccountCode: string;
+  /** Where gift cards sold are held (GC1), and the no-GST code for them; null refuses orders with gift cards. */
+  giftCardAccountCode?: string | null;
+  giftCardTaxCode?: string | null;
   /** The platform's name in messages ("Shopify", "WooCommerce"); Shopify when not given. */
   platformName?: string;
 };
@@ -223,7 +226,12 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
     return refuse(`${name} was paid in ${order.presentmentCurrency}; Tohyee only brings in orders in ${rules.baseCurrency}.`);
   }
   if (order.incomplete) return refuse(`${name} ${order.incomplete}`);
-  if (order.lines.some((line) => line.isGiftCard)) return refuse(`${name} sells a gift card; gift cards aren't supported yet.`);
+  if (order.lines.some((line) => line.isGiftCard) && !rules.giftCardAccountCode) {
+    return refuse(`${name} sells a gift card; choose where gift cards are held in the Shopify settings to bring it in.`);
+  }
+  if (order.lines.some((line) => line.isGiftCard) && rules.gstRegistered && !rules.giftCardTaxCode) {
+    return refuse(`${name} sells a gift card, which has no GST, but there's no active "no GST (out of scope)" tax code to put it on.`);
+  }
   const amountsMode: AmountsMode = !rules.gstRegistered ? "no_tax" : order.taxesIncluded ? "inclusive" : "exclusive";
   const notes: string[] = [];
   const drafts: Draft[] = [];
@@ -249,6 +257,24 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
 
   for (const line of order.lines) {
     if (!isPositive(dec(line.quantity))) continue;
+    if (line.isGiftCard) {
+      // GC1: a gift card sold is money held for whoever spends it, not a sale. No GST now; the things it's spent on carry it (GC2).
+      const gross = sub(dec(line.originalTotal), dec(line.discount));
+      if (isNegative(gross)) return refuse(`${name} line "${line.name}" comes to less than nothing (${money(gross)}).`);
+      if (isPositive(taxOf(line.taxLines))) return refuse(`${name} charged tax on gift card "${line.name}"; gift cards with tax aren't supported.`);
+      drafts.push({
+        what: `${name} gift card "${line.name}"`,
+        amount: gross,
+        quantity: line.quantity,
+        shopifyTax: ZERO_DECIMAL,
+        tax: rules.gstRegistered ? { code: rules.giftCardTaxCode!, rate: "0" } : { code: null, rate: null },
+        accountCode: rules.giftCardAccountCode!,
+        itemId: null,
+        description: line.name,
+        source: { kind: "line", externalId: line.externalId, requiresShipping: false },
+      });
+      continue;
+    }
     const item = line.variantId ? items.get(line.variantId) ?? null : null;
     const draft = draftFor(
       `${name} line "${line.name}"`,
@@ -327,7 +353,7 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
 const succeeded = (transaction: PlatformTransaction) => transaction.status === "SUCCESS" && !transaction.test;
 
 /** The money received for an order: its successful sales and captures (SPC11). */
-export function orderPayments(order: PlatformOrder): { amount: Decimal; lastAt: string | null; giftCard: boolean } {
+export function orderPayments(order: PlatformOrder): { amount: Decimal; lastAt: string | null; giftCard: boolean; giftCardAmount: Decimal } {
   const received = order.transactions.filter((t) => succeeded(t) && (t.kind === "SALE" || t.kind === "CAPTURE"));
   let lastAt: string | null = null;
   for (const t of received) if (t.processedAt && (!lastAt || Date.parse(t.processedAt) > Date.parse(lastAt))) lastAt = t.processedAt;
@@ -335,6 +361,7 @@ export function orderPayments(order: PlatformOrder): { amount: Decimal; lastAt: 
     amount: sum(received.map((t) => dec(t.amount))),
     lastAt,
     giftCard: received.some((t) => t.gateway === "gift_card"),
+    giftCardAmount: sum(received.filter((t) => t.gateway === "gift_card").map((t) => dec(t.amount))),
   };
 }
 
@@ -410,6 +437,15 @@ export function planRefund(
     if (!isPositive(dec(entry.quantity)) && isZero(dec(entry.subtotal))) continue;
     const line = byId.get(entry.lineItemId);
     if (!line) return refuse(`${what} refunds a line that isn't on the order.`);
+    if (line.isGiftCard) {
+      // GC4: a gift card refunded comes back out of what's held for it, with no GST, as it went in.
+      if (!rules.giftCardAccountCode || (rules.gstRegistered && !rules.giftCardTaxCode)) return refuse(`${what} refunds a gift card, and gift cards aren't set up.`);
+      for (const part of splitAmount(money(dec(entry.subtotal)), isPositive(dec(entry.quantity)) ? entry.quantity : "1")) {
+        lines.push({ description: line.name, quantity: part.quantity, unitPrice: part.unitPrice, accountCode: rules.giftCardAccountCode, taxCode: rules.gstRegistered ? rules.giftCardTaxCode! : null, itemId: null });
+        rates.push(rules.gstRegistered ? "0" : null);
+      }
+      continue;
+    }
     const item = line.variantId ? items.get(line.variantId) ?? null : null;
     const tax = taxCodeFor(line.taxLines, rules, overseas, `${what} line "${line.name}"`);
     if (!tax.ok) return tax;
