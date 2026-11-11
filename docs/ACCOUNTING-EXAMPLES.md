@@ -2476,6 +2476,15 @@ isn't reconciled.
   owing again (**115.00**). Locked periods are refused as BK13. Several
   lines go in one preview and one batch. As Xero's Remove & Redo, except
   that it voids rather than deletes. Not yet reviewed.
+- **BK46** Pairs that cancel out (Jess, 11 Nov 2026, issue 1, minor; the
+  details are Claude's, not yet reviewed). In "not yet on the statement", a
+  10 Oct 776.73 payout transfer and a 12 Oct -776.73 journal removing the
+  same payout counted twice cancel exactly. "Leave out pairs that cancel
+  out in the same month" (on by default) hides both and says how many
+  pairs; the totals don't change. Each item pairs once, in date order: a
+  second -776.73 on 14 Oct stays. A 31 Oct 50.00 and a 1 Nov -50.00 are in
+  different months and stay. The base amounts must cancel too. Off, every
+  item shows; printing follows the screen.
 
 ### Void for manual journals (VJ1-VJ5; Jess, 11 Nov 2026, issue 9; the details are Claude's, not yet reviewed)
 

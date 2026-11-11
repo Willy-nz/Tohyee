@@ -13,6 +13,7 @@ import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import type { BankAccount } from "@/lib/bank/accounts";
 import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
 import type { BankReconciliationReport as Report } from "@/lib/reports/bank-reconciliation";
+import { cancellingPairs } from "@/lib/reports/cancelling-pairs";
 
 /** How the statement balance was worked out, in words. */
 function sourceText(report: Report): string {
@@ -49,6 +50,10 @@ export function BankReconciliationReportView({
   const report = useApiData<Report>(accountId ? "/api/reports/bank-reconciliation" : null, { organisationId, accountId, asAt });
   const save = useSaveAsCustomReport(organisationId, "bank_reconciliation", { accountId: accountId || null, asAt });
   const data = report.data;
+  // BK46: pairs that cancel out in the same month are left out unless asked for; no total changes.
+  const [hidePairs, setHidePairs] = useState(true);
+  const pairs = data ? cancellingPairs(data.tohyeeNotInBank.items) : new Set<string>();
+  const shown = data ? data.tohyeeNotInBank.items.filter((item) => !hidePairs || !pairs.has(item.journalLineId)) : [];
   return (
     <Card
       title="Bank reconciliation"
@@ -151,14 +156,29 @@ export function BankReconciliationReportView({
                 <tr className={ui.reportHeading}>
                   <td colSpan={2}>Less: in Tohyee, not yet on the statement</td>
                 </tr>
-                {data.tohyeeNotInBank.items.length === 0 ? (
+                {pairs.size > 0 ? (
+                  <tr data-print={hidePairs ? undefined : "hide"}>
+                    <td colSpan={2}>
+                      <label className={ui.checkbox} data-print="hide">
+                        <input type="checkbox" checked={hidePairs} onChange={(event) => setHidePairs(event.target.checked)} /> Leave out pairs that cancel out in the same
+                        month ({pairs.size / 2} {pairs.size === 2 ? "pair" : "pairs"})
+                      </label>
+                      {hidePairs ? (
+                        <span className={ui.muted}>
+                          {pairs.size / 2} {pairs.size === 2 ? "pair" : "pairs"} that cancel out left out; the total is the same.
+                        </span>
+                      ) : null}
+                    </td>
+                  </tr>
+                ) : null}
+                {shown.length === 0 ? (
                   <tr>
                     <td className={ui.muted} colSpan={2}>
                       None.
                     </td>
                   </tr>
                 ) : (
-                  data.tohyeeNotInBank.items.map((item) => (
+                  shown.map((item) => (
                     <tr key={item.journalLineId} className={ui.reportSection}>
                       <td>
                         {formatDate(item.date)} · {originLabel(item.origin)} <Link href={journalHref(item.journalId)}>#{item.journalId}</Link>

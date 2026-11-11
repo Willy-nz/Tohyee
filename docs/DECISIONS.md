@@ -13942,6 +13942,14 @@ migration 0265.
       are. Hiding voided pairs from lists is issue 10, next. Not yet
       reviewed.
 
+### Pairs that cancel out on the bank reconciliation report (12 Nov 2026; decision 1592)
+
+1592. **Hidden by default, totals unchanged (BK46).** Jess's issue 1
+      (minor). Items not yet on the statement that cancel exactly within a
+      month are left out, two at a time in date order, with a count and a
+      checkbox to show them. Only on screen and in print; the data and
+      exports keep every item. Not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
