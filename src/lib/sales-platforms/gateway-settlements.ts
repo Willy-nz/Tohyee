@@ -7,8 +7,8 @@
  * the clearing account to the fees account. Suggested by the gateway's name
  * on the line and the amounts, never by amount alone; a person confirms.
  *
- * The fee has no GST, as Shopify's payout fees (SPC15). That's for Jess to
- * confirm for each gateway.
+ * The fee has no GST: Inland Revenue's IS 26/02 treats services to merchants
+ * that include settlement as exempt financial services (Jess, 12 Nov 2026).
  */
 import { getStatementLine, type StatementLine } from "@/lib/bank/accounts";
 import { reconcileStatementLine } from "@/lib/bank/reconcile";
@@ -57,7 +57,7 @@ export type SettlementGuidance = {
   gstNote: string;
 };
 
-const GST_NOTE = "The fee is posted with no GST, as payout fees are. Check the gateway's tax invoice if you're not sure.";
+const GST_NOTE = "The fee has no GST: Inland Revenue treats a payment provider's settlement service as an exempt financial service (IS 26/02).";
 
 /** The gateways of each live connection that have their own clearing account (not Shopify Payments, not left owing). */
 export async function listGateways(tx: OrgTx): Promise<Gateway[]> {

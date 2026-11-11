@@ -53,9 +53,8 @@ export type PostingRules = {
   taxCodes: ReadonlyArray<{ rate: string; code: string; codeRate: string }>;
   salesAccountCode: string;
   shippingAccountCode: string;
-  /** Where gift cards sold are held (GC1), and the no-GST code for them; null refuses orders with gift cards. */
+  /** Where gift cards sold are held (GC1); null refuses orders with gift cards. */
   giftCardAccountCode?: string | null;
-  giftCardTaxCode?: string | null;
   /** The platform's name in messages ("Shopify", "WooCommerce"); Shopify when not given. */
   platformName?: string;
 };
@@ -194,6 +193,8 @@ type Draft = {
   itemId: string | null;
   description: string;
   source: LineSource;
+  /** A gift card (GC1): Shopify charges it no tax, but its GST is counted when it's sold. */
+  giftCard?: boolean;
 };
 
 /**
@@ -217,6 +218,24 @@ function rulesOn(rules: PostingRules, date: string): PostingRules {
   return rules.gstRegistration ? { ...rules, gstRegistered: isRegisteredOn(rules.gstRegistration, date) } : rules;
 }
 
+/**
+ * The GST on a gift card (GC1, GC2): the store's one GST code for its standard rate, on prices that include it,
+ * since the card's face value is what was paid. Not registered: none. Tax-exclusive orders aren't supported.
+ */
+/** How an order's amounts are entered: no tax when not registered on its date (#180), else as Shopify's prices are. */
+export function orderAmountsMode(givenRules: PostingRules, order: PlatformOrder): AmountsMode {
+  const rules = rulesOn(givenRules, localDate(order.processedAt));
+  return !rules.gstRegistered ? "no_tax" : order.taxesIncluded ? "inclusive" : "exclusive";
+}
+
+export function giftCardGst(rules: PostingRules, amountsMode: AmountsMode): { ok: true; tax: { code: string | null; rate: string | null } } | { ok: false; message: string } {
+  if (amountsMode === "no_tax") return { ok: true, tax: { code: null, rate: null } };
+  if (amountsMode === "exclusive") return { ok: false, message: "the store's prices exclude tax, and gift cards are only supported where they include it." };
+  const taxed = [...new Map(rules.taxCodes.filter((entry) => isPositive(dec(entry.codeRate))).map((entry) => [entry.code, entry])).values()];
+  if (taxed.length !== 1) return { ok: false, message: "there isn't exactly one GST code matched to the store's tax rates to put the gift card's GST on." };
+  return { ok: true, tax: { code: taxed[0].code, rate: taxed[0].codeRate } };
+}
+
 export function planOrder(order: PlatformOrder, givenRules: PostingRules, items: ReadonlyMap<string, LinkedItem>, overseas: boolean): OrderPlan {
   const rules = rulesOn(givenRules, localDate(order.processedAt));
   const name = order.name;
@@ -229,10 +248,9 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
   if (order.lines.some((line) => line.isGiftCard) && !rules.giftCardAccountCode) {
     return refuse(`${name} sells a gift card; choose where gift cards are held in the Shopify settings to bring it in.`);
   }
-  if (order.lines.some((line) => line.isGiftCard) && rules.gstRegistered && !rules.giftCardTaxCode) {
-    return refuse(`${name} sells a gift card, which has no GST, but there's no active "no GST (out of scope)" tax code to put it on.`);
-  }
   const amountsMode: AmountsMode = !rules.gstRegistered ? "no_tax" : order.taxesIncluded ? "inclusive" : "exclusive";
+  const cardGst = giftCardGst(rules, amountsMode);
+  if (order.lines.some((line) => line.isGiftCard) && !cardGst.ok) return refuse(`${name} sells a gift card, but ${cardGst.message}`);
   const notes: string[] = [];
   const drafts: Draft[] = [];
 
@@ -258,7 +276,8 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
   for (const line of order.lines) {
     if (!isPositive(dec(line.quantity))) continue;
     if (line.isGiftCard) {
-      // GC1: a gift card sold is money held for whoever spends it, not a sale. No GST now; the things it's spent on carry it (GC2).
+      // GC1: a gift card sold is money held for whoever spends it, not a sale. GST is counted now, when it's sold, as Inland Revenue's
+      // general rule for face value vouchers says (GST Act s 5(11G)); spending it takes that GST back off the order (GC2).
       const gross = sub(dec(line.originalTotal), dec(line.discount));
       if (isNegative(gross)) return refuse(`${name} line "${line.name}" comes to less than nothing (${money(gross)}).`);
       if (isPositive(taxOf(line.taxLines))) return refuse(`${name} charged tax on gift card "${line.name}"; gift cards with tax aren't supported.`);
@@ -267,7 +286,8 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
         amount: gross,
         quantity: line.quantity,
         shopifyTax: ZERO_DECIMAL,
-        tax: rules.gstRegistered ? { code: rules.giftCardTaxCode!, rate: "0" } : { code: null, rate: null },
+        tax: cardGst.ok ? cardGst.tax : { code: null, rate: null },
+        giftCard: true,
         accountCode: rules.giftCardAccountCode!,
         itemId: null,
         description: line.name,
@@ -320,7 +340,7 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
       if (isPositive(draft.shopifyTax)) {
         notes.push(`${draft.what}: ${rules.platformName ?? "Shopify"} charged ${money(draft.shopifyTax)} tax; it's part of the sale because the organisation isn't GST registered.`);
       }
-    } else if (cmp(ours, draft.shopifyTax) !== 0) {
+    } else if (!draft.giftCard && cmp(ours, draft.shopifyTax) !== 0) {
       notes.push(`${draft.what}: Tohyee works out GST of ${money(ours)} (per line, as on every invoice); ${rules.platformName ?? "Shopify"}'s tax line says ${money(draft.shopifyTax)}.`);
     }
     for (const part of parts) {
@@ -439,10 +459,11 @@ export function planRefund(
     if (!line) return refuse(`${what} refunds a line that isn't on the order.`);
     if (line.isGiftCard) {
       // GC4: a gift card refunded comes back out of what's held for it, with no GST, as it went in.
-      if (!rules.giftCardAccountCode || (rules.gstRegistered && !rules.giftCardTaxCode)) return refuse(`${what} refunds a gift card, and gift cards aren't set up.`);
+      const gst = giftCardGst(rules, amountsMode);
+      if (!rules.giftCardAccountCode || !gst.ok) return refuse(`${what} refunds a gift card, and gift cards aren't set up.`);
       for (const part of splitAmount(money(dec(entry.subtotal)), isPositive(dec(entry.quantity)) ? entry.quantity : "1")) {
-        lines.push({ description: line.name, quantity: part.quantity, unitPrice: part.unitPrice, accountCode: rules.giftCardAccountCode, taxCode: rules.gstRegistered ? rules.giftCardTaxCode! : null, itemId: null });
-        rates.push(rules.gstRegistered ? "0" : null);
+        lines.push({ description: line.name, quantity: part.quantity, unitPrice: part.unitPrice, accountCode: rules.giftCardAccountCode, taxCode: gst.tax.code, itemId: null });
+        rates.push(gst.tax.rate);
       }
       continue;
     }

@@ -9,8 +9,8 @@ import { api, errorMessage } from "@/lib/client/api";
 import type { SalesPlatformConnection } from "@/lib/sales-platforms/types";
 
 /**
- * Shopify gift cards (GC1-GC5, decision 1590): sold into a liability with no
- * GST, and taken out of it when they're spent. Without an account, orders
+ * Shopify gift cards (GC1-GC5, decisions 1590, 1593): sold into a liability,
+ * with GST counted when they're sold, and taken out of it when they're spent. Without an account, orders
  * that sell or are paid with a gift card are refused, as before.
  */
 export function GiftCardSetting({
@@ -70,7 +70,7 @@ export function GiftCardSetting({
       <span className={ui.muted}>
         Gift cards:{" "}
         {on
-          ? `sold into ${connection.giftCardAccountCode} with no GST, and taken out of it when they're spent (the things bought carry the GST).`
+          ? `sold into ${connection.giftCardAccountCode}, with GST counted when they're sold, and taken out of it when they're spent (without counting that GST again).`
           : "not set up, so orders that sell or are paid with a Shopify gift card are refused."}{" "}
         {isAdmin ? (
           on ? (

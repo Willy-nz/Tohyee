@@ -18,9 +18,11 @@ import {
   type PostingRules,
   PAID_STATUSES,
   SHOPIFY_PAYMENTS_GATEWAY,
+  giftCardGst,
   gstWaitReason,
   localDate,
   money,
+  orderAmountsMode,
   orderPayments,
   paymentGateway,
   planOrder,
@@ -103,13 +105,14 @@ type ConnectionSettingsRow = {
 
 /**
  * GC2: what gift cards paid for an order, taken out of the gift card account
- * as a credit note (no GST: the order's own lines carry it) applied to the
- * order's invoice.
+ * as a credit note applied to the order's invoice. Its GST was counted when
+ * the card was sold, so the credit note takes that much GST back off the
+ * order's, which counted it again.
  */
 async function redeemGiftCards(
   tx: OrgTx,
   posting: Posting,
-  input: { order: PlatformOrder; id: string; invoiceId: string; contactId: string; date: string; amount: Decimal; amountsMode: AmountsMode },
+  input: { order: PlatformOrder; id: string; invoiceId: string; contactId: string; date: string; amount: Decimal; amountsMode: AmountsMode; taxCode: string | null },
 ): Promise<void> {
   const { creditNote } = await createCreditNote(tx, {
     source: SOURCE,
@@ -124,7 +127,7 @@ async function redeemGiftCards(
         quantity: "1",
         unitPrice: money(input.amount),
         accountCode: posting.giftCardAccountCode!,
-        taxCode: input.amountsMode === "no_tax" ? null : posting.giftCardTaxCode,
+        taxCode: input.taxCode,
       },
     ],
   });
@@ -135,14 +138,6 @@ async function redeemGiftCards(
     applicationDate: input.date,
     applications: [{ invoiceId: input.invoiceId, amount: money(input.amount) }],
   });
-}
-
-/** The no-GST code gift cards go on (GC1): NONE if it's there and active, else another active out-of-scope code. */
-async function outOfScopeTaxCode(tx: OrgTx): Promise<string | null> {
-  const found = await tx.query<{ code: string }>(
-    "select code from tax_codes where category = 'out_of_scope' and is_active and rate = 0 order by (upper(code) = 'NONE') desc, code limit 1",
-  );
-  return found.rows[0]?.code ?? null;
 }
 
 /**
@@ -201,7 +196,6 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
     guestContactId: row.guest_contact_id,
     salesWhenSentAccountCode: row.platform === "shopify" ? row.when_sent_code : null,
     giftCardAccountCode: row.platform === "shopify" ? row.gift_card_code : null,
-    giftCardTaxCode: row.platform === "shopify" && row.gift_card_code ? await outOfScopeTaxCode(tx) : null,
     baseCurrency: tx.baseCurrency,
     gstRegistered: settings.gstRegistered,
     gstRegistration: {
@@ -669,8 +663,9 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       await refuse(`${order.name} was paid (at least partly) with a gift card; choose where gift cards are held in the Shopify settings to bring it in.`);
       return;
     }
-    if (!owing && payments.giftCard && !posting.giftCardTaxCode && posting.gstRegistered) {
-      await refuse(`${order.name} was paid with a gift card, but there's no active "no GST (out of scope)" tax code to take it out of ${posting.giftCardAccountCode} with.`);
+    const cardGst = giftCardGst(posting, orderAmountsMode(posting, order));
+    if (!owing && payments.giftCard && !cardGst.ok) {
+      await refuse(`${order.name} was paid with a gift card, but ${cardGst.message}`);
       return;
     }
     if (!owing && cmp(payments.amount, dec(order.total)) !== 0) {
@@ -700,7 +695,18 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       if (owing) return { invoice: approved.invoice, payment: null, fromCards: null };
       // GC2: what a gift card paid comes out of what's held for gift cards, as credit applied to the invoice; the rest is a payment.
       const fromCards = payments.giftCardAmount;
-      if (isPositive(fromCards)) await redeemGiftCards(tx, posting, { order, id, invoiceId: invoice.id, contactId: doc!.contact_id!, date: invoiceDate, amount: fromCards, amountsMode: invoice.amountsMode });
+      if (isPositive(fromCards)) {
+        await redeemGiftCards(tx, posting, {
+          order,
+          id,
+          invoiceId: invoice.id,
+          contactId: doc!.contact_id!,
+          date: invoiceDate,
+          amount: fromCards,
+          amountsMode: invoice.amountsMode,
+          taxCode: cardGst.ok ? cardGst.tax.code : null,
+        });
+      }
       const rest = sub(dec(order.total), fromCards);
       const cards = isPositive(fromCards) ? `${money(fromCards)} out of ${posting.giftCardAccountCode}` : null;
       if (!isPositive(rest)) return { invoice: approved.invoice, payment: null, fromCards: cards };

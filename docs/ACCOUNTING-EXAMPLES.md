@@ -6957,26 +6957,33 @@ payments made with one (gateway `gift_card`). An admin chooses a current
 liability to hold them in; until then both are refused, as before (SPC23).
 Made-up store, as SPC11.
 
-**Question for Jess (law):** these examples put no GST on the gift card when
-it's sold and count GST on what it's spent on, as Shopify's tax lines do.
-Whether that's right for every voucher (GST Act s 5(11G)-(11H)) is yours to
-confirm.
+**GST: when the card is sold** (Jess, 12 Nov 2026: "go with the IRD").
+Inland Revenue's general rule is that the issue or sale of a face value
+voucher is a supply (GST Act s 5(11G)), so GST is counted on the card when
+it's sold, out of its face value, although Shopify charges it no tax. When
+it's spent, the order's lines carry GST again, so the gift card credit
+note takes the GST already counted on that part back off. Tax-exclusive
+stores are refused. The redemption option in s 5(11G) isn't offered.
 
 - **GC1** Order **#1301** (5301), Aroha, 1 × "Gift card - $50" at 50.00,
-  no tax, paid by card through Shopify Payments: invoice **Dr 1100 50.00 /
-  Cr 2360 50.00**, tax code NONE (no GST, not on the GST return), no item;
-  payment **Dr 1010 50.00 / Cr 1100 50.00**. Nothing is held for sending.
+  no tax from Shopify, paid by card through Shopify Payments: invoice **Dr
+  1100 50.00 / Cr 2360 43.48 / Cr 2100 6.52** (GST, the store's one GST
+  code), no item; payment **Dr 1010 50.00 / Cr 1100 50.00**. Nothing is
+  held for sending.
 - **GC2** Order **#1302**, 2 × Large candle 46.00 (GST 6.00), paid 30.00
   with a gift card and 16.00 by card: invoice as SPC11 (**Dr 1100 46.00 / Cr
-  4000 40.00 / Cr 2100 6.00**); a credit note "#1302 gift card" (NONE)
-  **Dr 2360 30.00 / Cr 1100 30.00** applied to the invoice; payment **Dr
-  1010 16.00 / Cr 1100 16.00**. 2360 now holds 20.00.
+  4000 40.00 / Cr 2100 6.00**); a credit note "#1302 gift card" (GST
+  inclusive) **Dr 2360 26.09 / Dr 2100 3.91 / Cr 1100 30.00** applied to the
+  invoice; payment **Dr 1010 16.00 / Cr 1100 16.00**. 2360 now holds
+  **17.39** (the 20.00 left on the card, less its GST). GST so far: 6.52 +
+  6.00 - 3.91 = **8.61**, which is 50.00 + 16.00 at 3/23.
 - **GC3** Order **#1303**, 1 × Large candle 23.00, paid wholly with a gift
-  card: the invoice and a 23.00 gift card credit note; no payment. 2360
-  holds -3.00 (a card sold before the start date was spent).
+  card: the invoice and a 23.00 gift card credit note (**Dr 2360 20.00 / Dr
+  2100 3.00**); no payment. 2360 holds **-2.61**: more spent than sold here
+  (a card sold before the start date).
 - **GC4** #1301's gift card is refunded (50.00 back to the customer's
-  card): a credit note **Dr 2360 50.00 / Cr 1100 50.00** (NONE), refunded
-  from 1010. A refund back onto a gift card is still refused.
+  card): a credit note **Dr 2360 43.48 / Dr 2100 6.52 / Cr 1100 50.00**,
+  refunded from 1010. A refund back onto a gift card is still refused.
 - **GC5** The account must be a liability that isn't a bank account or the
   store's Income in advance account; "Add 2360 Gift cards" makes one.
   Choosing it tries again, at the next sync, every order whose last try was
@@ -21776,8 +21783,9 @@ bank on its own, less its fee, so its deposits never match a Shopify
 payout. Each deposit is now matched to the order payments it settles in
 that clearing account, and the fee is posted, as payout fees are (SPC15).
 
-**Question for Jess:** the fee is posted with no GST, as Shopify's payout
-fees are. Whether each gateway's fee has GST is yours to confirm.
+**GST:** none on the fee (Jess, 12 Nov 2026: "go with the IRD"). Inland
+Revenue's IS 26/02 (March 2026) says services to merchants that include
+settlement are financial services, exempt from GST.
 
 Setup: as SPC42-SPC43. afterpay → **1020 Afterpay clearing**. Fees account
 6020. Orders **#1102** (2 Oct, 46.00, GST 6.00) and **#1106** (3 Oct, 23.00,

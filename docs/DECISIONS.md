@@ -14015,6 +14015,17 @@ migration 0265.
       checkbox to show them. Only on screen and in print; the data and
       exports keep every item. Not yet reviewed.
 
+### GST on gift cards and gateway fees (12 Nov 2026; decision 1593)
+
+1593. **As Inland Revenue says (GC1-GC4, GS4).** Jess, 12 Nov 2026: "go with
+      the IRD". Gift cards: GST is counted when the card is sold, the
+      general rule for face value vouchers (GST Act s 5(11G)), out of its
+      face value with the store's one GST code; spending it takes that GST
+      back off the order, which counts it again. This replaces decision
+      1590's GST at redemption. Gateway fees (Afterpay, say): no GST, as
+      IS 26/02 treats settlement services to merchants as exempt financial
+      services. Not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
