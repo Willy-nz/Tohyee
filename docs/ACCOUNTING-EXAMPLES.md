@@ -2477,6 +2477,28 @@ isn't reconciled.
   lines go in one preview and one batch. As Xero's Remove & Redo, except
   that it voids rather than deletes. Not yet reviewed.
 
+### Void for manual journals (VJ1-VJ5; Jess, 11 Nov 2026, issue 9; the details are Claude's, not yet reviewed)
+
+Tested in `tests/integration/void-journals.test.ts`.
+
+- **VJ1** A posted manual journal (or a correction's replacement) has
+  **Void** beside Edit this journal, for bookkeepers and up. It cancels the
+  journal with no new version. Not for reversals, or journals an invoice,
+  bill, payment or other record posted: those are undone at the record.
+- **VJ2** First a preview of what it does to each account. Two journals Dr
+  6010 / Cr 3000 of **100.00** (10 Jun) and **40.00** (12 Jun): 3000 debit
+  **140.00**, 6010 credit **140.00**.
+- **VJ3** Then each gets its exact reversal, linked to it, dated its own
+  day unless another date is chosen, described "Void of journal #n: " and
+  the reason. Nothing is deleted. The journal's page says "Voided". It
+  can't then be edited or voided again; a retry does nothing more.
+- **VJ4** Refused (the preview says why): a date in a locked period (a
+  date in an open period can be chosen instead), a line reconciled with a
+  bank statement line (unreconcile it first), already voided or corrected,
+  or something changed since the preview.
+- **VJ5** Several at once: tick manual journals in the Journals list, then
+  **Void selected** (up to 100), with the same preview. Viewers can't void.
+
 ### The AI voiding journals it posted (AJV1-AJV6; Jess, 11 Nov 2026; the details are Claude's, not yet reviewed)
 
 Tested in `tests/integration/ai-journal-void.test.ts`. 31 March year end.

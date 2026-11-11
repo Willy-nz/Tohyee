@@ -13896,6 +13896,18 @@ migration 0265.
       never voids". The limit is set on the AI page by admins and owners
       (tenant migration 0268). Not yet reviewed.
 
+### Void for manual journals (12 Nov 2026; decision 1585)
+
+1585. **Void posts only the reversal (VJ1-VJ5).** Jess's issue 9: a manual
+      journal that shouldn't exist could only be "edited", which always adds
+      a new version. Void posts the exact reversal, linked to the original,
+      on its own date or a chosen one, with the reason in its description,
+      as a correction's reversal does. Bookkeepers and up, one or several
+      after a preview by account. Manual journals and replacements only;
+      refused in locked periods and on reconciled journals, as corrections
+      are. Hiding voided pairs from lists is issue 10, next. Not yet
+      reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
