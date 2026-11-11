@@ -50,11 +50,13 @@ export function PlanReview({
   const blocked = plan.items.filter((item) => item.blocked);
   return (
     <section className={ui.card} aria-label="Check before going ahead" style={{ display: "grid", gap: 10, minWidth: 0, overflowWrap: "anywhere" }}>
-      <h3 className={ui.cardTitle}>{plan.mode === "unreconcile" ? "Unreconcile these lines?" : "Undo this batch?"}</h3>
+      <h3 className={ui.cardTitle}>{plan.mode === "unreconcile" ? "Unreconcile these lines?" : plan.mode === "redo" ? "Remove & redo these lines?" : "Undo this batch?"}</h3>
       <p className={ui.muted} style={{ margin: 0 }}>
         {plan.mode === "unreconcile"
           ? "Each line goes back to be reconciled. Nothing is posted or voided: what it was reconciled with stays in the books."
-          : "Each line goes back to be reconciled, with the other side of a transfer. What the batch posted (spend or receive money, transfers) is voided on the line's date. Payments stay."}
+          : plan.mode === "redo"
+            ? "Each line goes back to be coded again. What it created (spend or receive money, a transfer) is voided on the line's date, keeping the record. Matches to things already posted stay."
+            : "Each line goes back to be reconciled, with the other side of a transfer. What the batch posted (spend or receive money, transfers) is voided on the line's date. Payments stay."}
       </p>
       {doable.length > 0 ? (
         <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 8, minWidth: 0 }}>
@@ -81,6 +83,11 @@ export function PlanReview({
                   <Badge tone="amber">Voided</Badge> {item.voids.label} on {formatDate(item.voids.date)}
                 </div>
               ) : null}
+              {item.paymentVoids.map((entry) => (
+                <div key={entry.id}>
+                  <Badge tone="amber">Voided</Badge> {entry.label} on {formatDate(entry.date)}
+                </div>
+              ))}
               {item.notes.map((note) => (
                 <div key={note} className={ui.muted}>
                   {note}
@@ -90,7 +97,7 @@ export function PlanReview({
           ))}
         </ul>
       ) : (
-        <Notice tone="warning">None of these can be {plan.mode === "unreconcile" ? "unreconciled" : "undone"}.</Notice>
+        <Notice tone="warning">None of these can be {plan.mode === "unreconcile" ? "unreconciled" : plan.mode === "redo" ? "removed and redone" : "undone"}.</Notice>
       )}
       {blocked.length > 0 ? (
         <div>

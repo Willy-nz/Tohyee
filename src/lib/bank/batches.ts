@@ -6,6 +6,8 @@ import { approvalWork } from "@/lib/bank/coding-proposals";
 import { reconcileStatementLine, suggestionsForLine, unreconcileStatementLine } from "@/lib/bank/reconcile";
 import { type BankRule, getBankRule, ruleAmountsMode, ruleContact, ruleLinesFor, ruleMatches } from "@/lib/bank/rules";
 import { voidBankTransaction, voidTransfer } from "@/lib/bank/transactions";
+import { voidSupplierPayment } from "@/lib/bills/payments";
+import { voidPayment } from "@/lib/invoices/payments";
 import {
   type ActionWork,
   type Batch,
@@ -280,12 +282,14 @@ export type PlanItem = PlanLine & {
   alsoLines: Array<PlanLine & { why: "split" | "transfer"; reconciliationId: string }>;
   /** Undo only: what's voided, on the line's date (AIB7). */
   voids: { kind: "bank_transaction" | "transfer"; id: string; date: string; label: string } | null;
+  /** Remove & redo with "also void the payments" (BK45): the payments the line recorded, voided on its date. */
+  paymentVoids: Array<{ kind: "customer" | "supplier"; id: string; documentId: string; date: string; label: string }>;
   notes: string[];
   /** Why it can't be done; it's left as it is. */
   blocked: string | null;
 };
 
-export type Plan = { mode: "unreconcile" | "undo"; batchId: string | null; items: PlanItem[]; lockDate: string | null; hash: string; counts: { items: number; lines: number; blocked: number; voids: number } };
+export type Plan = { mode: "unreconcile" | "undo" | "redo"; batchId: string | null; items: PlanItem[]; lockDate: string | null; hash: string; counts: { items: number; lines: number; blocked: number; voids: number } };
 
 type LineRow = { id: string; account_id: string; code: string; name: string; line_date: string; amount: string; description: string; status: string };
 
@@ -343,6 +347,7 @@ function finishPlan(mode: Plan["mode"], batchId: string | null, items: PlanItem[
       reconciliationId: item.reconciliationId,
       also: item.alsoLines.map((line) => [line.lineId, line.reconciliationId]),
       voids: item.voids ? [item.voids.kind, item.voids.id] : null,
+      payments: item.paymentVoids.map((entry) => [entry.kind, entry.id]),
       blocked: item.blocked,
     })),
   });
@@ -356,7 +361,7 @@ function finishPlan(mode: Plan["mode"], batchId: string | null, items: PlanItem[
       items: items.length,
       lines: items.filter((item) => !item.blocked).reduce((total, item) => total + (item.reconciliationId ? 1 : 0) + item.alsoLines.length, 0),
       blocked: items.filter((item) => item.blocked).length,
-      voids: items.filter((item) => !item.blocked && item.voids).length,
+      voids: items.filter((item) => !item.blocked).reduce((total, item) => total + (item.voids ? 1 : 0) + item.paymentVoids.length, 0),
     },
   };
 }
@@ -386,7 +391,7 @@ export async function planUnreconcile(tx: OrgTx, lineIdsInput: unknown): Promise
     const row = rows.get(lineId);
     if (!row) throw new ValidationError(`Statement line ${lineId} wasn't found.`);
     const line = await getStatementLine(tx, lineId);
-    const base: PlanItem = { ...planLine(row), reconciliationId: null, reconciliationKind: null, reconciledWith: [], alsoLines: [], voids: null, notes: [], blocked: null };
+    const base: PlanItem = { ...planLine(row), reconciliationId: null, reconciliationKind: null, reconciledWith: [], alsoLines: [], voids: null, paymentVoids: [], notes: [], blocked: null };
     if (line.status !== "reconciled" || !line.reconciliation) {
       items.push({ ...base, blocked: `This line is ${line.status}, not reconciled.` });
       continue;
@@ -454,7 +459,7 @@ export async function planBatchUndo(tx: OrgTx, batchIdInput: unknown): Promise<P
     const lineId = action.targetId!;
     const row = rows.get(lineId);
     if (!row) continue;
-    const base: PlanItem = { ...planLine(row), reconciliationId: null, reconciliationKind: null, reconciledWith: [], alsoLines: [], voids: null, notes: [], blocked: null };
+    const base: PlanItem = { ...planLine(row), reconciliationId: null, reconciliationKind: null, reconciledWith: [], alsoLines: [], voids: null, paymentVoids: [], notes: [], blocked: null };
     const made = (
       await tx.query<{ id: string; status: string; kind: string; journal_id: string | null }>(
         `select r.id::text, r.status, r.kind,
@@ -507,6 +512,92 @@ export async function planBatchUndo(tx: OrgTx, batchIdInput: unknown): Promise<P
   return finishPlan("undo", batch.id, items, lockDate);
 }
 
+/**
+ * What Remove & redo will do (BK45, decision 1574): each chosen reconciled
+ * line is unreconciled (with its split, and the other side of a transfer it
+ * made), and what the line itself created (spend or receive money, a
+ * transfer) is voided on the line's date. A match to something already
+ * posted is only unreconciled; payments the line recorded are voided only
+ * with `removePayments`. Locked periods are refused as BK13.
+ */
+export async function planRemoveAndRedo(tx: OrgTx, lineIdsInput: unknown, options: { removePayments?: unknown } = {}): Promise<Plan> {
+  const removePayments = options.removePayments === true;
+  const base = await planUnreconcile(tx, lineIdsInput);
+  const items: PlanItem[] = [];
+  for (const unreconcile of base.items) {
+    const item: PlanItem = { ...unreconcile, notes: [] };
+    if (!item.reconciliationId) {
+      items.push(unreconcile);
+      continue;
+    }
+    const journals = (
+      await tx.query<{ journal_id: string }>(
+        `select l.journal_id::text as journal_id from bank_reconciliation_items i join ledger_journal_lines l on l.id = i.journal_line_id
+          where i.reconciliation_id = $1 and i.active group by l.journal_id order by l.journal_id`,
+        [item.reconciliationId],
+      )
+    ).rows.map((row) => row.journal_id);
+    if (item.reconciliationKind === "bank_transaction" || item.reconciliationKind === "transfer") {
+      const table = item.reconciliationKind === "bank_transaction" ? "bank_transactions" : "bank_transfers";
+      const found = (await tx.query<{ id: string; status: string; reference: string | null }>(`select id::text, status, reference from ${table} where journal_id = any($1::bigint[])`, [journals])).rows[0];
+      if (found?.status === "posted") {
+        item.voids = {
+          kind: item.reconciliationKind,
+          id: found.id,
+          date: item.date,
+          label: `${item.reconciliationKind === "bank_transaction" ? "Spend or receive money" : "Transfer"} #${found.id}${found.reference ? ` (${found.reference})` : ""}`,
+        };
+        item.notes.push(`${item.voids.label} is voided on ${formatDate(item.date)}, keeping the record, and the line is ready to code again.`);
+        if (item.reconciliationKind === "transfer") {
+          for (const other of await otherSides(tx, item.reconciliationId, item.lineId)) {
+            if (item.alsoLines.some((line) => line.lineId === other.lineId)) continue;
+            const otherRow = (await planLines(tx, [other.lineId])).get(other.lineId);
+            if (otherRow) item.alsoLines.push({ ...planLine(otherRow), why: "transfer", reconciliationId: other.reconciliationId });
+          }
+        }
+      }
+    } else if (item.reconciliationKind === "payments") {
+      if (removePayments) {
+        const customer = await tx.query<{ id: string; invoice_id: string; amount: string }>(
+          "select p.id::text, p.invoice_id::text, p.amount::text from customer_payments p where p.journal_id = any($1::bigint[]) and p.status = 'active' order by p.id",
+          [journals],
+        );
+        const supplier = await tx.query<{ id: string; bill_id: string; amount: string }>(
+          "select p.id::text, p.bill_id::text, p.amount::text from supplier_payments p where p.journal_id = any($1::bigint[]) and p.status = 'active' order by p.id",
+          [journals],
+        );
+        for (const row of customer.rows) item.paymentVoids.push({ kind: "customer", id: row.id, documentId: row.invoice_id, date: item.date, label: `Payment #${row.id} on invoice #${row.invoice_id}` });
+        for (const row of supplier.rows) item.paymentVoids.push({ kind: "supplier", id: row.id, documentId: row.bill_id, date: item.date, label: `Payment #${row.id} on bill #${row.bill_id}` });
+        item.notes.push(`${item.paymentVoids.map((entry) => entry.label).join(", ")} ${item.paymentVoids.length === 1 ? "is" : "are"} voided on ${formatDate(item.date)}; the invoice or bill is owing again.`);
+      } else {
+        item.notes.push("The payments stay recorded (the invoice or bill stays paid). Choose to void the payments too to remove them.");
+      }
+    } else {
+      item.notes.push("It was matched to something already posted, so that stays; the line is only unreconciled.");
+    }
+    item.blocked = unreconcile.blocked ?? lockedReason([item.date, ...item.alsoLines.map((other) => other.date)], base.lockDate);
+    items.push(item);
+  }
+  return finishPlan("redo", null, items, base.lockDate);
+}
+
+/** Runs Remove & redo after its preview (BK45), as a batch of its own. */
+export async function startRemoveAndRedo(
+  run: OrgRunner,
+  input: { lineIds: unknown; removePayments: unknown; previewHash: unknown; idempotencyKey: string; source: string },
+  options: RunOptions = {},
+): Promise<RunOutcome & { created: boolean }> {
+  const { batch, created } = await run(async (tx) => {
+    const request = requestHash("bank_redo", { lineIds: parseBatchLineIds(input.lineIds), removePayments: input.removePayments === true, previewHash: input.previewHash });
+    const earlier = await tx.query("select 1 from batches where command_source = $1 and idempotency_key = $2", [input.source, input.idempotencyKey]);
+    if (earlier.rowCount) return createBatch(tx, { kind: "bank_redo", source: input.source, idempotencyKey: input.idempotencyKey, requestHash: request, actions: [] });
+    const plan = await planRemoveAndRedo(tx, input.lineIds, { removePayments: input.removePayments });
+    assertPlanSeen(plan, input.previewHash);
+    return createBatch(tx, { kind: "bank_redo", source: input.source, idempotencyKey: input.idempotencyKey, requestHash: request, actions: planActions(plan, input.idempotencyKey) });
+  });
+  return { ...(await runBatch(run, batch.id, undoWork(batch.source), options)), created };
+}
+
 /** Unreconciles one reconciliation if it's still the one the plan showed; a retry with the same key finds the earlier result. */
 async function unreconcileExpected(tx: OrgTx, lineId: string, reconciliationId: string, source: string, key: string): Promise<boolean> {
   const replay = await tx.query("select 1 from bank_reconciliations where removal_command_source = $1 and removal_idempotency_key = $2", [source, key]);
@@ -541,6 +632,7 @@ function undoWork(source: string): ActionWork {
       reconciliationId: string | null;
       also: Array<{ lineId: string; reconciliationId: string }>;
       voids: { kind: "bank_transaction" | "transfer"; id: string; date: string } | null;
+      payments?: Array<{ kind: "customer" | "supplier"; id: string; documentId: string; date: string }>;
     };
     const unreconciled: string[] = [];
     // The other side first, so the transfer can be voided (it can't be while either side is reconciled).
@@ -559,7 +651,13 @@ function undoWork(source: string): ActionWork {
       else await voidTransfer(tx, payload.voids.id, command);
       voided = payload.voids;
     }
-    return { lineId, unreconciled, voided };
+    // Remove & redo with the payments (BK45): each voided on the line's date; its invoice or bill is owing again.
+    for (const [index, payment] of (payload.payments ?? []).entries()) {
+      const command = { source, idempotencyKey: `${action.idempotencyKey}:pay${index}`, voidDate: payment.date };
+      if (payment.kind === "customer") await voidPayment(tx, payment.documentId, payment.id, command);
+      else await voidSupplierPayment(tx, payment.documentId, payment.id, command);
+    }
+    return { lineId, unreconciled, voided, paymentsVoided: (payload.payments ?? []).length };
   };
 }
 
@@ -574,6 +672,7 @@ function planActions(plan: Plan, key: string): NewBatchAction[] {
             reconciliationId: item.reconciliationId,
             also: item.alsoLines.map((line) => ({ lineId: line.lineId, reconciliationId: line.reconciliationId })),
             voids: item.voids ? { kind: item.voids.kind, id: item.voids.id, date: item.voids.date } : null,
+            payments: item.paymentVoids.map((entry) => ({ kind: entry.kind, id: entry.id, documentId: entry.documentId, date: entry.date })),
           },
     idempotencyKey: `${key}:${item.lineId}`,
     ...(item.blocked ? { refused: item.blocked } : {}),

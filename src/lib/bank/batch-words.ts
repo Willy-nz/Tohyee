@@ -54,7 +54,7 @@ export function canResume(counts: BatchCountsLike, state: string): boolean {
 }
 
 /** The confirm button's words for a plan: "Unreconcile 3 lines" / "Undo 2 lines and void 1". */
-export function planButtonText(mode: "unreconcile" | "undo", counts: { lines: number; voids: number }): string {
+export function planButtonText(mode: "unreconcile" | "undo" | "redo", counts: { lines: number; voids: number }): string {
   const lines = `${counts.lines} line${counts.lines === 1 ? "" : "s"}`;
   if (mode === "unreconcile") return `Unreconcile ${lines}`;
   return counts.voids ? `Unreconcile ${lines} and void ${counts.voids}` : `Unreconcile ${lines}`;
