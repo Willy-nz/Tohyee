@@ -1,3 +1,4 @@
+import { aiVoidJournal, previewAiJournalVoid } from "@/lib/ai/journal-void";
 import { addForecastCommentary, addGroupCommentary } from "@/lib/commentary/service";
 import { approvalNeededForAi } from "@/lib/approvals/requests";
 import { submitForApproval } from "@/lib/approvals/service";
@@ -432,6 +433,31 @@ export const WRITE_TOOLS: readonly AiTool[] = [
     async run(tx, args) {
       const result = await postJournalDraft(tx, args.draftId);
       return { created: result.created, draft: result.draft, journalId: result.journal.id };
+    },
+  },
+  {
+    name: "void_own_journal",
+    title: "Void a journal this AI posted",
+    level: "full",
+    description:
+      "Voids a manual journal that this same AI key or app posted from a draft (Jess, 11 Nov 2026), never an invoice, bill, payment or anything a person posted: an exact reversal is posted on the journal's own date and the original is kept, marked as voided by the AI. Refused in a locked period, when a line is matched to a bank statement line, when it's already been voided or corrected, and past the organisation's time limit if it set one. First call it without previewHash to see what it will reverse and check it's what was asked; then call it again with the previewHash it gave and a new idempotencyKey.",
+    inputSchema: schema(
+      {
+        journalId: ID("journal"),
+        previewHash: { type: "string", description: "From the preview. Left out, nothing changes and the preview is the answer." },
+        idempotencyKey: IDEMPOTENCY,
+      },
+      ["journalId"],
+    ),
+    async run(tx, args, context) {
+      if (args.previewHash == null || args.previewHash === "") {
+        return {
+          preview: true,
+          ...(await previewAiJournalVoid(tx, args.journalId)),
+          next: "Check this is the journal the person asked to void. To go ahead, call void_own_journal again with the same journalId, this previewHash and a new idempotencyKey.",
+        };
+      }
+      return aiVoidJournal(tx, { journalId: args.journalId, previewHash: args.previewHash, idempotencyKey: idempotencyKey(args.idempotencyKey), source: context.source });
     },
   },
   {

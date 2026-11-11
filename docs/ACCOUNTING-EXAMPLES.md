@@ -2477,6 +2477,32 @@ isn't reconciled.
   lines go in one preview and one batch. As Xero's Remove & Redo, except
   that it voids rather than deletes. Not yet reviewed.
 
+### The AI voiding journals it posted (AJV1-AJV6; Jess, 11 Nov 2026; the details are Claude's, not yet reviewed)
+
+Tested in `tests/integration/ai-journal-void.test.ts`. 31 March year end.
+A Full access AI key "Claude" makes and posts a draft manual journal on 10
+Jun 2026: Dr 6010 **100.00** / Cr 3000 **100.00**.
+
+- **AJV1** Only a manual journal posted from a draft by the **same** AI key
+  or app (the draft records which). Refused: one a person posted, one
+  another AI key posted, and anything not a manual journal (an invoice's,
+  a payment's, a correction). Full access only (`void_own_journal`).
+- **AJV2** First a preview: the journal's date, reference and lines, and a
+  hash. Nothing changes.
+- **AJV3** Called again with the hash, it posts an exact reversal dated the
+  journal's own day (10 Jun 2026): Dr 3000 **100.00** / Cr 6010
+  **100.00**, described "Voided by the AI (AI key "Claude"): journal #n".
+  The original is kept, and its page says "Voided by the AI". A retry with
+  the same key does nothing more; voiding again is refused.
+- **AJV4** Refused in a locked period (the journal's date on or before the
+  lock date), and when one of its lines is matched to a bank statement
+  line.
+- **AJV5** AI › Journals the AI posted: an admin or owner can set how many
+  days after posting the AI may void (1 to 3650; blank, the default, is no
+  limit). Past it, refused.
+- **AJV6** A changed journal (the hash no longer matches) is refused: preview
+  again.
+
 ### Bulk coding ("cash coding") (examples not yet approved by Jess)
 
 Like Xero's cash coding. On one bank or credit card account, tick several
