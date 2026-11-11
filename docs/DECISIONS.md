@@ -13778,6 +13778,16 @@ migration 0265.
       decides what's listed, so it works with Sales when sent off; with it
       on, the amounts held and Mark as sent are there too. The store's
       settings link to it instead of listing the orders.
+### Revenue recognition setting (11 Nov 2026; decision 1573)
+
+1573. **Sales when sent is a revenue recognition choice in Settings.** Jess:
+      the store page was "a weird place" with "weird wording"; it's about
+      when revenue is recognised, when fulfilled or when paid "like a game
+      sale would be". Settings › Organisation has a Revenue recognition card:
+      for each Shopify store, When paid or When fulfilled (with its Income in
+      advance account). The store's page says which and links there.
+      Behaviour is unchanged (SWS1-SWS11).
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
