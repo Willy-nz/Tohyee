@@ -13906,6 +13906,19 @@ migration 0265.
       own name, so it's still clear which account is which. Tenant migration
       0269. Claude's details, not yet reviewed.
 
+### A locked analytics file (12 Nov 2026; decision 1588)
+
+1588. **Wait, then say so plainly (Jess's issue 3).** An organisation's
+      analytics file can only be open in one process. When another Tohyee
+      process has it (usually one left running after an update), opening it
+      waits up to about five seconds for it to be let go, then fails with
+      "Analytics is locked by another Tohyee process (process n)... Restart
+      Tohyee", which shows on Data sources and in the AI's analytics tools
+      instead of a server error. The Windows installer now also stops any
+      node.exe from Tohyee's own folder when it updates. Opening read-only
+      for queries was left alone: loads write to the same file. Not yet
+      reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
