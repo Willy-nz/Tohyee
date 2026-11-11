@@ -1668,3 +1668,47 @@
 .reportPickerRow > .field {
   flex: 1 1 auto;
 }
+
+/* Annual financial statements one page at a time (FS14): a sheet of paper on screen. */
+.annualPage {
+  margin-top: 16px;
+  padding: 32px;
+  min-height: 560px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.annualCover {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 496px;
+  padding-top: 96px;
+}
+
+.annualPager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+@media (max-width: 640px) {
+  .annualPage {
+    padding: 16px;
+    min-height: 0;
+  }
+  .annualCover {
+    min-height: 320px;
+    padding-top: 32px;
+  }
+}
+
+@media print {
+  .annualPage {
+    border: 0;
+    padding: 0;
+  }
+}
