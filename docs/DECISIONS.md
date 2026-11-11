@@ -13881,6 +13881,21 @@ migration 0265.
       are profit and loss only, as before. Up to 10 added columns. Claude's
       details, not yet reviewed.
 
+### The AI voiding journals it posted (11 Nov 2026; decision 1581)
+
+1581. **void_own_journal (AJV1-AJV6).** Jess set the rules: only manual
+      journals the AI posted itself, never invoices, bills, payments or
+      anything a person made; a preview, then the void; the original kept
+      and marked as voided by the AI; refused in locked periods and on
+      journals matched to a bank line; an optional limit on how long after
+      posting. "Posted itself" is the same AI key or app that posted the
+      draft (the draft records which), so another key can't void it. The
+      void is an exact reversal on the journal's own date, like a
+      correction's. Full access only, like Remove & redo (Jess didn't say;
+      Claude's call). This is the second exception to decision 1277's "an AI
+      never voids". The limit is set on the AI page by admins and owners
+      (tenant migration 0268). Not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

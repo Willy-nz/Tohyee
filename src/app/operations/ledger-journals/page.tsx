@@ -137,7 +137,9 @@ function JournalDetail({
       ) : null}
       {correctionJournals.length > 0 ? (
         <Notice tone="warning">
-          {REVERSED_BY[journal.origin] ?? "Corrected by"}{" "}
+          {/* AJV3: a journal the AI voided says so. */}
+          {correctionJournals.some((entry) => entry.commandSource.startsWith("ai-void:")) ? <strong>Voided by the AI. </strong> : null}
+          {correctionJournals.some((entry) => entry.commandSource.startsWith("ai-void:")) ? "Reversed by" : (REVERSED_BY[journal.origin] ?? "Corrected by")}{" "}
           {correctionJournals.map((entry, index) => (
             <span key={entry.id}>
               {index > 0 ? " and " : ""}
