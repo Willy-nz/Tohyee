@@ -20574,6 +20574,7 @@ alter table sales_platform_connections add column stock_items boolean not null d
 alter table sales_platform_connections add column gift_card_account_id bigint references accounts(id);
 `,
   },
+  {
     version: "0274",
     name: "gateway_settlements",
     sql: `

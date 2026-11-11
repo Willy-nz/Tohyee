@@ -14007,6 +14007,13 @@ migration 0265.
       person confirms. Settling reconciles the line as a transfer from the
       clearing account and posts the fee from it, with no GST (for Jess to
       confirm), to the store's fees account. Not yet reviewed.
+### Pairs that cancel out on the bank reconciliation report (12 Nov 2026; decision 1592)
+
+1592. **Hidden by default, totals unchanged (BK46).** Jess's issue 1
+      (minor). Items not yet on the statement that cancel exactly within a
+      month are left out, two at a time in date order, with a count and a
+      checkbox to show them. Only on screen and in print; the data and
+      exports keep every item. Not yet reviewed.
 
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
