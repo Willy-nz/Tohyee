@@ -507,7 +507,7 @@ export async function computeCustomReport(
   }
 
   const accountsResult = await tx.query<{ id: string; code: string; name: string; account_class: AccountClass; account_type: AccountType }>(
-    "select id, code, name, account_class, account_type from accounts order by code",
+    "select id, code, coalesce(reporting_name, name) as name, account_class, account_type from accounts order by code",
   );
   const accounts: Account[] = accountsResult.rows.map((row) => ({
     id: row.id,

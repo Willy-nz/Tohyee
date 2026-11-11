@@ -64,6 +64,7 @@ export function AccountPicker({
           id: bankAccount.id,
           code: bankAccount.code,
           name: bankAccount.name,
+          reportingName: null,
           accountClass: ACCOUNT_TYPES[input.accountType].accountClass,
           accountType: input.accountType,
           description: null,

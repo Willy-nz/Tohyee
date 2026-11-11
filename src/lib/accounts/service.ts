@@ -19,6 +19,8 @@ export type Account = {
   accountClass: AccountClass;
   accountType: AccountType;
   description: string | null;
+  /** The name shown on financial reports and statements instead of `name`, if set (RN1, decision 1582). */
+  reportingName: string | null;
   currencyCode: string | null;
   systemKey: SystemKey | null;
   isActive: boolean;
@@ -34,6 +36,7 @@ type AccountRow = {
   account_class: AccountClass;
   account_type: AccountType;
   description: string | null;
+  reporting_name: string | null;
   currency_code: string | null;
   system_key: SystemKey | null;
   is_active: boolean;
@@ -42,7 +45,7 @@ type AccountRow = {
 };
 
 const ACCOUNT_SELECT = `
-  select a.id, a.code, a.name, a.account_class, a.account_type, a.description,
+  select a.id, a.code, a.name, a.account_class, a.account_type, a.description, a.reporting_name,
          a.currency_code, a.system_key, a.is_active,
          exists (select 1 from ledger_journal_lines l where l.account_id = a.id) as has_postings,
          (select t.code from tax_codes t where t.id = a.default_tax_code_id) as default_tax_code
@@ -56,6 +59,7 @@ function toAccount(row: AccountRow): Account {
     accountClass: row.account_class,
     accountType: row.account_type,
     description: row.description,
+    reportingName: row.reporting_name,
     currencyCode: row.currency_code,
     systemKey: row.system_key,
     isActive: row.is_active,
@@ -135,6 +139,7 @@ export async function createAccount(
     name: unknown;
     accountType: unknown;
     description?: unknown;
+    reportingName?: unknown;
     currencyCode?: unknown;
     defaultTaxCode?: unknown;
   },
@@ -143,6 +148,7 @@ export async function createAccount(
   const name = requireString(input.name, "name", { maxLength: 150 });
   const accountType = parseAccountType(input.accountType);
   const description = optionalString(input.description, "description", { maxLength: 500 });
+  const reportingName = optionalString(input.reportingName, "reportingName", { maxLength: 200 });
   const currencyCode = parseAccountCurrency(tx, input.currencyCode);
   const accountClass = classOfType(accountType);
   if (currencyCode && accountClass !== "asset" && accountClass !== "liability") {
@@ -152,11 +158,11 @@ export async function createAccount(
   const defaultTaxCodeId = await resolveDefaultTaxCode(tx, input.defaultTaxCode, null);
 
   const inserted = await tx.query<{ id: string }>(
-    `insert into accounts (code, name, account_class, account_type, description, currency_code, default_tax_code_id)
-     values ($1, $2, $3, $4, $5, $6, $7)
+    `insert into accounts (code, name, account_class, account_type, description, currency_code, default_tax_code_id, reporting_name)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)
      on conflict do nothing
      returning id`,
-    [code, name, accountClass, accountType, description, currencyCode, defaultTaxCodeId],
+    [code, name, accountClass, accountType, description, currencyCode, defaultTaxCodeId, reportingName],
   );
   const id = inserted.rows[0]?.id;
   if (!id) {
@@ -185,6 +191,7 @@ export async function updateAccount(
     name?: unknown;
     accountType?: unknown;
     description?: unknown;
+    reportingName?: unknown;
     currencyCode?: unknown;
     isActive?: unknown;
     defaultTaxCode?: unknown;
@@ -202,6 +209,8 @@ export async function updateAccount(
     input.description === undefined
       ? existing.description
       : optionalString(input.description, "description", { maxLength: 500 });
+  const reportingName =
+    input.reportingName === undefined ? existing.reportingName : optionalString(input.reportingName, "reportingName", { maxLength: 200 });
   const currencyCode =
     input.currencyCode === undefined ? existing.currencyCode : parseAccountCurrency(tx, input.currencyCode);
   const isActive = optionalBoolean(input.isActive, "isActive") ?? existing.isActive;
@@ -233,9 +242,9 @@ export async function updateAccount(
     await tx.query(
       `update accounts
           set code = $2, name = $3, account_class = $4, account_type = $5,
-              description = $6, currency_code = $7, is_active = $8, default_tax_code_id = $9, updated_at = now()
+              description = $6, currency_code = $7, is_active = $8, default_tax_code_id = $9, reporting_name = $10, updated_at = now()
         where id = $1`,
-      [accountId, code, name, accountClass, accountType, description, currencyCode, isActive, defaultTaxCodeId],
+      [accountId, code, name, accountClass, accountType, description, currencyCode, isActive, defaultTaxCodeId, reportingName],
     );
   } catch (error) {
     if ((error as { code?: string }).code === "23505") {

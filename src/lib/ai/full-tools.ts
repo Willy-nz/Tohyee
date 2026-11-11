@@ -212,6 +212,7 @@ const ACCOUNT_FIELDS: Record<string, JsonSchema> = {
   description: { type: "string" },
   currencyCode: { type: ["string", "null"], description: "Only for a bank or credit card account in another currency." },
   defaultTaxCode: { type: ["string", "null"] },
+  reportingName: { type: ["string", "null"], description: "Shown on financial reports and statements instead of the name; empty for the name." },
 };
 const ASSET_FIELDS: Record<string, JsonSchema> = {
   name: { type: "string" },
@@ -860,13 +861,13 @@ export const FULL_WRITE_TOOLS: readonly AiTool[] = [
     level: "full",
     description: "Adds an account to the chart of accounts. Check list_accounts first: codes must be new.",
     inputSchema: schema(ACCOUNT_FIELDS, ["code", "name", "accountType"]),
-    run: (tx, args) => createAccount(tx, { code: args.code, name: args.name, accountType: args.accountType, ...pick(args, ["description", "currencyCode", "defaultTaxCode"]) }),
+    run: (tx, args) => createAccount(tx, { code: args.code, name: args.name, accountType: args.accountType, ...pick(args, ["description", "currencyCode", "defaultTaxCode", "reportingName"]) }),
   },
   {
     name: "update_account",
     title: "Edit an account",
     level: "full",
-    description: "Edits an account's code, name, type, description or default GST code (not archive it).",
+    description: "Edits an account's code, name, type, description, reporting name or default GST code (not archive it).",
     inputSchema: schema({ accountId: ID("account"), ...ACCOUNT_FIELDS }, ["accountId"]),
     run: (tx, args) => updateAccount(tx, args.accountId, pick(args, Object.keys(ACCOUNT_FIELDS))),
   },

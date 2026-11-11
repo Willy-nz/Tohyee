@@ -13896,6 +13896,16 @@ migration 0265.
       never voids". The limit is set on the AI page by admins and owners
       (tenant migration 0268). Not yet reviewed.
 
+### Reporting names (12 Nov 2026; decision 1582)
+
+1582. **An account's reporting name (RN1-RN3).** Jess asked for reporting
+      names as an option for each code. One per account, used on the
+      financial reports and statements (profit and loss, balance sheet,
+      changes in equity, custom layouts, annual statements) in place of the
+      account's name; transaction lists and the ledger keep the account's
+      own name, so it's still clear which account is which. Tenant migration
+      0269. Claude's details, not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

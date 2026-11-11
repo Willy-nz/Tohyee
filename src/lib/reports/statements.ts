@@ -113,7 +113,7 @@ export async function cashFlowStatement(tx: OrgTx, input: { from?: unknown; to?:
            from ledger_journals j
           where j.posting_date between $1 and $2
        )
-       select a.id::text as account_id, a.code, a.name, a.account_class, a.account_type, jr.bucket,
+       select a.id::text as account_id, a.code, coalesce(a.reporting_name, a.name) as name, a.account_class, a.account_type, jr.bucket,
               sum(l.debit_amount - l.credit_amount)::text as net_debit
          from journals jr
          join ledger_journal_lines l on l.journal_id = jr.id

@@ -18920,6 +18920,25 @@ the year to 31 Mar 2027.
   The changes in equity and cash flows statements aren't linked: their lines
   aren't accounts' amounts. Nothing posts.
 
+### Reporting names (RN1-RN3; Jess, 12 Nov 2026: "we need to have reporting names as an option for each code"; the details are Claude's, not yet reviewed)
+
+Tested in `tests/integration/reporting-names.test.ts`. Setup: Dr 1000 /
+Cr 4000 Sales **300.00** on 1 Jun 2026.
+
+- **RN1** Each account can have a **reporting name** (up to 200
+  characters), set on Accounting › Chart of accounts (admins), or by a
+  Full access AI with update_account. Blank uses the account's name. The
+  account keeps its own name everywhere else.
+- **RN2** The profit and loss, balance sheet, changes in equity, custom
+  report layouts and the annual financial statements show the reporting
+  name in place of the account's name: 4000 with reporting name "Jewellery
+  sales" shows as **Jewellery sales 300.00**; 1000 "Cash at bank" on the
+  balance sheet. Transaction lists, the general ledger and the chart of
+  accounts keep the account's name (the chart shows "On reports: ..."
+  under it).
+- **RN3** On the annual statements, while editing, the statement pages say
+  the lines come from the layout and keep **Edit layout** beside them.
+
 ### Annual financial statements as one document (FS9-FS13; Jess, 11 Nov 2026: "page 1 cover page 2 contents which are automaticcaly made from the rest page 3 some liabilty for the accountant discharge 4 Pand L and so on. Depn schedule last"; the wording and details are Claude's, not yet reviewed)
 
 Tested in `tests/integration/financial-statements-report.test.ts` and

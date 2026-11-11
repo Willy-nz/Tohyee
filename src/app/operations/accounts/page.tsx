@@ -17,11 +17,12 @@ type Draft = {
   name: string;
   accountType: AccountType;
   description: string;
+  reportingName: string;
   currencyCode: string;
   defaultTaxCode: string;
 };
 
-const EMPTY_DRAFT: Draft = { code: "", name: "", accountType: "expense", description: "", currencyCode: "", defaultTaxCode: "" };
+const EMPTY_DRAFT: Draft = { code: "", name: "", accountType: "expense", description: "", reportingName: "", currencyCode: "", defaultTaxCode: "" };
 
 function AccountForm({
   initial,
@@ -106,6 +107,9 @@ function AccountForm({
           <input value={draft.defaultTaxCode} onChange={(event) => setDraft({ ...draft, defaultTaxCode: event.target.value.toUpperCase() })} maxLength={20} />
         </Field>
       </div>
+      <Field label="Reporting name" hint="Shown on the profit and loss, balance sheet, custom reports and annual statements instead of the name. Blank uses the name.">
+        <input value={draft.reportingName} onChange={(event) => setDraft({ ...draft, reportingName: event.target.value })} maxLength={200} />
+      </Field>
       <div className={ui.actions}>
         <Button type="submit" disabled={busy}>
           {busy ? "Saving…" : submitLabel}
@@ -169,6 +173,7 @@ function Accounts({ organisationId }: { organisationId: string }) {
               name: editing.name,
               accountType: editing.accountType,
               description: editing.description ?? "",
+              reportingName: editing.reportingName ?? "",
               currencyCode: editing.currencyCode ?? "",
               defaultTaxCode: editing.defaultTaxCode ?? "",
             }}
@@ -233,6 +238,7 @@ function Accounts({ organisationId }: { organisationId: string }) {
                       <td>{account.code}</td>
                       <td>
                         {account.name}
+                        {account.reportingName ? <div className={ui.muted}>On reports: {account.reportingName}</div> : null}
                         {account.description ? <div className={ui.muted}>{account.description}</div> : null}
                       </td>
                       <td>{ACCOUNT_TYPES[account.accountType]?.label ?? account.accountType}</td>

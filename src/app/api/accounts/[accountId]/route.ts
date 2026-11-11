@@ -10,6 +10,7 @@ export const PATCH = route<{ params: Promise<{ accountId: string }> }>(async (re
       name: body.name,
       accountType: body.accountType,
       description: body.description,
+      reportingName: body.reportingName,
       currencyCode: body.currencyCode,
       isActive: body.isActive,
       defaultTaxCode: body.defaultTaxCode,
