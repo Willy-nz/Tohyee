@@ -13820,6 +13820,23 @@ migration 0265.
       and the changes in equity and cash flows statements aren't linked:
       there's no one set of accounts behind them. Not yet reviewed.
 
+### Annual financial statements as one document (11 Nov 2026; decision 1576)
+
+1576. **Cover, contents, compilation report and depreciation schedule
+      (FS9-FS13).** Jess asked for page 1 a cover, page 2 contents made from
+      the rest, page 3 the accountant's disclaimer, then the statements, and
+      the depreciation schedule last. The PDF is now those pages, with page
+      numbers in the contents. The cover, compilation report and page
+      headings are saved per year end as a draft (DRAFT on every page) or
+      final (tenant migration 0267). The compilation report's default
+      wording follows the parts of the example report in CA ANZ's SES-2
+      (Compilation of Financial Information), checked on CA ANZ's site and
+      an NZ firm's published terms on 11 Nov 2026, in Tohyee's own words.
+      Jess said "SRS-2": the NZ standard is SES-2. The schedule is worked
+      out from the fixed asset register. The one-page-at-a-time screen with
+      editing comes next. Claude's wording, not yet reviewed by an
+      accountant.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

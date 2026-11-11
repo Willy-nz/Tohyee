@@ -18765,7 +18765,8 @@ Tested in `tests/integration/financial-statements-pdf.test.ts` and
 statements, with figures from the same functions as the report screens
 (P1-P4, SCE1-SCF4). Nothing posts.
 
-- **FS1** Contents, in order: a cover with the contents; statement of
+- **FS1** Contents, in order: a cover and the contents (pages since FS9,
+  with the compilation report and depreciation schedule); statement of
   financial performance; statement of financial position (current and
   non-current subtotals, net assets); statement of changes in equity;
   statement of cash flows; notes. Every statement has this year and last
@@ -18823,6 +18824,53 @@ the year to 31 Mar 2027.
   lines (net profit, a formula row), blanks and nil amounts aren't links.
   The changes in equity and cash flows statements aren't linked: their lines
   aren't accounts' amounts. Nothing posts.
+
+### Annual financial statements as one document (FS9-FS13; Jess, 11 Nov 2026: "page 1 cover page 2 contents which are automaticcaly made from the rest page 3 some liabilty for the accountant discharge 4 Pand L and so on. Depn schedule last"; the wording and details are Claude's, not yet reviewed)
+
+Tested in `tests/integration/financial-statements-report.test.ts` and
+`tests/unit/depreciation-schedule.test.ts`. FS1's setup.
+
+- **FS9** The statements are pages, in this order, each starting a new page
+  in the PDF: 1 the cover; 2 the contents; 3 the compilation report; then
+  the statements of financial performance, financial position, changes in
+  equity and cash flows; the notes; and the depreciation schedule last, only
+  when the year has fixed assets in it. The contents are made from the pages
+  after them, each with the page it starts on: with no fixed assets,
+  Compilation report 3, Statement of financial performance 4, financial
+  position 5, changes in equity 6, cash flows 7, Notes 8 (when each fits on
+  one page).
+- **FS10** The cover's default words: the organisation's name; "Financial
+  statements"; "For the year ended 31 March 2027"; and, at the foot,
+  "Prepared with Tohyee". Each can be changed or cleared; a cleared line is
+  left off.
+- **FS11** The compilation report's default words follow the parts of the
+  example report in the NZ compilation standard (CA ANZ's SES-2,
+  Compilation of Financial Information), in Tohyee's own words: a title to
+  "[the directors / owners / trustees]"; Scope and purpose of engagement;
+  Responsibilities; No audit or review engagement undertaken; Disclaimer of
+  liability; Independence; and a sign-off of "[Firm name]", "[Town], New
+  Zealand", "[Date]". [Square brackets] are for the preparer. It can be left
+  out, and the contents then don't list it. Not reviewed by an accountant.
+- **FS12** The depreciation schedule comes from the fixed asset register as
+  at the year end, grouped by asset type, with a total for each type and
+  for all: each asset's rate, cost, book value at the start of the year
+  (opening), additions, disposals, the year's depreciation and its book
+  value at the end (closing). Opening + additions - disposals - depreciation
+  = closing. Example: a computer bought 1 Apr 2025 for 2,000.00 at DV 50%,
+  with 1,000.00 depreciation last year and 500.00 this year: opening
+  **1,000.00**, depreciation **500.00**, closing **500.00**. A chair bought
+  1 Jul 2026 for 600.00 at SL 10% with 45.00 depreciation: opening **0.00**,
+  additions **600.00**, closing **555.00**. A desk with a book value of
+  300.00 at the start of the year, disposed of on 30 Sep 2026 after 20.00
+  depreciation: opening **300.00**, disposals **280.00**, depreciation
+  **20.00**, closing **0.00**. Totals: opening 1,300.00, additions 600.00,
+  disposals 280.00, depreciation 565.00, closing 1,055.00.
+- **FS13** The words (cover, compilation report and each page's heading)
+  are kept for each year end. Until saved they're the defaults and the
+  statements are a draft. **Save as draft** keeps them and every page of the
+  PDF says DRAFT at the top; **Save as final** keeps them without DRAFT.
+  Another year end keeps its own. Bookkeepers and up save; viewers see.
+  Renaming a page's heading renames it in the contents too. Nothing posts.
 
 ### Cash flow layouts (CFL1-CFL5; Jess chose on 6 Nov 2026 to rename, group, move accounts between sections, reorder, hide and add notes; the details are Claude's calls, not yet reviewed)
 

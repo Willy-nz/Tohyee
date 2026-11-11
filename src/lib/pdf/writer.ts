@@ -71,6 +71,7 @@ export class PdfWriter {
     private readonly regular: PDFFont,
     private readonly bold: PDFFont,
     private readonly footerText: string,
+    private readonly stamp: string,
   ) {}
 
   page!: PDFPage;
@@ -78,7 +79,8 @@ export class PdfWriter {
   y = 0;
   private pages: PDFPage[] = [];
 
-  static async create(meta: { title: string; author: string; footer: string }): Promise<PdfWriter> {
+  /** `stamp`, such as "DRAFT", prints at the top right of every page. */
+  static async create(meta: { title: string; author: string; footer: string; stamp?: string }): Promise<PdfWriter> {
     const doc = await PDFDocument.create();
     doc.registerFontkit(fontkit);
     const files = await loadFontFiles();
@@ -88,7 +90,7 @@ export class PdfWriter {
     doc.setAuthor(meta.author);
     doc.setCreator("Tohyee");
     doc.setProducer("Tohyee (pdf-lib)");
-    const writer = new PdfWriter(doc, regular, bold, meta.footer);
+    const writer = new PdfWriter(doc, regular, bold, meta.footer, meta.stamp ?? "");
     writer.newPage();
     return writer;
   }
@@ -97,6 +99,23 @@ export class PdfWriter {
     this.page = this.doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     this.pages.push(this.page);
     this.y = 0;
+  }
+
+  /** How many pages there are so far: the current page's number. */
+  get pageCount(): number {
+    return this.pages.length;
+  }
+
+  /** Writes on an earlier page (numbered from 1), from its top, then carries on where it was. */
+  onPage(number: number, work: () => void): void {
+    const [page, y] = [this.page, this.y];
+    this.page = this.pages[number - 1];
+    this.y = 0;
+    try {
+      work();
+    } finally {
+      [this.page, this.y] = [page, y];
+    }
   }
 
   /** Room left on this page, above the footer. */
@@ -325,6 +344,10 @@ export class PdfWriter {
       const label = `${this.footerText}${this.footerText ? " · " : ""}Page ${index + 1} of ${count}`;
       const width = this.regular.widthOfTextAtSize(label, size);
       page.drawText(label, { x: PAGE_WIDTH - MARGIN - width, y: MARGIN - 12, size, font: this.regular, color: MUTED });
+      if (this.stamp) {
+        const stampWidth = this.bold.widthOfTextAtSize(this.stamp, 10);
+        page.drawText(this.stamp, { x: PAGE_WIDTH - MARGIN - stampWidth, y: PAGE_HEIGHT - MARGIN + 14, size: 10, font: this.bold, color: MUTED });
+      }
     });
     return this.doc.save();
   }
