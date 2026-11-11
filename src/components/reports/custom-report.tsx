@@ -149,15 +149,54 @@ export function StartCustomReport({ organisationId }: { organisationId: string }
 }
 
 export function CustomReportList({ organisationId, view }: { organisationId: string; view: CustomReportView }) {
-  const list = useApiData<{ reports: CustomReport[] }>("/api/custom-reports", { organisationId, view });
+  const { can } = useWorkspace();
+  const confirm = useConfirm();
+  const [version, setVersion] = useState(0);
+  const list = useApiData<{ reports: CustomReport[] }>("/api/custom-reports", { organisationId, view, v: version });
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Drafts can be deleted (CR7), a few at a time or all at once; published copies are archived instead.
+  const deletable = (list.data?.reports ?? []).filter((report) => report.kind === "draft");
+  const canDelete = can("bookkeeper") && deletable.length > 0;
+  async function remove(ids: string[]) {
+    const titles = deletable.filter((report) => ids.includes(report.id)).map((report) => report.title);
+    if (ids.length === 0) return;
+    const ok = await confirm(
+      ids.length === 1 ? `Delete the draft "${titles[0]}"? This can't be undone.` : `Delete these ${ids.length} drafts? This can't be undone.`,
+      { title: ids.length === 1 ? "Delete draft" : "Delete drafts", confirmLabel: "Delete", danger: true },
+    );
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    try {
+      for (const id of ids) await api(`/api/custom-reports/${id}`, { method: "DELETE", query: { organisationId } });
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setChosen([]);
+      setBusy(false);
+      setVersion((value) => value + 1);
+    }
+  }
   const empty = {
     drafts: "No draft reports. Start one under Custom.",
     published: "No published reports. Publish a draft to keep a copy that never changes.",
     archived: "Nothing archived.",
   }[view];
   return (
-    <Card title={{ drafts: "Drafts", published: "Published", archived: "Archived" }[view]}>
+    <Card
+      title={{ drafts: "Drafts", published: "Published", archived: "Archived" }[view]}
+      actions={
+        canDelete ? (
+          <Button variant="secondary" disabled={busy || chosen.length === 0} onClick={() => void remove(chosen)}>
+            {chosen.length > 0 ? `Delete ${chosen.length} selected` : "Delete selected"}
+          </Button>
+        ) : undefined
+      }
+    >
       {list.error ? <Notice tone="error">{list.error}</Notice> : null}
+      {error ? <Notice tone="error">{error}</Notice> : null}
       {!list.data && !list.error ? <p className={ui.muted}>Loading…</p> : null}
       {list.data && list.data.reports.length === 0 ? <Empty>{empty}</Empty> : null}
       {list.data && list.data.reports.length > 0 ? (
@@ -165,15 +204,38 @@ export function CustomReportList({ organisationId, view }: { organisationId: str
           <table className={ui.table}>
             <thead>
               <tr>
+                {canDelete ? (
+                  <th>
+                    <input
+                      type="checkbox"
+                      aria-label="Select every draft"
+                      checked={chosen.length > 0 && chosen.length === deletable.length}
+                      onChange={(event) => setChosen(event.target.checked ? deletable.map((report) => report.id) : [])}
+                    />
+                  </th>
+                ) : null}
                 <th>Title</th>
                 <th>Started from</th>
                 <th>{view === "published" ? "Published" : "Last changed"}</th>
                 {view === "archived" ? <th>Was</th> : null}
+                {canDelete ? <th aria-label="Delete" /> : null}
               </tr>
             </thead>
             <tbody>
               {list.data.reports.map((report) => (
                 <tr key={report.id}>
+                  {canDelete ? (
+                    <td>
+                      {report.kind === "draft" ? (
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${report.title}`}
+                          checked={chosen.includes(report.id)}
+                          onChange={(event) => setChosen(event.target.checked ? [...chosen, report.id] : chosen.filter((id) => id !== report.id))}
+                        />
+                      ) : null}
+                    </td>
+                  ) : null}
                   <td>
                     <Link href={pageHref(report.id)}>{report.title}</Link>
                   </td>
@@ -182,6 +244,15 @@ export function CustomReportList({ organisationId, view }: { organisationId: str
                     {formatDateTime(report.publishedAt ?? report.updatedAt)} · {personName(report, "publishedBy") ?? personName(report, "updatedBy") ?? ""}
                   </td>
                   {view === "archived" ? <td>{report.kind === "published" ? <Badge tone="blue">Published</Badge> : <Badge>Draft</Badge>}</td> : null}
+                  {canDelete ? (
+                    <td>
+                      {report.kind === "draft" ? (
+                        <Button size="small" variant="secondary" disabled={busy} onClick={() => void remove([report.id])}>
+                          Delete
+                        </Button>
+                      ) : null}
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
