@@ -131,6 +131,11 @@ describeWithDatabase("AI keys that make drafts and post (decisions 346-348)", ()
 
   it("no tool deletes, voids, archives, rolls back, refunds or removes anything", () => {
     for (const tool of AI_TOOLS) {
+      // Remove & redo voids what a line created, after a preview, at Full access only: Jess asked for it (decision 1574).
+      if (tool.name === "remove_and_redo_bank_lines") {
+        expect(tool.level).toBe("full");
+        continue;
+      }
       const words = tool.name.split("_");
       for (const word of ["delete", "void", "archive", "unarchive", "rollback", "roll", "remove", "revoke", "undo", "unreconcile", "reopen", "dispose"]) {
         expect(words, tool.name).not.toContain(word);

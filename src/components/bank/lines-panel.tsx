@@ -106,6 +106,10 @@ export function StatementLinesPanel({
   const [plan, setPlan] = useState<Plan | null>(null);
   const [batchKey, setBatchKey] = useState(() => newIdempotencyKey("unreconcile"));
   const [batchBusy, setBatchBusy] = useState(false);
+  // Unreconcile selected (BK11), or Remove & redo (BK45): unreconcile and void what each line created.
+  const [mode, setMode] = useState<"unreconcile" | "redo">("unreconcile");
+  const [removePayments, setRemovePayments] = useState(false);
+  const batchPath = mode === "redo" ? "/api/bank-batches/remove-and-redo" : "/api/bank-batches/unreconcile";
   const [batchMessage, setBatchMessage] = useState<{ tone: "success" | "warning" | "error"; text: string; errors: string[] } | null>(null);
   const canChoose = can("bookkeeper");
   const choosable = (list.data?.lines ?? []).filter((line) => line.status === "reconciled").map((line) => line.id);
@@ -115,11 +119,14 @@ export function StatementLinesPanel({
     onChanged();
   }
 
-  async function previewUnreconcile() {
+  async function previewUnreconcile(chosen: "unreconcile" | "redo" = mode, payments = removePayments) {
+    setMode(chosen);
+    setRemovePayments(payments);
     setBatchBusy(true);
     setBatchMessage(null);
     try {
-      const answer = await api<{ plan: Plan }>("/api/bank-batches/unreconcile", { method: "POST", body: { organisationId, lineIds: [...selected] } });
+      const path = chosen === "redo" ? "/api/bank-batches/remove-and-redo" : "/api/bank-batches/unreconcile";
+      const answer = await api<{ plan: Plan }>(path, { method: "POST", body: { organisationId, lineIds: [...selected], removePayments: payments } });
       setPlan(answer.plan);
     } catch (caught) {
       setBatchMessage({ tone: "error", text: errorMessage(caught), errors: [] });
@@ -132,14 +139,14 @@ export function StatementLinesPanel({
     if (!plan) return;
     setBatchBusy(true);
     try {
-      const outcome = await api<RunOutcome>("/api/bank-batches/unreconcile", {
+      const outcome = await api<RunOutcome>(batchPath, {
         method: "POST",
-        body: { organisationId, lineIds: [...selected], previewHash: plan.hash, idempotencyKey: batchKey },
+        body: { organisationId, lineIds: [...selected], removePayments, previewHash: plan.hash, idempotencyKey: batchKey },
       });
       const errors = outcome.batch.actions.filter((action) => action.error).map((action) => `Line ${action.targetId}: ${action.error}`);
       setBatchMessage({
         tone: outcome.stopped || outcome.batch.counts.failed ? "warning" : "success",
-        text: `Unreconcile selected (batch ${outcome.batch.id}): ${outcomeText(outcome)}`,
+        text: `${mode === "redo" ? "Remove & redo" : "Unreconcile selected"} (batch ${outcome.batch.id}): ${outcomeText(outcome)}`,
         errors,
       });
       setPlan(null);
@@ -206,9 +213,15 @@ export function StatementLinesPanel({
           <span>
             {selected.size} line{selected.size === 1 ? "" : "s"} chosen
           </span>
-          <Button size="small" disabled={batchBusy} onClick={() => void previewUnreconcile()}>
+          <Button size="small" disabled={batchBusy} onClick={() => void previewUnreconcile("unreconcile", false)}>
             {batchBusy ? "Checking…" : "Unreconcile selected…"}
           </Button>
+          <Button size="small" disabled={batchBusy} onClick={() => void previewUnreconcile("redo", removePayments)}>
+            Remove &amp; redo…
+          </Button>
+          <label className={ui.checkbox}>
+            <input type="checkbox" checked={removePayments} onChange={(event) => setRemovePayments(event.target.checked)} /> With Remove &amp; redo, void payments too
+          </label>
           <Button size="small" variant="secondary" onClick={() => setSelected(new Set())}>
             Clear
           </Button>

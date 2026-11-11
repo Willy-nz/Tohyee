@@ -20480,4 +20480,14 @@ alter table ledger_journals add constraint ledger_journals_origin_check
                     'opening_balance', 'payroll', 'livestock_valuation', 'livestock_rations', 'recode', 'history', 'sales_when_sent'));
 `,
   },
+  {
+    version: "0266",
+    name: "bank_redo_batches",
+    sql: `
+-- Remove & redo (BK45, decision 1574): a batch of its own, undoing no batch.
+alter table batches drop constraint batches_kind_check;
+alter table batches add constraint batches_kind_check
+  check (kind in ('bank_reconcile', 'bank_unreconcile', 'bank_undo', 'bank_redo', 'bank_coding', 'mixed_use_review'));
+`,
+  },
 ];
