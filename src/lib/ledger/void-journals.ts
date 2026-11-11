@@ -76,13 +76,13 @@ export async function planVoidJournals(tx: OrgTx, input: { journalIds: unknown; 
 /** Voids them (VJ3), all or none: needs the preview's hash. A retry with the same key does nothing more. */
 export async function voidJournals(
   tx: OrgTx,
-  input: { journalIds: unknown; voidDate?: unknown; reason: unknown; previewHash: unknown; idempotencyKey: unknown; source?: string },
+  input: { journalIds: unknown; voidDate?: unknown; reason?: unknown; previewHash: unknown; idempotencyKey: unknown; source?: string },
 ): Promise<{ created: boolean; voided: Array<{ journalId: string; reversalJournalId: string }> }> {
   const key = requireIdempotencyKey(input.idempotencyKey);
   const reason = optionalString(input.reason, "reason", { maxLength: 300 });
   const commandSource = `void:${input.source ?? "ui"}`;
   const earlier = await tx.query<{ id: string; related_journal_id: string }>(
-    "select id::text, related_journal_id::text from ledger_journals where command_source = $1 and idempotency_key like $2 order by id",
+    "select ledger_journals.id::text as id, related_journal_id::text as related_journal_id from ledger_journals where command_source = $1 and idempotency_key like $2 order by ledger_journals.id",
     [commandSource, `${key}:%`],
   );
   if (earlier.rows.length > 0) return { created: false, voided: earlier.rows.map((row) => ({ journalId: row.related_journal_id, reversalJournalId: row.id })) };
