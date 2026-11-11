@@ -13788,6 +13788,17 @@ migration 0265.
       "Already in the bank's balance" and not taken off. Claude's call on
       the details, not yet reviewed.
 
+### Remove & redo (11 Nov 2026; decision 1574)
+
+1574. **Remove & redo on any reconciled lines (BK45).** Jess asked for it to
+      recode 82 Shopify payout lines. After a preview, each line is
+      unreconciled and what it created (spend or receive money, a transfer)
+      is voided on its date, keeping the record; matches stay; payments are
+      voided only when chosen. Bookkeepers in Tohyee, and a Full access AI
+      key (remove_and_redo_bank_lines), which changes decision 1277's "an AI
+      never voids" for this tool, at Jess's request. A batch of its own
+      (bank_redo, tenant migration 0266). Not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

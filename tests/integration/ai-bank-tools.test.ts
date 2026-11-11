@@ -464,7 +464,10 @@ describeWithDatabase("AI keys reconciling bank lines (decision 488, AIB1-AIB8)",
   it("no tool deletes, excludes or switches anything off", () => {
     for (const tool of AI_TOOLS) {
       for (const word of ["delete", "void", "archive", "exclude", "deactivate", "unreconcile"]) expect(tool.name.split("_"), tool.name).not.toContain(word);
-      if (tool.level !== "read" && !tool.readOnly) expect(JSON.stringify(tool.inputSchema), tool.name).not.toMatch(/isActive|archiv|void|delete|"excluded"/i);
+      // Remove & redo voids what a line created, after a preview: Jess asked for it (decision 1574).
+      if (tool.level !== "read" && !tool.readOnly && tool.name !== "remove_and_redo_bank_lines") {
+        expect(JSON.stringify(tool.inputSchema), tool.name).not.toMatch(/isActive|archiv|void|delete|"excluded"/i);
+      }
     }
   });
 

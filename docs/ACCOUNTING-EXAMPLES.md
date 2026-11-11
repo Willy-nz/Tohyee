@@ -2463,6 +2463,19 @@ isn't reconciled.
   the feed's balance, is still not yet on the statement: Tohyee 957.77 -
   20.00 - 50.00 = **887.77**. Only when the balance is the feed's; a line's
   running balance is as BK20.
+- **BK45** Remove & redo (Jess, 11 Nov 2026: 82 Shopify payout lines coded
+  as income need matching to the payout transfers instead). On reconciled
+  lines, after a preview: each line is unreconciled (with its split, and
+  with the other side of a transfer it made), and what the line itself
+  created is voided on the line's date, keeping both: the 21 May -46.00
+  spend money in BK20 is voided (Dr 1000 46.00 / Cr 6120 40.00 / Cr 2100
+  6.00). A line matched to something already posted (the 1 May capital) is
+  only unreconciled. A line that recorded payments (the 20 May 115.00 on
+  INV-0001) is only unreconciled unless "also void the payments" is
+  chosen; then the payment is voided on the line's date and the invoice is
+  owing again (**115.00**). Locked periods are refused as BK13. Several
+  lines go in one preview and one batch. As Xero's Remove & Redo, except
+  that it voids rather than deletes. Not yet reviewed.
 
 ### Bulk coding ("cash coding") (examples not yet approved by Jess)
 

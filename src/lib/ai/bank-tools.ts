@@ -9,10 +9,12 @@ import {
   inSavepoint,
   MAX_BATCH_ACTIONS,
   matchLine,
+  planRemoveAndRedo,
   planUnreconcile,
   RECONCILE_ACTIONS,
   resumeBankBatch,
   startReconcileBatch,
+  startRemoveAndRedo,
   startUnreconcileBatch,
   transferAndMatch,
 } from "@/lib/bank/batches";
@@ -292,6 +294,43 @@ async function unmatchLines(run: OrgRunner, args: Record<string, unknown>, conte
   }
   return batchAnswer(
     await startUnreconcileBatch(run, { lineIds: args.lineIds, previewHash: args.previewHash, idempotencyKey: idempotencyKey(args.idempotencyKey), source: context.source }),
+  );
+}
+
+/** remove_and_redo_bank_lines (BK45, decision 1574): the preview, or (with its hash) the batch. */
+async function redoLines(run: OrgRunner, args: Record<string, unknown>, context: ToolContext) {
+  if (args.previewHash == null || args.previewHash === "") {
+    const plan = await run((tx) => planRemoveAndRedo(tx, args.lineIds, { removePayments: args.removePayments }));
+    return {
+      preview: true,
+      previewHash: plan.hash,
+      lines: plan.counts.lines,
+      voids: plan.counts.voids,
+      blocked: plan.counts.blocked,
+      items: plan.items.map((item) => ({
+        lineId: item.lineId,
+        account: `${item.accountCode} ${item.accountName}`,
+        date: item.date,
+        amount: item.amount,
+        description: item.description,
+        reconciledWith: item.reconciledWith,
+        voids: item.voids?.label ?? null,
+        voidsPayments: item.paymentVoids.map((entry) => entry.label),
+        alsoUnreconciled: item.alsoLines.map((line) => ({ lineId: line.lineId, date: line.date, amount: line.amount, why: line.why })),
+        notes: item.notes,
+        blocked: item.blocked,
+      })),
+      next: "Check this matches what the person asked for. To go ahead, call remove_and_redo_bank_lines again with the same lineIds and removePayments, this previewHash and a new idempotencyKey.",
+    };
+  }
+  return batchAnswer(
+    await startRemoveAndRedo(run, {
+      lineIds: args.lineIds,
+      removePayments: args.removePayments,
+      previewHash: args.previewHash,
+      idempotencyKey: idempotencyKey(args.idempotencyKey),
+      source: context.source,
+    }),
   );
 }
 
@@ -722,6 +761,27 @@ export const BANK_WRITE_TOOLS: readonly AiTool[] = [
     },
     async run(tx, args, context) {
       return unmatchLines(savepointRunner(tx), args, context);
+    },
+  },
+  {
+    name: "remove_and_redo_bank_lines",
+    title: "Remove & redo bank lines",
+    level: "full",
+    description: `Remove & redo on up to ${MAX_BULK_LINES} reconciled statement lines, anyone's (Jess, 11 Nov 2026): each is unreconciled, and what the line itself created (spend or receive money, a transfer) is voided on the line's date, keeping the record, so the line can be coded again. A match to something already posted is only unreconciled. Payments the line recorded on invoices or bills are only voided with removePayments: true (the invoice or bill is then owing again). Lines in a locked period are refused. First call it without previewHash to see what it will do and check it matches what was asked; then call it again with the previewHash it gave, the same lineIds and removePayments, and a new idempotencyKey. It's done as a batch: see get_bank_batch and resume_bank_batch.`,
+    inputSchema: schema(
+      {
+        lineIds: { type: "array", minItems: 1, maxItems: MAX_BULK_LINES, items: { type: "string" } },
+        removePayments: { type: "boolean", description: "Also void payments the lines recorded. Default false." },
+        previewHash: { type: "string", description: "From the preview. Left out, nothing changes and the preview is the answer." },
+        idempotencyKey: IDEMPOTENCY,
+      },
+      ["lineIds"],
+    ),
+    async runSteps(run, args, context) {
+      return redoLines(run, args, context);
+    },
+    async run(tx, args, context) {
+      return redoLines(savepointRunner(tx), args, context);
     },
   },
   {

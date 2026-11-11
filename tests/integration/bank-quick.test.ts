@@ -21,6 +21,7 @@ import { recordPayment, voidPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, getInvoice } from "@/lib/invoices/service";
 import { getJournal, postJournal } from "@/lib/ledger/journals";
 import { bankReconciliationReport } from "@/lib/reports/bank-reconciliation";
+import { planRemoveAndRedo, startRemoveAndRedo } from "@/lib/bank/batches";
 import { calculateGstReturn } from "@/lib/reports/gst-return";
 import { dec, sub, toFixedString } from "@/lib/money/decimal";
 import { updatePeriodControls } from "@/lib/ledger/period-controls";
@@ -555,6 +556,37 @@ describeWithDatabase("quicker bank reconciliation", () => {
     // After the feed's balance, it's not yet on the statement as before.
     await receive("2026-05-12", "50.00");
     expect(await report()).toMatchObject({ tohyeeNotInBank: { total: "50.00" }, inBankAlready: { total: "807.77" }, expectedStatementBalance: "887.77", explained: true });
+  });
+
+  it("BK45: Remove & redo voids what the line created, keeps matches, and voids payments only when asked", async () => {
+    const world = await bk20World();
+    const fuel = await world.lineOn("-46.00");
+    const sale = await world.lineOn("115.00");
+    const capital = await world.lineOn("1000.00");
+    const spend = (await world.sql("select id::text from bank_transactions where status = 'posted' and kind = 'spend'")).rows[0].id as string;
+    const plan = await world.asUser(bookkeeper, (tx) => planRemoveAndRedo(tx, [fuel.id, sale.id, capital.id], { removePayments: false }));
+    expect(plan.items.map((item) => [item.amount, item.voids?.kind ?? null, item.paymentVoids.length, item.blocked])).toEqual([
+      ["-46.00", "bank_transaction", 0, null],
+      ["115.00", null, 0, null],
+      ["1000.00", null, 0, null],
+    ]);
+    expect(plan.items[1].notes.join(" ")).toContain("payments stay");
+    // The payment too, when asked: the invoice is owing again.
+    const withPayments = await world.asUser(bookkeeper, (tx) => planRemoveAndRedo(tx, [sale.id], { removePayments: true }));
+    expect(withPayments.items[0].paymentVoids.map((entry) => entry.kind)).toEqual(["customer"]);
+    await startRemoveAndRedo(world.run, { lineIds: [sale.id], removePayments: true, previewHash: withPayments.hash, idempotencyKey: key("redo"), source: "test" });
+    expect((await world.lineOn("115.00")).status).toBe("unreconciled");
+    expect((await world.asUser(viewer, (tx) => getInvoice(tx, world.i1.id))).amountDue).toBe("115.00");
+    // The rest: the spend money is voided on the line's date; the capital match only unreconciled.
+    const rest = await world.asUser(bookkeeper, (tx) => planRemoveAndRedo(tx, [fuel.id, capital.id], { removePayments: false }));
+    await expect(startRemoveAndRedo(world.run, { lineIds: [fuel.id, capital.id], removePayments: false, previewHash: "stale", idempotencyKey: key("redo"), source: "test" })).rejects.toThrow("since the preview");
+    await startRemoveAndRedo(world.run, { lineIds: [fuel.id, capital.id], removePayments: false, previewHash: rest.hash, idempotencyKey: key("redo"), source: "test" });
+    expect([(await world.lineOn("-46.00")).status, (await world.lineOn("1000.00")).status]).toEqual(["unreconciled", "unreconciled"]);
+    expect((await world.asUser(viewer, (tx) => getBankTransaction(tx, spend))).status).toBe("voided");
+    const voids = await world.sql("select posting_date::text from ledger_journals where correction_kind = 'reversal' order by id");
+    expect(voids.rows.map((row) => row.posting_date)).toEqual(["2026-05-20", "2026-05-21"]);
+    // The capital journal is still posted (only unreconciled).
+    expect((await world.sql("select count(*)::text as n from ledger_journals where reference = 'Capital' and correction_kind is null")).rows[0].n).toBe("1");
   });
 
   it("BK21: statement balance not known, from a bank feed balance, and a difference that isn't explained", async () => {

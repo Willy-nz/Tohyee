@@ -154,6 +154,7 @@ export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel;
   { name: "review_mixed_use_line", level: "full", words: "Review a line on a personal or mixed-use account as business, private, split or a refund (posting what the screen would)" },
   { name: "review_mixed_use_lines", level: "full", words: "Review up to 100 lines on personal or mixed-use accounts as a batch" },
   { name: "unreview_mixed_use_line", level: "full", words: "Undo its own review within 24 hours (voiding what it posted on the line's date); anything else is for a person" },
+  { name: "remove_and_redo_bank_lines", level: "full", words: "Remove & redo up to 100 reconciled lines after showing what it will do: unreconcile them and void what each line created (payments only if asked)" },
   { name: "unmatch_bank_lines", level: "full", words: "Unreconcile up to 100 lines (anyone's) after showing what it will do, as Unreconcile selected does; nothing is posted or voided" },
   { name: "create_bank_rule", level: "full", words: "Make a bank rule (it only suggests)" },
   { name: "update_bank_rule", level: "full", words: "Edit a bank rule (not switch it off or delete it)" },
