@@ -13942,6 +13942,17 @@ migration 0265.
       are. Hiding voided pairs from lists is issue 10, next. Not yet
       reviewed.
 
+### Payment gateway deposits (12 Nov 2026; decision 1591)
+
+1591. **A gateway's deposit settles its orders (GS1-GS6).** Jess's issue 5.
+      A deposit naming a payment gateway with its own clearing account
+      (Afterpay, say) is matched to the order payments in that account it
+      settles: one, or two together, from the 14 days before, with a fee of
+      more than nothing and at most 10% plus 1.00. Never by amount alone; a
+      person confirms. Settling reconciles the line as a transfer from the
+      clearing account and posts the fee from it, with no GST (for Jess to
+      confirm), to the store's fees account. Not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

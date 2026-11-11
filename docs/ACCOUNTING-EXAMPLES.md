@@ -21649,6 +21649,43 @@ Built (decisions 1326-1333, tenant migration 0222). Tests:
 `tests/unit/sales-platform-setup.test.ts` and
 `tests/integration/sales-platform-payout-gateways.test.ts`.
 
+## Payment gateway deposits, such as Afterpay (GS1-GS6; Jess, 11 Nov 2026, issue 5; the details are Claude's, not yet reviewed)
+
+A gateway with its own clearing account (SPC43) pays each order into the
+bank on its own, less its fee, so its deposits never match a Shopify
+payout. Each deposit is now matched to the order payments it settles in
+that clearing account, and the fee is posted, as payout fees are (SPC15).
+
+**Question for Jess:** the fee is posted with no GST, as Shopify's payout
+fees are. Whether each gateway's fee has GST is yours to confirm.
+
+Setup: as SPC42-SPC43. afterpay → **1020 Afterpay clearing**. Fees account
+6020. Orders **#1102** (2 Oct, 46.00, GST 6.00) and **#1106** (3 Oct, 23.00,
+GST 3.00), both paid by Afterpay: 1020 holds **69.00**. Made-up numbers.
+
+- **GS1 Named on the line.** A deposit is looked at only when its text has
+  the gateway's id or the first word of its title (four letters or more):
+  "Afterpay Nz Limited 935893" is; "Countdown" for the same 42.94 isn't.
+- **GS2 The orders it settles.** Payments in 1020 from the 14 days before the
+  deposit, not yet settled. Single payments first; two together only when
+  none fits alone.
+- **GS3 A plausible fee.** The payments less the deposit must be more than
+  0.00 and at most 10% of them plus 1.00. 42.94 on 4 Oct fits #1102 (fee
+  3.06) and nothing else: "afterpay settling #1102 (46.00), less a fee of
+  3.06." 99.00 fits nothing: left for a person. More than one fit: the
+  person chooses.
+- **GS4 Settled.** The person confirms. The line is reconciled as a transfer
+  **Dr 1000 42.94 / Cr 1020 42.94**, and a spend from 1020 **Dr 6020 3.06 /
+  Cr 1020 3.06** (no GST; contact named after the gateway). 1020 holds
+  **23.00**. Sent again with the same key: nothing more. #1102 can't be
+  settled by another deposit. The next deposit, 21.32 on 5 Oct, fits #1106
+  (fee 1.68); settled, 1020 is **0.00**.
+- **GS5 Over MCP.** `list_sales_platform_payout_matches` lists such a
+  deposit as `gateway_settlement`, with the payments that fit, not
+  `not_a_payout`. It doesn't reconcile.
+- **GS6 Undone.** Unmatching the deposit frees #1102 to be settled again.
+  The fee spend stays until it's voided.
+
 ## Payout matches from a reconnected store, and what a review over MCP found (SPR11-SPR15; built by Claude 4 Nov 2026 for #570-#572 and #578, as Xero/A2X do, not yet reviewed)
 
 A read-only review of a live organisation over MCP found each payout
