@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
-import { ValidationError } from "@/lib/errors";
+import { ConflictError, ValidationError } from "@/lib/errors";
 import { organisationSourceFolder } from "@/lib/analytics/folders";
 import { analyticsFilePath, analyticsWorkFolder } from "@/lib/analytics/paths";
 import {
@@ -126,6 +126,34 @@ export function analyticsTempDirectoryLimit(): string {
   return sizeSetting("TOHYEE_ANALYTICS_TEMP_LIMIT", DEFAULT_TEMP_DIRECTORY_LIMIT);
 }
 
+/** DuckDB's error when another process has the file open (Windows and Linux wording). */
+const LOCKED = /being used by another process|Could not set lock on file|Conflicting lock is held/i;
+
+/**
+ * Says plainly that another Tohyee process has the analytics file (Jess's
+ * issue 3, 11 Nov 2026), naming its process number when DuckDB gives it.
+ */
+export function analyticsLockedMessage(error: unknown): string | null {
+  const text = error instanceof Error ? error.message : String(error);
+  if (!LOCKED.test(text)) return null;
+  const pid = /PID (\d+)/.exec(text)?.[1];
+  return `Analytics is locked by another Tohyee process${pid ? ` (process ${pid})` : ""}, usually one left running after an update. Restart Tohyee (or the computer) and try again.`;
+}
+
+/** Opens the file, waiting a little while another process lets go of it (an old one stopping after an update). */
+export async function createWaitingForLock<T>(create: () => Promise<T>, waits: readonly number[] = [500, 1500, 3000]): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await create();
+    } catch (error) {
+      const locked = analyticsLockedMessage(error);
+      if (!locked) throw error;
+      if (attempt >= waits.length) throw new ConflictError(locked);
+      await new Promise((resolve) => setTimeout(resolve, waits[attempt]));
+    }
+  }
+}
+
 async function open(organisationId: string, file: string, folder: string | null): Promise<DuckDBInstance> {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const work = analyticsWorkFolder(organisationId);
@@ -133,7 +161,7 @@ async function open(organisationId: string, file: string, folder: string | null)
   const { DuckDBInstance } = await duckdb();
   // Extensions are never downloaded at run time (the server may be
   // offline, and it's code from the internet).
-  const instance = await DuckDBInstance.create(file, { autoinstall_known_extensions: "false" });
+  const instance = await createWaitingForLock(() => DuckDBInstance.create(file, { autoinstall_known_extensions: "false" }));
   // Defence in depth (decision 377): DuckDB may only touch this
   // organisation's source folder and its own work folder, and the setting
   // can't be changed back, so no query can read other files on the server

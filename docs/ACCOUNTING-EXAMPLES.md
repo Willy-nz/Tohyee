@@ -2476,6 +2476,15 @@ isn't reconciled.
   owing again (**115.00**). Locked periods are refused as BK13. Several
   lines go in one preview and one batch. As Xero's Remove & Redo, except
   that it voids rather than deletes. Not yet reviewed.
+- **BK46** Pairs that cancel out (Jess, 11 Nov 2026, issue 1, minor; the
+  details are Claude's, not yet reviewed). In "not yet on the statement", a
+  10 Oct 776.73 payout transfer and a 12 Oct -776.73 journal removing the
+  same payout counted twice cancel exactly. "Leave out pairs that cancel
+  out in the same month" (on by default) hides both and says how many
+  pairs; the totals don't change. Each item pairs once, in date order: a
+  second -776.73 on 14 Oct stays. A 31 Oct 50.00 and a 1 Nov -50.00 are in
+  different months and stay. The base amounts must cancel too. Off, every
+  item shows; printing follows the screen.
 
 ### Void for manual journals (VJ1-VJ5; Jess, 11 Nov 2026, issue 9; the details are Claude's, not yet reviewed)
 
@@ -6589,9 +6598,10 @@ are New Zealand dates (NZDT, UTC+13).
 - **SPC23** Refused rather than guessed (logged, nothing posted): a test
   order; an order without a customer (guest checkout) when no contact is
   chosen for them (SPC24); an order in another
-  currency (store or presentment not NZD); an order with a gift card line;
+  currency (store or presentment not NZD); an order with a gift card line,
+  or a payment by a gift card, until gift cards are set up (GC1-GC5);
   a paid order whose total Tohyee can't reproduce (e.g. with a tip or
-  duties); a payment by a gift card; a partly paid order (it waits); a
+  duties); a partly paid order (it waits); a
   refund with an order adjustment; a payout that's a withdrawal.
 
 - **SPC24** Guest checkouts (decision 317). An admin chooses the
@@ -6909,6 +6919,69 @@ Built (decisions 1334-1341). Tests:
 `tests/integration/shopify-import-fixes.test.ts` (SPC38-SPC42) and the
 unit tests `sales-platform-customer-matches`, `sales-platform-setup`,
 `sales-platform-orders` and `sales-platforms`.
+
+### Shopify products as stock or non-stock (SSD1-SSD3; Jess, 11 Nov 2026, issue 6; the details are Claude's, not yet reviewed)
+
+Products Shopify tracks stock for came in as stock items with nothing on
+hand, so with negative stock off their orders waited and were never
+invoiced. A made-to-order shop now says so, and a stuck order shows one
+warning with a fix. Made-up store, same as SPC17.
+
+- **SSD1** Connecting, the shop answers "Do you track stock in Shopify?"
+  with **No, things are made to order** (or later unticks "I keep stock in
+  Shopify" under What comes in). Gift box (SKU GIFTBOX, tracked in Shopify)
+  comes in as **non-stock** item GIFTBOX. Order **#1004** (5004), 1 ×
+  GIFTBOX at 34.50, tax 4.50, paid: invoice **Dr 1100 34.50 / Cr 4000 30.00
+  / Cr 2100 4.50**, and no cost of sales. Items already brought in keep
+  their type. Answering Yes (the default, and how stores connected before
+  this) is SPC17.
+- **SSD2** With Yes, and nothing on hand for GIFTBOX, #1004 fails at the
+  invoice ("There's no stock on hand to take out"). The store's settings
+  show one warning: "1 order isn't invoiced because there's no stock on
+  hand to take out (#1004)", with **Make 1 product non-stock** and **Or
+  allow negative stock in Settings**. It lists the store's orders with no
+  invoice whose last try failed for no stock, and the store's stock items
+  that have never had stock in or out. Bookkeepers see it; viewers don't.
+- **SSD3** An admin chooses **Make 1 product non-stock** and confirms.
+  GIFTBOX becomes non-stock, the store stops making new stock items (as
+  SSD1), and the next sync tries #1004 again: posted as in SSD1. The
+  warning goes. A stock item that has had stock in or out isn't changed;
+  allowing negative stock (or entering the stock on hand) is the way
+  through for those.
+
+### Shopify gift cards (GC1-GC5; Jess, 11 Nov 2026, issue 7; the details are Claude's, not yet reviewed)
+
+A gift card sold isn't a sale: the money is owed to whoever holds the card
+until it's spent. Shopify marks gift card products (`isGiftCard`) and
+payments made with one (gateway `gift_card`). An admin chooses a current
+liability to hold them in; until then both are refused, as before (SPC23).
+Made-up store, as SPC11.
+
+**Question for Jess (law):** these examples put no GST on the gift card when
+it's sold and count GST on what it's spent on, as Shopify's tax lines do.
+Whether that's right for every voucher (GST Act s 5(11G)-(11H)) is yours to
+confirm.
+
+- **GC1** Order **#1301** (5301), Aroha, 1 × "Gift card - $50" at 50.00,
+  no tax, paid by card through Shopify Payments: invoice **Dr 1100 50.00 /
+  Cr 2360 50.00**, tax code NONE (no GST, not on the GST return), no item;
+  payment **Dr 1010 50.00 / Cr 1100 50.00**. Nothing is held for sending.
+- **GC2** Order **#1302**, 2 × Large candle 46.00 (GST 6.00), paid 30.00
+  with a gift card and 16.00 by card: invoice as SPC11 (**Dr 1100 46.00 / Cr
+  4000 40.00 / Cr 2100 6.00**); a credit note "#1302 gift card" (NONE)
+  **Dr 2360 30.00 / Cr 1100 30.00** applied to the invoice; payment **Dr
+  1010 16.00 / Cr 1100 16.00**. 2360 now holds 20.00.
+- **GC3** Order **#1303**, 1 × Large candle 23.00, paid wholly with a gift
+  card: the invoice and a 23.00 gift card credit note; no payment. 2360
+  holds -3.00 (a card sold before the start date was spent).
+- **GC4** #1301's gift card is refunded (50.00 back to the customer's
+  card): a credit note **Dr 2360 50.00 / Cr 1100 50.00** (NONE), refunded
+  from 1010. A refund back onto a gift card is still refused.
+- **GC5** The account must be a liability that isn't a bank account or the
+  store's Income in advance account; "Add 2360 Gift cards" makes one.
+  Choosing it tries again, at the next sync, every order whose last try was
+  refused for a gift card (#1301 above). Stop puts back the refusal for new
+  orders; what's posted stays.
 
 ### WooCommerce orders into the accounts (item 7 part 2, approved by Jess, 5 Oct 2026)
 
@@ -21695,6 +21768,43 @@ Built (decisions 1326-1333, tenant migration 0222). Tests:
 `tests/unit/sales-platform-payout-match.test.ts`,
 `tests/unit/sales-platform-setup.test.ts` and
 `tests/integration/sales-platform-payout-gateways.test.ts`.
+
+## Payment gateway deposits, such as Afterpay (GS1-GS6; Jess, 11 Nov 2026, issue 5; the details are Claude's, not yet reviewed)
+
+A gateway with its own clearing account (SPC43) pays each order into the
+bank on its own, less its fee, so its deposits never match a Shopify
+payout. Each deposit is now matched to the order payments it settles in
+that clearing account, and the fee is posted, as payout fees are (SPC15).
+
+**Question for Jess:** the fee is posted with no GST, as Shopify's payout
+fees are. Whether each gateway's fee has GST is yours to confirm.
+
+Setup: as SPC42-SPC43. afterpay → **1020 Afterpay clearing**. Fees account
+6020. Orders **#1102** (2 Oct, 46.00, GST 6.00) and **#1106** (3 Oct, 23.00,
+GST 3.00), both paid by Afterpay: 1020 holds **69.00**. Made-up numbers.
+
+- **GS1 Named on the line.** A deposit is looked at only when its text has
+  the gateway's id or the first word of its title (four letters or more):
+  "Afterpay Nz Limited 935893" is; "Countdown" for the same 42.94 isn't.
+- **GS2 The orders it settles.** Payments in 1020 from the 14 days before the
+  deposit, not yet settled. Single payments first; two together only when
+  none fits alone.
+- **GS3 A plausible fee.** The payments less the deposit must be more than
+  0.00 and at most 10% of them plus 1.00. 42.94 on 4 Oct fits #1102 (fee
+  3.06) and nothing else: "afterpay settling #1102 (46.00), less a fee of
+  3.06." 99.00 fits nothing: left for a person. More than one fit: the
+  person chooses.
+- **GS4 Settled.** The person confirms. The line is reconciled as a transfer
+  **Dr 1000 42.94 / Cr 1020 42.94**, and a spend from 1020 **Dr 6020 3.06 /
+  Cr 1020 3.06** (no GST; contact named after the gateway). 1020 holds
+  **23.00**. Sent again with the same key: nothing more. #1102 can't be
+  settled by another deposit. The next deposit, 21.32 on 5 Oct, fits #1106
+  (fee 1.68); settled, 1020 is **0.00**.
+- **GS5 Over MCP.** `list_sales_platform_payout_matches` lists such a
+  deposit as `gateway_settlement`, with the payments that fit, not
+  `not_a_payout`. It doesn't reconcile.
+- **GS6 Undone.** Unmatching the deposit frees #1102 to be settled again.
+  The fee spend stays until it's voided.
 
 ## Payout matches from a reconnected store, and what a review over MCP found (SPR11-SPR15; built by Claude 4 Nov 2026 for #570-#572 and #578, as Xero/A2X do, not yet reviewed)
 

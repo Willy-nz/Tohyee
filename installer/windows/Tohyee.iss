@@ -133,6 +133,11 @@ begin
   Exec(PowerShellExe(), '-NoProfile -Command "Stop-Service -Name Tohyee -Force -ErrorAction SilentlyContinue; Stop-Service -Name TohyeePostgres -Force -ErrorAction SilentlyContinue"',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM TohyeeTray.exe /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  { A Tohyee node process left running (one that didn't stop with the service) keeps the analytics files locked
+    after an update (Jess's issue 3, Nov 2026): stop any node.exe started from this install's own node folder,
+    and nothing else, then give Windows a moment to let go of the files. }
+  Exec(PowerShellExe(), '-NoProfile -Command "$own = Join-Path ''' + ExpandConstant('{app}') + ''' ''node\node.exe''; Get-Process -Name node -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $own } | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Result := '';
 end;
 

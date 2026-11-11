@@ -138,6 +138,7 @@ type ConnectForm = {
   consumerSecret: string;
   customers: CustomerChoice;
   syncProducts: boolean;
+  stockItems: boolean;
 };
 
 const EMPTY_CONNECT: ConnectForm = {
@@ -152,6 +153,7 @@ const EMPTY_CONNECT: ConnectForm = {
   // Decision 1334: only customers who have ordered, unless the person chooses otherwise.
   customers: "buyers",
   syncProducts: true,
+  stockItems: true,
 };
 
 /** The draft a connection's saved settings and the suggestions give (nothing chosen is overwritten). */
@@ -294,9 +296,10 @@ export function StoreSetup({
               ...(f.authMethod === "access_token" ? { accessToken: f.accessToken, apiSecret: f.apiSecret } : { clientId: f.clientId, clientSecret: f.clientSecret }),
               ...customerChoiceSettings(f.customers),
               syncProducts: f.syncProducts,
+              stockItems: f.syncProducts && f.stockItems,
             };
       const made = (await api<{ connection: SalesPlatformConnection }>("/api/sales-platforms/connections", { method: "POST", body })).connection;
-      setConnectForm({ ...EMPTY_CONNECT, customers: f.customers, syncProducts: f.syncProducts });
+      setConnectForm({ ...EMPTY_CONNECT, customers: f.customers, syncProducts: f.syncProducts, stockItems: f.stockItems });
       setConnection(made);
       setSaved(`Connected ${made.storeName ?? made.storeDomain}.`);
       go("start");
@@ -654,6 +657,26 @@ function ImportStep({ form, onChange }: { form: ConnectForm; onChange: (form: Co
       <label className={ui.checkbox}>
         <input type="checkbox" checked={form.syncProducts} onChange={(event) => onChange({ ...form, syncProducts: event.target.checked })} /> Products, as items
       </label>
+      {form.syncProducts ? (
+        // Decision 1589 (SSD1): made-to-order shops say no, so nothing waits for stock that was never counted.
+        <fieldset className={styles.customerChoice}>
+          <legend>Do you track stock in Shopify?</legend>
+          <label className={styles.customerOption}>
+            <input type="radio" name="new-store-stock" checked={form.stockItems} onChange={() => onChange({ ...form, stockItems: true })} />
+            <span>
+              <strong>Yes</strong>
+              <span className={ui.muted}>Products Shopify tracks stock for become stock items. Put what&apos;s on hand into Tohyee before orders come in.</span>
+            </span>
+          </label>
+          <label className={styles.customerOption}>
+            <input type="radio" name="new-store-stock" checked={!form.stockItems} onChange={() => onChange({ ...form, stockItems: false })} />
+            <span>
+              <strong>No, things are made to order</strong>
+              <span className={ui.muted}>Every product becomes a non-stock item.</span>
+            </span>
+          </label>
+        </fieldset>
+      ) : null}
       <p className={ui.muted} style={{ margin: 0 }}>
         Sales (orders, refunds and payouts) are set up next, and stay off until you turn them on.
       </p>

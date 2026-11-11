@@ -7,6 +7,7 @@ import { runTile } from "@/lib/analytics/dashboards";
 import { closeAnalytics, listTables } from "@/lib/analytics/engine";
 import { builtInMeasures, measureFromSaved } from "@/lib/analytics/measure-library";
 import * as connectionRoute from "@/app/api/sales-platforms/connections/[connectionId]/route";
+import * as stockStuckRoute from "@/app/api/sales-platforms/connections/[connectionId]/stock-stuck/route";
 import * as logRoute from "@/app/api/sales-platforms/connections/[connectionId]/log/route";
 import * as webhookRoute from "@/app/api/sales-platforms/webhooks/[organisationId]/[webhookKey]/route";
 import type { SessionUser } from "@/lib/auth/sessions";
@@ -26,6 +27,7 @@ import { getOrganisation } from "@/lib/organisations/registry";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { getSalesOrder } from "@/lib/sales-orders/service";
 import { connectStore, listSyncLog, syncConnection, updateConnectionSettings } from "@/lib/sales-platforms/service";
+import { stockStuck } from "@/lib/sales-platforms/stock-stuck";
 import { SHOP_NOT_PERMITTED, setSalesPlatformFetchForTests } from "@/lib/sales-platforms/shopify";
 import { createTaxCode } from "@/lib/tax/codes";
 import {
@@ -544,6 +546,141 @@ describeWithDatabase("Shopify orders into the accounts (stage 2)", () => {
     // Tried again at the next sync (and logged once, not every time).
     await w.sync("2026-10-09T05:00:00Z");
     expect((await logFor(w, "5006")).filter((entry) => entry.action === "failed")).toHaveLength(1);
+  });
+
+  it("SSD1: with stock items off, a tracked product comes in as non-stock", async () => {
+    const w = await setup();
+    expect((await w.as((tx) => updateConnectionSettings(tx, w.connectionId, { stockItems: false }))).stockItems).toBe(false);
+    await w.sync("2026-10-01T01:00:00Z");
+    expect((await w.as((tx) => tx.query<{ item_type: string }>("select item_type from items where code = 'GIFTBOX'"))).rows[0].item_type).toBe("non_stock");
+    w.state.orders.push(order1004());
+    expect(await w.sync("2026-10-09T02:00:00Z")).toMatchObject({ failed: 0 });
+    const sold = (await doc(w, "order", "5004"))!;
+    expect(await journal(w, await journalIdOf(w, "sales_invoices", "approval_journal_id", sold.invoice_id))).toEqual({ "1100": "34.50", "2100": "-4.50", "4000": "-30.00" });
+    expect(await balance(w, "5000")).toBe("0.00");
+    await expect(w.as((tx) => updateConnectionSettings(tx, w.connectionId, { stockItems: "no" }))).rejects.toThrow();
+  });
+
+  it("SSD2-SSD3: an order stuck for no stock is found, and making the products non-stock lets it through", async () => {
+    const w = await setup();
+    await w.sync("2026-10-01T01:00:00Z");
+    expect(await w.as((tx) => stockStuck(tx, w.connectionId))).toEqual({ orders: [], items: [] });
+    w.state.orders.push(order1004());
+    expect(await w.sync("2026-10-09T02:00:00Z")).toMatchObject({ failed: 1 });
+    expect((await logFor(w, "5004")).at(-1)!.message).toContain("no stock on hand");
+    const stuck = await w.as((tx) => stockStuck(tx, w.connectionId));
+    expect(stuck.orders).toEqual([{ orderId: "5004", name: "#1004" }]);
+    expect(stuck.items.map((item) => item.code)).toEqual(["GIFTBOX"]);
+
+    // Viewers can't look; bookkeepers can look but not fix it; admins can.
+    const url = `/x?organisationId=${w.org}`;
+    const id = params({ connectionId: w.connectionId });
+    expect((await stockStuckRoute.GET(apiRequest(url, { cookie: await sessionCookieFor(viewer) }), id)).status).toBe(403);
+    expect((await stockStuckRoute.GET(apiRequest(url, { cookie: await sessionCookieFor(bookkeeper) }), id)).status).toBe(200);
+    expect((await stockStuckRoute.POST(apiRequest(url, { method: "POST", cookie: await sessionCookieFor(bookkeeper) }), id)).status).toBe(403);
+    const fixed = await stockStuckRoute.POST(apiRequest(url, { method: "POST", cookie: await sessionCookieFor(owner) }), id);
+    expect(fixed.status).toBe(200);
+    expect(await fixed.json()).toEqual({ items: 1, orders: 1 });
+    expect((await w.as((tx) => tx.query<{ item_type: string }>("select item_type from items where code = 'GIFTBOX'"))).rows[0].item_type).toBe("non_stock");
+    expect((await w.as((tx) => tx.query<{ s: boolean }>("select stock_items as s from sales_platform_connections"))).rows[0].s).toBe(false);
+
+    expect(await w.sync("2026-10-09T03:00:00Z")).toMatchObject({ failed: 0 });
+    const sold = (await doc(w, "order", "5004"))!;
+    expect(await journal(w, await journalIdOf(w, "sales_invoices", "approval_journal_id", sold.invoice_id))).toEqual({ "1100": "34.50", "2100": "-4.50", "4000": "-30.00" });
+    expect(await w.as((tx) => stockStuck(tx, w.connectionId))).toEqual({ orders: [], items: [] });
+  });
+
+  it("GC1-GC5: gift cards sold into a liability, spent out of it, refunded from it", async () => {
+    const w = await setup();
+    await w.sync("2026-10-01T01:00:00Z");
+    const card = { id: 4301, name: "Gift card - $50", sku: null, quantity: 1, variantId: null, originalTotal: "50.00", tax: [], giftCard: true, requiresShipping: false };
+    // Before gift cards are set up, an order selling one is refused (SPC23).
+    w.state.orders.push(order1001({ id: 5301, name: "#1301", total: "50.00", lines: [card], transactions: [{ id: 9301, kind: "SALE", amount: "50.00", processedAt: "2026-10-02T01:30:00Z" }] }));
+    await w.sync("2026-10-02T02:00:00Z");
+    expect((await logFor(w, "5301")).at(-1)).toMatchObject({ action: "failed", message: "#1301 sells a gift card; choose where gift cards are held in the Shopify settings to bring it in." });
+    expect(await doc(w, "order", "5301")).toBeNull();
+    // GC5: the account must be a liability, and not Income in advance.
+    await expect(w.as((tx) => updateConnectionSettings(tx, w.connectionId, { giftCardAccountCode: "4000" }))).rejects.toThrow("isn't a liability account");
+    const on = await w.as((tx) => updateConnectionSettings(tx, w.connectionId, { newGiftCardAccount: { code: "2360" } }));
+    expect(on.giftCardAccountCode).toBe("2360");
+    expect((await doc(w, "order", "5301"))!.retry).toBe(true);
+    await expect(w.as((tx) => updateConnectionSettings(tx, w.connectionId, { newSalesWhenSentAccount: { code: "2350" }, giftCardAccountCode: "2350" }))).rejects.toThrow(
+      "Use a different account for gift cards than for Income in advance",
+    );
+    await expect(w.as((tx) => updateConnectionSettings(tx, w.connectionId, { newGiftCardAccount: { code: "2361" }, giftCardAccountCode: "2360" }))).rejects.toThrow(
+      "Choose a gift card account or add one, not both.",
+    );
+
+    // GC1: the 50.00 gift card, paid by card through Shopify Payments, is tried again: held in 2360, no GST.
+    await w.sync("2026-10-02T03:00:00Z");
+    const sold = (await doc(w, "order", "5301"))!;
+    expect(sold.state).toBe("done");
+    expect(await invoiceLines(w, sold.invoice_id)).toEqual([["Gift card - $50", "1", "50.00", "NONE", "0.00"]]);
+    expect(await journal(w, await journalIdOf(w, "sales_invoices", "approval_journal_id", sold.invoice_id))).toEqual({ "1100": "50.00", "2360": "-50.00" });
+    expect(await journal(w, await journalIdOf(w, "customer_payments", "journal_id", sold.customer_payment_id))).toEqual({ "1010": "50.00", "1100": "-50.00" });
+
+    // GC2: two candles (46.00) paid 30.00 by gift card and 16.00 by card: the sale and its GST as usual, 30.00 out of 2360.
+    w.state.orders.push(
+      order1001({
+        id: 5302,
+        name: "#1302",
+        transactions: [
+          { id: 9302, kind: "SALE", gateway: "gift_card", amount: "30.00", processedAt: "2026-10-03T01:30:00Z" },
+          { id: 9303, kind: "SALE", amount: "16.00", processedAt: "2026-10-03T01:30:00Z" },
+        ],
+      }),
+    );
+    await w.sync("2026-10-03T02:00:00Z");
+    const spent = (await doc(w, "order", "5302"))!;
+    expect(spent.state).toBe("done");
+    expect(await journal(w, await journalIdOf(w, "sales_invoices", "approval_journal_id", spent.invoice_id))).toEqual({ "1100": "46.00", "2100": "-6.00", "4000": "-40.00" });
+    expect(await journal(w, await journalIdOf(w, "customer_payments", "journal_id", spent.customer_payment_id))).toEqual({ "1010": "16.00", "1100": "-16.00" });
+    const redeemed = (
+      await w.as((tx) => tx.query<{ j: string }>("select approval_journal_id::text as j from sales_credit_notes where reference = '#1302 gift card'"))
+    ).rows[0];
+    expect(await journal(w, redeemed.j)).toEqual({ "2360": "30.00", "1100": "-30.00" });
+    expect((await w.as((tx) => getInvoice(tx, spent.invoice_id))).amountDue).toBe("0.00");
+    expect(await balance(w, "2360")).toBe("-20.00");
+
+    // GC3: paid wholly by gift card: no payment, all 23.00 from 2360.
+    w.state.orders.push(
+      order1001({
+        id: 5303,
+        name: "#1303",
+        total: "23.00",
+        lines: [{ ...order1001().lines[0], id: 4303, quantity: 1, originalTotal: "23.00", tax: [{ title: "GST", rate: 0.15, amount: "3.00" }] }],
+        transactions: [{ id: 9304, kind: "SALE", gateway: "gift_card", amount: "23.00", processedAt: "2026-10-04T01:30:00Z" }],
+      }),
+    );
+    await w.sync("2026-10-04T02:00:00Z");
+    const whole = (await doc(w, "order", "5303"))!;
+    expect(whole).toMatchObject({ state: "done", customer_payment_id: null });
+    expect((await logFor(w, "5303")).at(-1)!.message).toBe("Invoiced #1303 as INV-0003 (23.00) on 2026-10-04, paid with a gift card (23.00 out of 2360).");
+    expect((await w.as((tx) => getInvoice(tx, whole.invoice_id))).amountDue).toBe("0.00");
+    expect(await balance(w, "2360")).toBe("3.00");
+
+    // GC4: the 50.00 gift card refunded to the customer's card: back out of 2360, no GST.
+    w.state.orders.splice(
+      w.state.orders.findIndex((order) => order.id === 5301),
+      1,
+      order1001({
+        id: 5301,
+        name: "#1301",
+        total: "50.00",
+        updatedAt: "2026-10-05T22:00:30Z",
+        financialStatus: "REFUNDED",
+        lines: [card],
+        transactions: [{ id: 9301, kind: "SALE", amount: "50.00", processedAt: "2026-10-02T01:30:00Z" }],
+        refunds: [
+          refund6001({ id: 6301, lines: [{ lineId: 4301, quantity: 1, subtotal: "50.00", tax: "0.00" }], transactions: [{ id: 9305, kind: "REFUND", amount: "50.00", processedAt: "2026-10-05T22:00:00Z" }] }),
+        ],
+      }),
+    );
+    await w.sync("2026-10-06T00:00:00Z");
+    const back = (await doc(w, "refund", "6301"))!;
+    expect(back.state).toBe("done");
+    expect(await journal(w, await journalIdOf(w, "sales_credit_notes", "approval_journal_id", back.credit_note_id))).toEqual({ "1100": "-50.00", "2360": "50.00" });
+    expect(await balance(w, "2360")).toBe("53.00");
   });
 
   it("SPC19: a client-credentials token is renewed near expiry, stored encrypted, and never shown", async () => {

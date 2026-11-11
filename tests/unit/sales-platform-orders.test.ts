@@ -195,7 +195,7 @@ describe("orders (SPC11-SPC13, SPC16, SPC17, SPC23)", () => {
     expect(refusal(order1001({ test: true }))).toBe("#1001 is a test order, so it isn't brought in.");
     expect(refusal(order1001({ currency: "AUD" }))).toBe("#1001 is in AUD; Tohyee only brings in orders in NZD.");
     expect(refusal(order1001({ presentmentCurrency: "USD" }))).toBe("#1001 was paid in USD; Tohyee only brings in orders in NZD.");
-    expect(refusal(order1001({ lines: [{ ...order1001().lines[0], giftCard: true }] }))).toBe("#1001 sells a gift card; gift cards aren't supported yet.");
+    expect(refusal(order1001({ lines: [{ ...order1001().lines[0], giftCard: true }] }))).toBe("#1001 sells a gift card; choose where gift cards are held in the Shopify settings to bring it in.");
     expect(refusal(order1001({ total: "50.00" }))).toBe(
       "#1001's lines come to 46.00 in Tohyee but Shopify's order total is 50.00 (tips, duties or other charges aren't supported yet), so it isn't brought in.",
     );

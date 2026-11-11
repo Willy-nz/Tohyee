@@ -13962,6 +13962,59 @@ migration 0265.
       older Recode, a correcting journal, stays for tracking changes. An AI
       tool at Full access, as she asked. Not yet reviewed.
 
+### A locked analytics file (12 Nov 2026; decision 1588)
+
+1588. **Wait, then say so plainly (Jess's issue 3).** An organisation's
+      analytics file can only be open in one process. When another Tohyee
+      process has it (usually one left running after an update), opening it
+      waits up to about five seconds for it to be let go, then fails with
+      "Analytics is locked by another Tohyee process (process n)... Restart
+      Tohyee", which shows on Data sources and in the AI's analytics tools
+      instead of a server error. The Windows installer now also stops any
+      node.exe from Tohyee's own folder when it updates. Opening read-only
+      for queries was left alone: loads write to the same file. Not yet
+      reviewed.
+### Shopify products as stock or non-stock (12 Nov 2026; decision 1589)
+
+1589. **"Do you track stock in Shopify?" (SSD1-SSD3).** Jess's issue 6.
+      Connecting a Shopify store asks it; No makes every product a
+      non-stock item, so a made-to-order shop's orders never wait for
+      stock nobody counted. Yes (the default, and existing stores) keeps
+      SPC17. The answer can be changed under What comes in, and applies to
+      items brought in from then on. When orders fail for no stock on hand,
+      the store's settings show one warning listing them, with "Make these
+      products non-stock" (admins; only items that have never moved stock,
+      and it turns the setting off and retries the orders) or a link to
+      allow negative stock. Not yet reviewed.
+### Shopify gift cards (12 Nov 2026; decision 1590)
+
+1590. **Gift cards held in a liability until spent (GC1-GC5).** Jess's
+      issue 7. With a gift card account chosen, a Shopify gift card sold
+      goes to it with no GST, and a payment by gift card comes out of it as
+      a credit note applied to the order's invoice; the order's own lines
+      carry the sale and its GST. Without one, orders with gift cards are
+      refused as before. Choosing the account retries the refused orders.
+      Products sold as vouchers that aren't Shopify gift cards are still
+      ordinary sales. The GST timing is for Jess to confirm. Not yet
+      reviewed.
+### Payment gateway deposits (12 Nov 2026; decision 1591)
+
+1591. **A gateway's deposit settles its orders (GS1-GS6).** Jess's issue 5.
+      A deposit naming a payment gateway with its own clearing account
+      (Afterpay, say) is matched to the order payments in that account it
+      settles: one, or two together, from the 14 days before, with a fee of
+      more than nothing and at most 10% plus 1.00. Never by amount alone; a
+      person confirms. Settling reconciles the line as a transfer from the
+      clearing account and posts the fee from it, with no GST (for Jess to
+      confirm), to the store's fees account. Not yet reviewed.
+### Pairs that cancel out on the bank reconciliation report (12 Nov 2026; decision 1592)
+
+1592. **Hidden by default, totals unchanged (BK46).** Jess's issue 1
+      (minor). Items not yet on the statement that cancel exactly within a
+      month are left out, two at a time in date order, with a count and a
+      checkbox to show them. Only on screen and in print; the data and
+      exports keep every item. Not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
