@@ -615,8 +615,8 @@ describeWithDatabase("Shopify orders into the accounts (stage 2)", () => {
     await w.sync("2026-10-02T03:00:00Z");
     const sold = (await doc(w, "order", "5301"))!;
     expect(sold.state).toBe("done");
-    expect(await invoiceLines(w, sold.invoice_id)).toEqual([["Gift card - $50", "1", "50.00", "NONE", "0.00"]]);
-    expect(await journal(w, await journalIdOf(w, "sales_invoices", "approval_journal_id", sold.invoice_id))).toEqual({ "1100": "50.00", "2360": "-50.00" });
+    expect(await invoiceLines(w, sold.invoice_id)).toEqual([["Gift card - $50", "1", "50.00", "GST", "6.52"]]);
+    expect(await journal(w, await journalIdOf(w, "sales_invoices", "approval_journal_id", sold.invoice_id))).toEqual({ "1100": "50.00", "2100": "-6.52", "2360": "-43.48" });
     expect(await journal(w, await journalIdOf(w, "customer_payments", "journal_id", sold.customer_payment_id))).toEqual({ "1010": "50.00", "1100": "-50.00" });
 
     // GC2: two candles (46.00) paid 30.00 by gift card and 16.00 by card: the sale and its GST as usual, 30.00 out of 2360.
@@ -638,9 +638,11 @@ describeWithDatabase("Shopify orders into the accounts (stage 2)", () => {
     const redeemed = (
       await w.as((tx) => tx.query<{ j: string }>("select approval_journal_id::text as j from sales_credit_notes where reference = '#1302 gift card'"))
     ).rows[0];
-    expect(await journal(w, redeemed.j)).toEqual({ "2360": "30.00", "1100": "-30.00" });
+    expect(await journal(w, redeemed.j)).toEqual({ "2360": "26.09", "2100": "3.91", "1100": "-30.00" });
     expect((await w.as((tx) => getInvoice(tx, spent.invoice_id))).amountDue).toBe("0.00");
-    expect(await balance(w, "2360")).toBe("-20.00");
+    expect(await balance(w, "2360")).toBe("-17.39");
+    // GST: 6.52 on the card, 6.00 on the candles, less 3.91 already counted on the 30.00 of the card spent.
+    expect(await balance(w, "2100")).toBe("-8.61");
 
     // GC3: paid wholly by gift card: no payment, all 23.00 from 2360.
     w.state.orders.push(
@@ -657,7 +659,7 @@ describeWithDatabase("Shopify orders into the accounts (stage 2)", () => {
     expect(whole).toMatchObject({ state: "done", customer_payment_id: null });
     expect((await logFor(w, "5303")).at(-1)!.message).toBe("Invoiced #1303 as INV-0003 (23.00) on 2026-10-04, paid with a gift card (23.00 out of 2360).");
     expect((await w.as((tx) => getInvoice(tx, whole.invoice_id))).amountDue).toBe("0.00");
-    expect(await balance(w, "2360")).toBe("3.00");
+    expect(await balance(w, "2360")).toBe("2.61");
 
     // GC4: the 50.00 gift card refunded to the customer's card: back out of 2360, no GST.
     w.state.orders.splice(
@@ -679,8 +681,8 @@ describeWithDatabase("Shopify orders into the accounts (stage 2)", () => {
     await w.sync("2026-10-06T00:00:00Z");
     const back = (await doc(w, "refund", "6301"))!;
     expect(back.state).toBe("done");
-    expect(await journal(w, await journalIdOf(w, "sales_credit_notes", "approval_journal_id", back.credit_note_id))).toEqual({ "1100": "-50.00", "2360": "50.00" });
-    expect(await balance(w, "2360")).toBe("53.00");
+    expect(await journal(w, await journalIdOf(w, "sales_credit_notes", "approval_journal_id", back.credit_note_id))).toEqual({ "1100": "-50.00", "2100": "6.52", "2360": "43.48" });
+    expect(await balance(w, "2360")).toBe("46.09");
   });
 
   it("SPC19: a client-credentials token is renewed near expiry, stored encrypted, and never shown", async () => {
