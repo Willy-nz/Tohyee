@@ -13951,6 +13951,17 @@ migration 0265.
       changes. Off by default everywhere but on screen, so the accountant
       pack and API keep every line. Not yet reviewed.
 
+### Recoding bank transactions in place (12 Nov 2026; decision 1587)
+
+1587. **Edit and Recode several (RC1-RC6).** Jess's issue 11: fix the
+      transaction, not post recoding journals. Spend and receive money are
+      corrected whole on their own date: voided and posted again with the
+      new coding, the statement line reconciled with the new one, in one
+      database transaction. Bank transactions can't be changed, so the
+      link from old to new is its own table (tenant migration 0271). The
+      older Recode, a correcting journal, stays for tracking changes. An AI
+      tool at Full access, as she asked. Not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

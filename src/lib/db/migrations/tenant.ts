@@ -20538,4 +20538,22 @@ alter table accounts add column reporting_name text check (reporting_name is nul
 alter table sales_platform_documents add column apply_when_sent boolean not null default false;
 `,
   },
+  {
+    version: "0271",
+    name: "bank_transaction_recodes",
+    sql: `
+-- Bank transactions recoded in place (RC3, decision 1587): the one voided
+-- and the one posted in its place. Bank transactions can't be changed, so
+-- the link is kept here.
+create table bank_transaction_recodes (
+  from_id bigint primary key references bank_transactions(id),
+  to_id bigint not null unique references bank_transactions(id),
+  command_source text not null,
+  idempotency_key text not null,
+  created_by_email text not null,
+  created_at timestamptz not null default now(),
+  unique (command_source, idempotency_key, from_id)
+);
+`,
+  },
 ];
