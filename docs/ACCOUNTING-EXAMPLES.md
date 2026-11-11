@@ -19146,6 +19146,30 @@ sent** on and Income in advance **2350** (a current liability). Order
   on, with the amount held, the total held and Mark as sent (SWS10). A
   sent or cancelled order isn't listed.
 
+### Sales when sent for orders invoiced without it (SWS12-SWS14; Jess, 11 Nov 2026, issue 12; the details are Claude's, not yet reviewed)
+
+Tested in `tests/integration/sales-when-sent.test.ts`. #1001 as in SWS1:
+pendant (stock) 100.00 + GST, kit 20.00 + GST, shipping 10.00 + GST.
+
+- **SWS12** An order whose sales order was made before Sales when sent was
+  on (placed 1 Nov, unpaid) and is invoiced after it's on (paid 2 Nov): the
+  invoice is as before (149.50, all to 4000 Sales, the pendant's stock off,
+  cost of goods sold **20.00**), and one journal on the invoice date moves
+  what's to be sent, **130.00**, from Sales to Income in advance. Sending
+  the pendant on 3 Nov moves **110.00** back (the pendant and, with the
+  first thing sent, the shipping), with no more stock off: held **20.00**.
+- **SWS13** An order invoiced in full to sales while it was off, not yet
+  fully sent: turning it on doesn't change it. Settings › Revenue
+  recognition lists such orders (order, invoice, date, Shopify's status,
+  total) with **Apply Sales when sent to these orders**. Applying marks
+  them; the next sync holds what each still has to send, in one journal per
+  order on its invoice date, logged against its invoice. The invoice and
+  its payment don't change (it may be in a payout already).
+- **SWS14** What Shopify had already sent stays in sales and isn't counted
+  again; the shipping is held only if nothing has been sent. #1001 with the
+  pendant sent on 1 Nov: **20.00** (the kit) is held; when the kit is sent
+  on 4 Nov it moves back, and sales are **130.00** again.
+
 ### Covers from paddock photos (AIW15-AIW19; #503, by Claude on 30 Oct 2026; not yet reviewed)
 
 Tested in `tests/integration/pasture-photos.test.ts` and

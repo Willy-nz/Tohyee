@@ -28,7 +28,7 @@ import {
   planRefund,
 } from "@/lib/sales-platforms/orders";
 import { SALES_PLATFORM_LABELS, type SalesPlatform, type SyncResult } from "@/lib/sales-platforms/types";
-import { closeHeld, countSent, holdLines, refundHeld, saveHeld, takeRefundFromHeld } from "@/lib/sales-platforms/when-sent";
+import { closeHeld, countSent, holdAfterInvoicing, holdLines, refundHeld, saveHeld, takeRefundFromHeld } from "@/lib/sales-platforms/when-sent";
 
 export { ordersHeld } from "@/lib/sales-platforms/when-sent";
 import { isOverseas } from "@/lib/tax/exports";
@@ -183,13 +183,15 @@ type DocumentRow = {
   invoice_id: string | null;
   customer_payment_id: string | null;
   sales_when_sent: boolean;
+  /** Chosen with "Apply Sales when sent to orders already invoiced" (SWS13). */
+  apply_when_sent: boolean;
 };
 
 type RecordKind = "order" | "refund" | "payout";
 
 async function findDocument(tx: OrgTx, posting: Posting, kind: RecordKind, externalId: string): Promise<DocumentRow | null> {
   const result = await tx.query<DocumentRow>(
-    `select id, state, retry, contact_id, sales_order_id, invoice_id, customer_payment_id, sales_when_sent from sales_platform_documents
+    `select id, state, retry, contact_id, sales_order_id, invoice_id, customer_payment_id, sales_when_sent, apply_when_sent from sales_platform_documents
       where platform = $1 and store_domain = $2 and record_kind = $3 and external_id = $4 for update`,
     [posting.platform, posting.storeDomain, kind, externalId],
   );
@@ -214,6 +216,7 @@ type DocumentValues = Partial<{
   reserve_released_transfer_id: string;
   external_updated_at: string | null;
   sales_when_sent: boolean;
+  apply_when_sent: boolean;
 }>;
 
 const DOCUMENT_COLUMNS = [
@@ -234,6 +237,7 @@ const DOCUMENT_COLUMNS = [
   "reserve_released_transfer_id",
   "external_updated_at",
   "sales_when_sent",
+  "apply_when_sent",
 ] as const;
 
 /** Records (or updates) what a Shopify record became. Columns not given keep their values. */
@@ -593,6 +597,7 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
 
   // Invoiced from the sales order: paid, with the payment into the clearing account or the payment method's account
   // (SPC11-SPC13, SPC16, SPC17, WC2, WC3, WC6), or placed and left owing (WC4).
+  let justInvoiced = false;
   if (doc.invoice_id === null) {
     const target = await paymentTarget(tx, posting, order);
     if (!target.ok) {
@@ -674,6 +679,59 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
     });
     doc = await findDocument(tx, posting, kind, id);
     if (!doc || doc.invoice_id === null) return;
+    justInvoiced = true;
+  }
+
+  // Sales when sent for an order invoiced without it (SWS12-SWS14): its sales order was made
+  // before Sales when sent was on, or it was chosen with "Apply to orders already invoiced".
+  const heldAccountNow = posting.salesWhenSentAccountCode;
+  if (!doc.sales_when_sent && (justInvoiced || doc.apply_when_sent)) {
+    if (!heldAccountNow) {
+      if (doc.apply_when_sent) await saveDocument(tx, posting, kind, id, { apply_when_sent: false });
+    } else {
+      const docNow = doc;
+      const overseasNow = await contactIsOverseas(tx, docNow.contact_id!);
+      const itemsNow = await linkedItems(tx, posting, order.lines.flatMap((line) => (line.variantId ? [line.variantId] : [])));
+      const planNow = planOrder(order, posting, itemsNow, overseasNow);
+      const invoiceRow = (
+        await tx.query<{ invoice_date: string; invoice_number: string }>("select invoice_date::text, invoice_number from sales_invoices where id = $1", [docNow.invoice_id])
+      ).rows[0];
+      const heldNow = planNow.ok
+        ? await attempt(tx, () =>
+            holdAfterInvoicing(tx, {
+              connectionId: posting.connectionId,
+              order,
+              invoiceDate: invoiceRow.invoice_date,
+              invoiceNumber: invoiceRow.invoice_number,
+              heldAccountCode: heldAccountNow,
+              lines: planNow.lines,
+              rates: planNow.rates,
+              amountsMode: planNow.amountsMode,
+              key: keyFor(posting, "order", id, "hold-after"),
+            }),
+          )
+        : null;
+      if (heldNow && !heldNow.ok) {
+        await wait(`${order.name} couldn't be held until it's sent: ${errorText(heldNow.error)}`);
+        return;
+      }
+      const result = heldNow?.ok ? heldNow.value : null;
+      await saveDocument(tx, posting, kind, id, { apply_when_sent: false, ...(result ? { sales_when_sent: true } : {}) });
+      if (result || docNow.apply_when_sent || !planNow.ok) await log(tx, context, {
+        action: "posted",
+        recordKind: kind,
+        externalId: id,
+        contactId: docNow.contact_id,
+        documentType: "invoice",
+        documentId: docNow.invoice_id,
+        message: result
+          ? `${order.name} (${invoiceRow.invoice_number}) is now under Sales when sent: ${money(result.held)} still to be sent moved from sales to ${heldAccountNow}. The invoice and its payment are unchanged.`
+          : planNow.ok
+            ? `${order.name} (${invoiceRow.invoice_number}) has everything sent already, so nothing is held.`
+            : `${order.name} (${invoiceRow.invoice_number}) couldn't be put under Sales when sent: ${planNow.reason}`,
+      });
+      doc = (await findDocument(tx, posting, kind, id))!;
+    }
   }
 
   // Sales when sent (SWS2-SWS8): what Shopify has sent, up to `upTo`, moves out of Income in advance.
