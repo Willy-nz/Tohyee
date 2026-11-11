@@ -13787,6 +13787,7 @@ migration 0265.
       line and on or before the feed balance's date, is listed under
       "Already in the bank's balance" and not taken off. Claude's call on
       the details, not yet reviewed.
+
 ### Revenue recognition setting (11 Nov 2026; decision 1573)
 
 1573. **Sales when sent is a revenue recognition choice in Settings.** Jess:
@@ -13807,6 +13808,17 @@ migration 0265.
       key (remove_and_redo_bank_lines), which changes decision 1277's "an AI
       never voids" for this tool, at Jess's request. A batch of its own
       (bank_redo, tenant migration 0266). Not yet reviewed.
+
+### Clicking amounts in the annual financial statements (11 Nov 2026; decision 1575)
+
+1575. **Click an amount in the annual financial statements (FS8).** Jess:
+      "Should be able to click a number and go to what makes it up even
+      when not in edit mode." In the statements of financial performance
+      and position, an amount from accounts links to Account transactions
+      for those accounts over that column's financial year, the dates the
+      layouts' own links use. Lines made by adding other lines, nil amounts,
+      and the changes in equity and cash flows statements aren't linked:
+      there's no one set of accounts behind them. Not yet reviewed.
 
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 

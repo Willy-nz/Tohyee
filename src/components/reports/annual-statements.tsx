@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { DateInput } from "@/components/date-input";
@@ -11,6 +12,7 @@ import { useReportLayout } from "@/components/reports/report-layout";
 import { NotesEditor } from "@/components/reports/statement-notes";
 import { Button, Field, Notice, ui } from "@/components/ui";
 import { todayInBrowser } from "@/lib/format";
+import { accountTransactionsHref } from "@/lib/reports/drilldown";
 import type { FinancialStatement, FinancialStatements, StatementLine } from "@/lib/reports/financial-statements";
 import { statementValue } from "@/lib/reports/statement-format";
 
@@ -27,6 +29,22 @@ function rowClass(line: StatementLine): string | undefined {
   if (line.kind === "total") return ui.reportGrand;
   if (line.kind === "subtotal") return ui.reportTotal;
   return ui.reportSection;
+}
+
+const ZERO = /^-?0*(\.0*)?$/;
+
+/** An amount, linked to the transactions that make it up when it's accounts' (decision 1575). */
+function Amount({ statement, line, year }: { statement: FinancialStatement; line: StatementLine; year: "current" | "prior" }) {
+  const value = line[year];
+  const text = statementValue(line, value);
+  const dates = statement.drill?.[year];
+  if (!dates || !line.accountIds || line.accountIds.length === 0 || value == null || ZERO.test(value) || (line.format && line.format !== "money")) return <>{text}</>;
+  const href = accountTransactionsHref(line.accountIds.length === 1 ? { accountId: line.accountIds[0], ...dates } : { accountIds: line.accountIds, ...dates });
+  return (
+    <Link href={href} title={`What makes up ${line.label}`}>
+      {text}
+    </Link>
+  );
 }
 
 function StatementTable({ statement, columns, action }: { statement: FinancialStatement; columns: FinancialStatements["columns"]; action: React.ReactNode }) {
@@ -65,8 +83,12 @@ function StatementTable({ statement, columns, action }: { statement: FinancialSt
                     {line.label}
                     {line.note ? <div className={ui.muted}>{line.note}</div> : null}
                   </td>
-                  <td className={ui.num}>{statementValue(line, line.current)}</td>
-                  <td className={ui.num}>{statementValue(line, line.prior)}</td>
+                  <td className={ui.num}>
+                    <Amount statement={statement} line={line} year="current" />
+                  </td>
+                  <td className={ui.num}>
+                    <Amount statement={statement} line={line} year="prior" />
+                  </td>
                 </tr>
               ),
             )}

@@ -18812,6 +18812,17 @@ the year to 31 Mar 2027.
 - **FS7** The notes are edited in the report: saved notes show and print;
   drafts are marked "DRAFT" until saved (FS2). Viewers see them but can't
   edit. Nothing posts.
+- **FS8** (Jess, 11 Nov 2026: "Should be able to click a number and go to
+  what makes it up even when not in edit mode.") In the statements of
+  financial performance and position, each amount that comes from accounts
+  is a link to Account transactions for those accounts over that column's
+  year, as the layouts' own amounts are: an account's line for that account,
+  a layout group's line or total for all of its accounts. Sales **3,000.00**
+  opens account 4000 from 1 Apr 2026 to 31 Mar 2027; **1,000.00** beside it
+  opens 4000 from 1 Apr 2025 to 31 Mar 2026. Totals made by adding other
+  lines (net profit, a formula row), blanks and nil amounts aren't links.
+  The changes in equity and cash flows statements aren't linked: their lines
+  aren't accounts' amounts. Nothing posts.
 
 ### Cash flow layouts (CFL1-CFL5; Jess chose on 6 Nov 2026 to rename, group, move accounts between sections, reorder, hide and add notes; the details are Claude's calls, not yet reviewed)
 

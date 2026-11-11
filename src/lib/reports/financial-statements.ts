@@ -174,6 +174,8 @@ export type StatementLine = {
   format?: "money" | "percent" | "number";
   /** From a layout row's note. */
   note?: string;
+  /** The accounts that make up the amounts, for clicking through to their transactions (decision 1575). */
+  accountIds?: string[];
 };
 type Line = StatementLine;
 
@@ -188,6 +190,8 @@ export type FinancialStatement = {
   lines: StatementLine[];
   /** A layout's text blocks, printed after the table. */
   paragraphs: string[];
+  /** The dates each column's amounts cover, for clicking through; null where lines aren't accounts' (decision 1575). */
+  drill: { current: { from: string; to: string }; prior: { from: string; to: string } } | null;
 };
 
 /** The year's financial statements, for the screen and the PDF alike (FS4, decision 1559). */
@@ -210,20 +214,22 @@ function nzLong(iso: string): string {
 }
 
 /** Lines from two years' account lines, matched by account (FS1): an account in only one year shows "-" in the other. */
-function merge(current: Array<{ code: string | null; label: string; amount: string }>, prior: Array<{ code: string | null; label: string; amount: string }>): Line[] {
+type MergeRow = { code: string | null; label: string; amount: string; accountId?: string };
+const ids = (row: MergeRow) => (row.accountId ? { accountIds: [row.accountId] } : {});
+function merge(current: MergeRow[], prior: MergeRow[]): Line[] {
   const lines = new Map<string, Line>();
-  for (const row of current) lines.set(row.code ?? row.label, { key: row.code ?? row.label, label: row.label, current: row.amount, prior: null });
+  for (const row of current) lines.set(row.code ?? row.label, { key: row.code ?? row.label, label: row.label, current: row.amount, prior: null, ...ids(row) });
   for (const row of prior) {
     const key = row.code ?? row.label;
     const existing = lines.get(key);
     if (existing) existing.prior = row.amount;
-    else lines.set(key, { key, label: row.label, current: null, prior: row.amount });
+    else lines.set(key, { key, label: row.label, current: null, prior: row.amount, ...ids(row) });
   }
   return [...lines.values()];
 }
 
-const accountLines = (sections: Array<{ lines: Array<{ code: string; name: string; amount: string }> }>) =>
-  sections.flatMap((section) => section.lines.map((line) => ({ code: line.code, label: line.name, amount: line.amount })));
+const accountLines = (sections: Array<{ lines: Array<{ accountId: string; code: string; name: string; amount: string }> }>) =>
+  sections.flatMap((section) => section.lines.map((line) => ({ code: line.code, label: line.name, amount: line.amount, accountId: line.accountId })));
 const rowLines = (rows: StatementRow[]) => rows.map((row) => ({ code: row.code, label: row.label, amount: row.amount }));
 
 /**
@@ -237,6 +243,7 @@ function layoutLines(figures: CustomReportFigures, yearEnd: string, priorEnd: st
   const value = (values: Record<string, string | null>, key: string | undefined) => (key ? (values[key] ?? null) : null);
   const lines: Line[] = [];
   const paragraphs: string[] = [];
+  const groupIds = (row: ComputedRow) => (row.accountIds && row.accountIds.length > 0 ? { accountIds: row.accountIds } : {});
   const extras = (row: ComputedRow) => ({
     ...(row.format && row.format !== "money" ? { format: row.format } : {}),
     ...(row.note ? { note: row.note } : {}),
@@ -278,6 +285,7 @@ function layoutLines(figures: CustomReportFigures, yearEnd: string, priorEnd: st
             label: account.name,
             current: value(account.values, current),
             prior: value(account.values, prior),
+            ...(account.accountId ? { accountIds: [account.accountId] } : {}),
           });
         lines.push({
           key: row.id,
@@ -286,6 +294,7 @@ function layoutLines(figures: CustomReportFigures, yearEnd: string, priorEnd: st
           prior: value(row.values, prior),
           kind: "subtotal",
           ...extras(row),
+          ...groupIds(row),
         });
       } else if (row.kind === "formula")
         lines.push({
@@ -303,6 +312,7 @@ function layoutLines(figures: CustomReportFigures, yearEnd: string, priorEnd: st
           current: value(row.values, current),
           prior: value(row.values, prior),
           ...extras(row),
+          ...(row.kind === "group" ? groupIds(row) : {}),
         });
     }
   }
@@ -439,6 +449,8 @@ export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unkn
   });
   // A heading only when either year has lines under it.
   const section = (label: string, lines: Line[]): Line[] => (lines.length === 0 ? [] : [heading(label), ...lines]);
+  // Each year's dates, as the layouts' own click-through uses (decision 1575).
+  const drill = { current: { from: yearStart, to: yearEnd }, prior: { from: priorStart, to: priorEnd } };
   const fromLayout = (
     run: Awaited<ReturnType<typeof layout>>,
     base: FinancialReportBase,
@@ -456,6 +468,7 @@ export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unkn
         layout: null,
         lines: standard(),
         paragraphs: [],
+        drill,
       };
     return {
       key,
@@ -464,6 +477,7 @@ export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unkn
       base,
       layout: { reportId: run.report.id, title: run.report.title },
       ...layoutLines(run.figures, yearEnd, priorEnd),
+      drill,
     };
   };
 
@@ -518,6 +532,7 @@ export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unkn
     base: "changes_in_equity",
     layout: null,
     paragraphs: [],
+    drill: null,
     lines: [
       total("Equity at the start of the year", sce.openingEquity, scePrior.openingEquity, "subtotal"),
       {
@@ -553,6 +568,7 @@ export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unkn
     base: "cash_flows",
     layout: null,
     paragraphs: [],
+    drill: null,
     lines: [
       heading("Operating activities"),
       {
