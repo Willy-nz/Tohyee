@@ -98,6 +98,8 @@ export const CUSTOM_REPORT_LIMITS = {
   termsPerFormula: 50,
   accountCodesPerGroup: 200,
   rowNoteLength: 500,
+  addedColumns: 10,
+  cellLength: 200,
 } as const;
 
 export type ReportColumnsSetting = {
@@ -115,7 +117,36 @@ export type ReportColumnsSetting = {
   budgetId?: string;
   /** The first period less the budget (needs `budgetId`). */
   budgetDifference?: boolean;
+  /** Columns added with Add column (LE4-LE9, decision 1580), after the ones above, in order. */
+  added?: AddedColumn[];
 };
+
+/** What Add column offers (LE4). */
+export const ADDED_COLUMN_KINDS = {
+  date: "Date",
+  budget: "Budget",
+  formula: "Formula",
+  notes: "Notes",
+  percentage: "Percentage",
+  variance: "Variance",
+} as const;
+export type AddedColumnKind = keyof typeof ADDED_COLUMN_KINDS;
+
+/**
+ * A column added with Add column (LE4-LE9). Its key in the figures is
+ * `a_` and its id. Columns are referred to by key: `p0` (the newest
+ * period), `p1`..., `diff`, `ytd`, `bud`, `bdiff` and earlier added columns.
+ */
+export type AddedColumn = { id: string; heading?: string } & (
+  | { kind: "date"; from: string | null; to: string }
+  | { kind: "budget"; budgetId: string; from: string; to: string }
+  | { kind: "formula"; terms: Array<{ column: string; sign: 1 | -1 }> }
+  | { kind: "notes" }
+  | { kind: "percentage"; column: string; ofRowId: string }
+  | { kind: "variance"; first: string; second: string; percentOfSecond?: boolean }
+);
+
+export const addedColumnKey = (column: { id: string }) => `a_${column.id}`;
 
 export type FormulaTerm = { rowId: string; sign: 1 | -1 };
 
@@ -141,6 +172,8 @@ export type RowExtras = {
   pageBreakAfter?: boolean;
   /** A short note shown under the row. */
   note?: string;
+  /** The row's text in each Notes column, by column key (LE7). */
+  cells?: Record<string, string>;
 };
 
 export type ReportRow = RowExtras &
@@ -293,7 +326,7 @@ export type TransactionCustomReportFigures = {
   computedAt: string;
 };
 
-export type ReportColumnKind = "period" | "difference" | "percent" | "budget" | "budget_difference" | "year_to_date";
+export type ReportColumnKind = "period" | "difference" | "percent" | "budget" | "budget_difference" | "year_to_date" | "date" | "formula" | "notes" | "percentage" | "variance";
 
 export type ReportColumn = {
   key: string;
@@ -304,6 +337,8 @@ export type ReportColumn = {
   to: string | null;
   /** An amount in this column opens Account transactions from this date to `to` (decision 1356); none for a difference, % or budget. */
   drillFrom?: string | null;
+  /** How an added column shows (LE4): a % or text; money otherwise. */
+  format?: "percent" | "text";
 };
 
 /** Amounts as strings, keyed by column; null for a % that can't be worked out (the compared amount is 0.00). */

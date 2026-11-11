@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
 import { useAccounts } from "@/components/books";
+import { DateInput } from "@/components/date-input";
 import { useApiData } from "@/components/hooks";
 import { reportCategories, useTracking } from "@/components/tracking";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
@@ -35,6 +36,10 @@ import {
   type PeriodLength,
   type ReportBlock,
   type ReportColumnsSetting,
+  type AddedColumn,
+  type AddedColumnKind,
+  ADDED_COLUMN_KINDS,
+  addedColumnKey,
   type ReportRow,
   type ReportTrackingFilter,
 } from "@/lib/reports/custom-layout";
@@ -808,6 +813,7 @@ function ColumnsEditor({
   initialFilter,
   tracking,
   budgets,
+  rows,
   busy,
   onSave,
   onCancel,
@@ -817,6 +823,8 @@ function ColumnsEditor({
   initialFilter: ReportTrackingFilter | null;
   tracking: TrackingSetup | null;
   budgets: Budget[];
+  /** The report's rows, for a Percentage column (LE8). */
+  rows: Array<{ id: string; label: string }>;
   busy: boolean;
   onSave: (setting: ReportColumnsSetting, filter: ReportTrackingFilter | null) => void;
   onCancel: () => void;
@@ -974,6 +982,7 @@ function ColumnsEditor({
           </label>
         </div>
       ) : null}
+      <AddedColumnsEditor base={base} setting={setting} rows={rows} budgets={budgets} onChange={(added) => setSetting({ ...setting, added })} />
       <div className={ui.actions}>
         <Button onClick={save} disabled={busy}>
           {busy ? "Saving…" : "Save columns"}
@@ -983,6 +992,194 @@ function ColumnsEditor({
         </Button>
       </div>
     </Card>
+  );
+}
+
+/** A row's text in a Notes column (LE7), saved when the box loses focus. */
+function NotesCellInput({ label, value, busy, onSave }: { label: string; value: string; busy: boolean; onSave: (value: string) => void }) {
+  const [text, setText] = useState(value);
+  return (
+    <Field label={`${label} column`}>
+      <input
+        value={text}
+        disabled={busy}
+        maxLength={CUSTOM_REPORT_LIMITS.cellLength}
+        onChange={(event) => setText(event.target.value)}
+        onBlur={() => {
+          if (text.trim() !== value) onSave(text.trim());
+        }}
+      />
+    </Field>
+  );
+}
+
+/** The columns a column added at `index` can use (LE4): the usual ones, then money columns added before it. */
+function usableColumns(setting: ReportColumnsSetting, index: number): Array<{ key: string; label: string }> {
+  const out = Array.from({ length: setting.periodCount }, (_, at) => ({ key: `p${at}`, label: at === 0 ? "Newest period" : `Period ${at + 1} (earlier)` }));
+  if (setting.difference) out.push({ key: "diff", label: "Difference" });
+  if (setting.yearToDate) out.push({ key: "ytd", label: "Year to date" });
+  if (setting.budgetId) out.push({ key: "bud", label: "Budget" });
+  if (setting.budgetId && setting.budgetDifference) out.push({ key: "bdiff", label: "Actual less budget" });
+  for (const column of (setting.added ?? []).slice(0, index)) {
+    if (column.kind === "date" || column.kind === "budget" || column.kind === "formula" || (column.kind === "variance" && !column.percentOfSecond)) {
+      out.push({ key: addedColumnKey(column), label: column.heading || ADDED_COLUMN_KINDS[column.kind] });
+    }
+  }
+  return out;
+}
+
+/** Add column (LE4-LE9): Date, Budget, Formula, Notes, Percentage and Variance columns after the usual ones. */
+function AddedColumnsEditor({
+  base,
+  setting,
+  rows,
+  budgets,
+  onChange,
+}: {
+  base: CustomReportBase;
+  setting: ReportColumnsSetting;
+  rows: Array<{ id: string; label: string }>;
+  budgets: Budget[];
+  onChange: (added: AddedColumn[]) => void;
+}) {
+  const added = setting.added ?? [];
+  const monthStart = `${setting.periodEnd.slice(0, 7)}-01`;
+  const kinds = (Object.keys(ADDED_COLUMN_KINDS) as AddedColumnKind[]).filter((kind) => base === "profit_and_loss" || kind !== "budget");
+  const update = (index: number, column: AddedColumn) => onChange(added.map((entry, at) => (at === index ? column : entry)));
+  function add(kind: AddedColumnKind) {
+    const id = newLayoutId("c");
+    const from = base === "balance_sheet" ? null : monthStart;
+    const column: AddedColumn =
+      kind === "date"
+        ? { id, kind, from, to: setting.periodEnd }
+        : kind === "budget"
+          ? { id, kind, budgetId: budgets.find((budget) => !budget.archivedAt)?.id ?? "", from: monthStart, to: setting.periodEnd }
+          : kind === "formula"
+            ? { id, kind, terms: [{ column: "p0", sign: 1 }] }
+            : kind === "notes"
+              ? { id, kind }
+              : kind === "percentage"
+                ? { id, kind, column: "p0", ofRowId: rows[0]?.id ?? "" }
+                : { id, kind, first: "p0", second: setting.periodCount > 1 ? "p1" : "p0" };
+    onChange([...added, column]);
+  }
+  const columnSelect = (index: number, value: string, label: string, set: (value: string) => void) => (
+    <Field label={label}>
+      <select value={value} onChange={(event) => set(event.target.value)}>
+        {usableColumns(setting, index).map((entry) => (
+          <option key={entry.key} value={entry.key}>
+            {entry.label}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+  return (
+    <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+      {added.map((column, index) => (
+        <div key={column.id} style={{ display: "grid", gap: 8, padding: 12, border: "1px solid var(--border)", borderRadius: 6 }}>
+          <strong>{ADDED_COLUMN_KINDS[column.kind]} column</strong>
+          <Field label="Heading" hint="Blank uses a heading of its own.">
+            <input value={column.heading ?? ""} maxLength={CUSTOM_REPORT_LIMITS.labelLength} onChange={(event) => update(index, { ...column, heading: event.target.value || undefined })} />
+          </Field>
+          {column.kind === "date" || column.kind === "budget" ? (
+            <>
+              {column.kind === "budget" ? (
+                <Field label="Budget">
+                  <select value={column.budgetId} onChange={(event) => update(index, { ...column, budgetId: event.target.value })}>
+                    <option value="">Choose a budget</option>
+                    {budgets
+                      .filter((budget) => !budget.archivedAt || budget.id === column.budgetId)
+                      .map((budget) => (
+                        <option key={budget.id} value={budget.id}>
+                          {budget.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+              ) : null}
+              {column.from !== null ? (
+                <Field label="From">
+                  <DateInput value={column.from} onChange={(event) => update(index, { ...column, from: event.target.value } as AddedColumn)} />
+                </Field>
+              ) : null}
+              <Field label={column.from === null ? "As at" : "To"}>
+                <DateInput value={column.to} onChange={(event) => update(index, { ...column, to: event.target.value })} />
+              </Field>
+            </>
+          ) : null}
+          {column.kind === "formula" ? (
+            <>
+              {column.terms.map((term, at) => (
+                <div key={at} className={ui.actions}>
+                  <select
+                    aria-label="Add or take away"
+                    value={term.sign}
+                    onChange={(event) => update(index, { ...column, terms: column.terms.map((entry, k) => (k === at ? { ...entry, sign: Number(event.target.value) as 1 | -1 } : entry)) })}
+                  >
+                    <option value={1}>+ add</option>
+                    <option value={-1}>− take away</option>
+                  </select>
+                  <select
+                    aria-label="Column"
+                    value={term.column}
+                    onChange={(event) => update(index, { ...column, terms: column.terms.map((entry, k) => (k === at ? { ...entry, column: event.target.value } : entry)) })}
+                  >
+                    {usableColumns(setting, index).map((entry) => (
+                      <option key={entry.key} value={entry.key}>
+                        {entry.label}
+                      </option>
+                    ))}
+                  </select>
+                  <Button size="small" variant="secondary" onClick={() => update(index, { ...column, terms: column.terms.filter((_, k) => k !== at) })}>
+                    Remove
+                  </Button>
+                </div>
+              ))}
+              <div>
+                <Button size="small" variant="secondary" onClick={() => update(index, { ...column, terms: [...column.terms, { column: "p0", sign: 1 }] })}>
+                  Add a column to it
+                </Button>
+              </div>
+            </>
+          ) : null}
+          {column.kind === "notes" ? <p className={ui.muted} style={{ margin: 0 }}>Type each row&apos;s text in its Details.</p> : null}
+          {column.kind === "percentage" ? (
+            <>
+              {columnSelect(index, column.column, "Column", (value) => update(index, { ...column, column: value }))}
+              <Field label="As a % of the row">
+                <select value={column.ofRowId} onChange={(event) => update(index, { ...column, ofRowId: event.target.value })}>
+                  {rows.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </>
+          ) : null}
+          {column.kind === "variance" ? (
+            <>
+              {columnSelect(index, column.first, "First column", (value) => update(index, { ...column, first: value }))}
+              {columnSelect(index, column.second, "Second column", (value) => update(index, { ...column, second: value }))}
+              <label className={ui.checkbox}>
+                <input type="checkbox" checked={Boolean(column.percentOfSecond)} onChange={(event) => update(index, { ...column, percentOfSecond: event.target.checked || undefined })} /> % of second
+              </label>
+            </>
+          ) : null}
+          <div>
+            <Button size="small" variant="secondary" onClick={() => onChange(added.filter((_, at) => at !== index))}>
+              Remove this column
+            </Button>
+          </div>
+        </div>
+      ))}
+      {added.length < CUSTOM_REPORT_LIMITS.addedColumns ? (
+        <div>
+          <MoreMenu label="Add column" text="Add column" items={kinds.map((kind) => ({ label: ADDED_COLUMN_KINDS[kind], onSelect: () => add(kind) }))} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1378,6 +1575,7 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
       router.push(pageHref(result.report.id));
     });
 
+  const reportRows = layout.blocks.flatMap((block) => (block.kind === "table" ? block.rows.filter((row) => row.kind !== "heading").map((row) => ({ id: row.id, label: row.label })) : []));
   const tableBlocks = new Map(layout.blocks.filter((block) => block.kind === "table").map((block) => [block.id, block as Extract<ReportBlock, { kind: "table" }>]));
   const editingTable = editing?.kind === "row" ? tableBlocks.get(editing.blockId) : undefined;
   const exportTables = figures.blocks
@@ -1411,6 +1609,7 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
           base={report.base}
           initial={layout.columns}
           initialFilter={layout.filter ?? null}
+          rows={reportRows}
           tracking={tracking.data}
           budgets={budgets.data?.budgets ?? []}
           busy={busy}
@@ -1464,6 +1663,7 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
           base={report.base}
           initial={layout.columns}
           initialFilter={layout.filter ?? null}
+          rows={reportRows}
           tracking={tracking.data}
           budgets={budgets.data?.budgets ?? []}
           busy={busy}
@@ -1499,6 +1699,28 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
             <input type="checkbox" checked={Boolean(pickedRow.pageBreakAfter)} disabled={busy} onChange={(event) => flag("pageBreakAfter", event.target.checked)} /> New page after
             this row
           </label>
+          {(layout.columns.added ?? [])
+            .filter((column) => column.kind === "notes")
+            .map((column) => (
+              <NotesCellInput
+                key={`${pickedRow.id}:${column.id}:${pickedRow.cells?.[addedColumnKey(column)] ?? ""}`}
+                label={column.heading || "Notes"}
+                value={pickedRow.cells?.[addedColumnKey(column)] ?? ""}
+                busy={busy}
+                onSave={(value) =>
+                  change((next) => {
+                    const block = next.blocks.find((entry) => entry.id === picked.blockId);
+                    const target = block?.kind === "table" ? block.rows.find((entry) => entry.id === picked.rowId) : undefined;
+                    if (!target) return false;
+                    const cells = { ...(target.cells ?? {}) };
+                    if (value) cells[addedColumnKey(column)] = value;
+                    else delete cells[addedColumnKey(column)];
+                    if (Object.keys(cells).length > 0) target.cells = cells;
+                    else delete target.cells;
+                  })
+                }
+              />
+            ))}
           <div>
             <Button
               size="small"

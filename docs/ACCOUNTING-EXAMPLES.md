@@ -4494,6 +4494,37 @@ screen behaviour, checked by hand. Nothing posts.
   editor shows a dashed "Page break" line. A page break must be true or
   left out; anything else is refused.
 
+### Add column (LE4-LE9; Jess, 11 Nov 2026: "Add column menu: Date, Budget, Formula, Notes, Percentage, Variance"; Claude's details, not yet reviewed)
+
+Tested in `tests/integration/custom-reports.test.ts`. The custom reports
+setup (CR1): a profit and loss for June 2026 (one column, Jun 2026), with
+a budget "Plan" holding 1,000.00 of sales (4000) in June. Nothing posts.
+
+- **LE4** Columns › **Add column** offers Date, Budget, Formula, Notes,
+  Percentage and Variance. Added columns come after the usual ones (the
+  periods, difference, %, budget and year to date), in the order added,
+  each with its own heading (or a default), up to 10. Each can use the
+  columns before it. They're kept with the layout and print and export.
+- **LE5** **Date**: any start and end date (a balance sheet: an as-at
+  date). "May" (1-31 May 2026): revenue **1,500.00**, cost of sales
+  **400.00**, net profit **1,100.00**. Its amounts open their transactions.
+- **LE6** **Budget**: any budget for any dates (profit and loss only).
+  "Plan" for June: revenue **1,000.00**, net profit **1,000.00**.
+- **LE7** **Formula**: columns added and taken away. Jun 2026 + May:
+  revenue **2,700.00**, expenses **250.00**, net profit **1,770.00**.
+  **Notes**: text typed for each row (up to 200 characters), shown in the
+  column: revenue "See note 2", the rest blank.
+- **LE8** **Percentage**: a column as a % of one row in the same table,
+  to one decimal place. Jun 2026 as a % of Revenue: revenue **100.0**, cost
+  of sales **25.0**, gross profit **75.0**, other income **1.7**, expenses
+  **20.8**, net profit **55.8**. Blank where the row is 0.00.
+- **LE9** **Variance**: the first column less the second, with a heading;
+  with "% of second" it's that difference as a % of the second column
+  instead (blank when the second is 0.00). Jun 2026 less May: revenue
+  **-300.00**, net profit **-430.00**; as % of second: revenue **-20.0**,
+  net profit **-39.1**, other income blank. Jun 2026 less Plan: revenue
+  **200.00**.
+
 ### Comparing periods, % of trading income and tracking filters (RX1-RX7)
 
 As Xero does, not yet reviewed (decisions 1353-1355, Jess's 4 Nov 2026

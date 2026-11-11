@@ -54,7 +54,9 @@ function Cell({
   blankZero?: boolean;
 }) {
   const value = values[column.key] ?? null;
-  if (column.kind === "percent" || (format === "percent" && column.kind !== "difference")) {
+  // A Notes column's text (LE7).
+  if (column.format === "text") return <td className={ui.layoutNotesCell}>{value ?? ""}</td>;
+  if (column.kind === "percent" || column.format === "percent" || (format === "percent" && column.kind !== "difference")) {
     return <td className={ui.num}>{value == null ? "" : `${value}%`}</td>;
   }
   if (value == null) return <td className={ui.num} />;
@@ -65,7 +67,7 @@ function Cell({
     (accounts.accountId || (accounts.accountIds && accounts.accountIds.length > 0)) &&
     column.to &&
     column.drillFrom !== undefined &&
-    (column.kind === "period" || column.kind === "year_to_date") &&
+    (column.kind === "period" || column.kind === "year_to_date" || column.kind === "date") &&
     !ZERO.test(value);
   return (
     <td className={ui.num}>
