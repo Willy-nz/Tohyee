@@ -13837,6 +13837,15 @@ migration 0265.
       editing comes next. Claude's wording, not yet reviewed by an
       accountant.
 
+### Annual financial statements one page at a time (11 Nov 2026; decision 1577)
+
+1577. **One page at a time, with editing in place (FS14).** Jess asked for
+      next and previous, one page showing, every piece of text editable and
+      Save as draft. The screen shows FS9's pages one at a time on a
+      page-like sheet; Edit turns the wording into boxes on the page itself
+      and saves it with Save as draft or Save as final. The notes keep their
+      own Save button, as before. Claude's layout, not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

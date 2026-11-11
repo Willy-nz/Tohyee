@@ -18871,6 +18871,17 @@ Tested in `tests/integration/financial-statements-report.test.ts` and
   PDF says DRAFT at the top; **Save as final** keeps them without DRAFT.
   Another year end keeps its own. Bookkeepers and up save; viewers see.
   Renaming a page's heading renames it in the contents too. Nothing posts.
+- **FS14** (Jess: "show 1 page at a time", "next page previous page", "All
+  text should be editable like the bit that says made in tohyee") On screen
+  the statements show one page at a time, in FS9's order, with Previous,
+  Next, a list to jump to any page and "Page 4 of 8". The contents page's
+  entries open their page. **Edit** (bookkeepers and up) turns every piece
+  of wording on every page into a box to type in: the cover lines, each
+  page's heading, the compilation report's title, sections (add or remove)
+  and sign-off, with a tick box to leave the compilation report out. Then
+  **Save as draft**, **Save as final** or **Cancel** (FS13). The page shows
+  DRAFT or Final. The notes keep their own Save button. Amounts still click
+  through (FS8) when not editing.
 
 ### Cash flow layouts (CFL1-CFL5; Jess chose on 6 Nov 2026 to rename, group, move accounts between sections, reorder, hide and add notes; the details are Claude's calls, not yet reviewed)
 
