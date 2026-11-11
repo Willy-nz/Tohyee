@@ -2,6 +2,12 @@
   "about": "Announcements shown on the Home page of the Tohyee server app (Windows), next to the GitHub releases. Edit this file on main and GitHub Pages publishes it to https://willy-nz.github.io/Tohyee/news.json. Each item: date (YYYY-MM-DD), title, body, and optionally link (https) and kind (\"conference\" shows it in the conference card).",
   "items": [
     {
+      "date": "2026-11-11",
+      "title": "Tohyee 0.32.0: annual statements as one document, and a new layout editor",
+      "body": "The annual financial statements are now one document you page through: a cover, automatic contents, a compilation report, the statements, notes and a depreciation schedule, with every word editable and Save as draft. The layout editor has one toolbar, Details beside the report and Add column. Bank lines can be removed and redone.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.32.0"
+    },
+    {
       "date": "2026-11-10",
       "title": "Tohyee 0.31.0: Shopify sales when they're sent",
       "body": "Shopify sales can now count when they're sent, not just when they're paid: what's still to send is held in Income in advance until Shopify marks it sent, line by line, with GST still counted on payment. Sales › To send shows the orders not yet sent, live, and Mark as sent covers one Shopify never marked fulfilled.",

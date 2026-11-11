@@ -48,8 +48,8 @@ before connecting an assistant.
 > organisation and review accounting outputs. Tohyee is provided as is, without
 > warranty; see the [licence](LICENSE).
 
-Latest release: [v0.31.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.31.0)
-([notes](docs/releases/0.31.0.md)). Get the installer and what each download
+Latest release: [v0.32.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.32.0)
+([notes](docs/releases/0.32.0.md)). Get the installer and what each download
 includes from the [latest release](https://github.com/Willy-nz/Tohyee/releases/latest).
 The [feature register](docs/FEATURES.md) records implemented features and limits;
 [release notes](docs/releases) describe packaged versions.
@@ -130,6 +130,7 @@ real phone or in a paddock yet.
 | Release | What's new |
 | --- | --- |
 | **Next** (on `main`) | Effluent management; aerial photos on farm maps with your own LINZ key. |
+| [**0.32.0**](docs/releases/0.32.0.md) | Annual financial statements as one paged, editable document (cover, contents, compilation report, depreciation schedule), a layout editor with Add column, Remove & redo on bank lines, and revenue recognition in Settings. |
 | [**0.31.0**](docs/releases/0.31.0.md) | Shopify sales when sent (held in Income in advance until Shopify marks them sent), Mark as sent, and Sales › To send. |
 | [**0.30.0**](docs/releases/0.30.0.md) | Annual financial statements as a report, Edit layout for cash flows and changes in equity, a general ledger report, custom reports from every report, a paged journals list, and bank transactions that open for recoding. |
 | [**0.29.0**](docs/releases/0.29.0.md) | Everything from the unpublished 0.28.0, plus breeding and rotation planning, the farm timeline, animals with weights and body condition scores, and MetService forecasts with your own key. |
