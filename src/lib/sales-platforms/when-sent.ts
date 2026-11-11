@@ -416,3 +416,73 @@ export async function markHeldOrderSent(tx: OrgTx, connectionId: string, orderId
   });
   return { orderId, name, invoiceDate: doc.invoice_date, held, lines };
 }
+
+/**
+ * Sales when sent for an order invoiced without it (SWS12-SWS14, decision
+ * 1583): an order whose sales order was made before Sales when sent was
+ * turned on, or one chosen with "Apply to orders already invoiced". Nothing
+ * on the invoice changes (it may be paid and in a payout already). One
+ * journal on the invoice's date moves what's still to be sent from sales to
+ * Income in advance: each line's unsent share, and the shipping when nothing
+ * has been sent yet. What Shopify had already sent stays in sales and isn't
+ * counted again. The stock already came off with the invoice, so the held
+ * lines move none when they're sent. Returns the journal, or null when
+ * everything has been sent.
+ */
+export async function holdAfterInvoicing(
+  tx: OrgTx,
+  input: {
+    connectionId: string;
+    order: PlatformOrder;
+    invoiceDate: string;
+    invoiceNumber: string;
+    heldAccountCode: string;
+    lines: readonly PlannedLine[];
+    rates: readonly string[];
+    amountsMode: AmountsMode;
+    key: string;
+  },
+): Promise<{ journalId: string; held: string } | null> {
+  const { order } = input;
+  const sentFulfilments = (order.sent ?? []).filter((fulfilment) => fulfilment.status === "SUCCESS");
+  const sentOf = new Map<string, Decimal>();
+  for (const fulfilment of sentFulfilments) {
+    if (fulfilment.incomplete) throw new ValidationError("a fulfilment sent more lines than Tohyee reads, so what's still to send can't be worked out yet.");
+    for (const line of fulfilment.lines) sentOf.set(line.lineItemId, add(sentOf.get(line.lineItemId) ?? dec("0"), dec(line.quantity)));
+  }
+  const anythingSent = sentFulfilments.some((fulfilment) => fulfilment.lines.length > 0);
+  const { held } = holdLines(input.lines, input.rates, input.amountsMode, input.heldAccountCode);
+  const keep: HeldLine[] = [];
+  for (const line of held) {
+    if (line.kind === "shipping") {
+      if (!anythingSent) keep.push({ ...line, itemId: null });
+      continue;
+    }
+    const quantity = dec(line.quantity);
+    const unsent = sub(quantity, sentOf.get(line.externalId) ?? dec("0"));
+    if (!isPositive(unsent)) continue;
+    const amount = cmp(unsent, quantity) >= 0 ? dec(line.amount) : mulDiv(dec(line.amount), unsent, quantity, SCALE);
+    keep.push({ ...line, itemId: null, quantity: toPlainString(cmp(unsent, quantity) >= 0 ? quantity : unsent), amount: toFixedString(amount, SCALE) });
+  }
+  if (keep.length === 0) return null;
+  const moves: Move[] = keep.map((line) => ({ from: line.incomeAccountCode, to: input.heldAccountCode, amount: dec(line.amount), description: `${line.description}: to be sent` }));
+  const journalId = await postMoves(
+    tx,
+    `${input.key}:journal`,
+    input.invoiceDate,
+    order.name,
+    `Held until sent: ${order.name} (invoice ${input.invoiceNumber}), invoiced before Sales when sent applied to it`,
+    moves,
+  );
+  if (!journalId) return null;
+  await saveHeld(tx, input.connectionId, order.externalId, input.heldAccountCode, keep);
+  // What had been sent already stays in sales: those fulfilments aren't counted again.
+  for (const fulfilment of sentFulfilments) {
+    await tx.query(
+      `insert into sales_platform_sent (connection_id, order_external_id, fulfilment_external_id, sent_on, journal_id)
+       values ($1, $2, $3, $4, null) on conflict (connection_id, fulfilment_external_id) do nothing`,
+      [input.connectionId, order.externalId, fulfilment.externalId, fulfilment.createdAt ? localDate(fulfilment.createdAt) : input.invoiceDate],
+    );
+  }
+  return { journalId, held: toFixedString(sum(keep.map((line) => dec(line.amount))), SCALE) };
+}

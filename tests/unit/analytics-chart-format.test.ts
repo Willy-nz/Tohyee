@@ -213,3 +213,10 @@ describe("chart look (#333)", () => {
     expect(option({ ...columns, kind: "bar" }, months).yAxis).toMatchObject({ inverse: true });
   });
 });
+
+describe("reference lines without a kind (Jess's issue 4, 11 Nov 2026)", () => {
+  it("a line with just a value is a constant line; one with nothing says which kinds there are", () => {
+    expect(parseChartFormat({ referenceLines: [{ value: 60000, label: "GST $60k" }] })?.referenceLines).toEqual([{ kind: "constant", value: "60000", label: "GST $60k" }]);
+    expect(() => parseChartFormat({ referenceLines: [{ label: "Nothing" }] })).toThrow("constant, target, average");
+  });
+});

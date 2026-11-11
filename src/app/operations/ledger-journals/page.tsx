@@ -13,6 +13,8 @@ import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { formatDate, formatDateTime, formatMoney, personName } from "@/lib/format";
+import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
+import type { VoidJournalsPlan } from "@/lib/ledger/void-journals";
 import type { Journal, JournalWithLines } from "@/lib/ledger/journals";
 
 /** How a foreign-currency line's base amount came about (FXB1-FXB11). */
@@ -87,6 +89,102 @@ const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
   livestock_rations: "The rations movement was voided: reversed by",
 };
 
+/** A journal Void works on (VJ1): a manual journal, or a correction's replacement. */
+const voidable = (journal: Journal) => (journal.origin === "manual" && journal.correctionKind === null) || journal.correctionKind === "replacement";
+
+/** Void (VJ1-VJ5): a preview of what it does, then the reversals, with a date and a reason. */
+function VoidPanel({ organisationId, journalIds, onDone, onCancel }: { organisationId: string; journalIds: string[]; onDone: () => void; onCancel: () => void }) {
+  const [voidDate, setVoidDate] = useState("");
+  const [reason, setReason] = useState("");
+  const [plan, setPlan] = useState<VoidJournalsPlan | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [key] = useState(() => newIdempotencyKey("void-journals"));
+  useEffect(() => {
+    let live = true;
+    api<VoidJournalsPlan>("/api/ledger/journals/void", { method: "POST", body: { organisationId, journalIds, voidDate } })
+      .then((result) => live && (setPlan(result), setError(null)))
+      .catch((caught) => live && setError(errorMessage(caught)));
+    return () => {
+      live = false;
+    };
+  }, [organisationId, journalIds, voidDate]);
+  const stuck = plan?.items.filter((item) => item.blocked) ?? [];
+  async function go() {
+    if (!plan) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/api/ledger/journals/void", { method: "POST", body: { organisationId, journalIds, voidDate, reason, previewHash: plan.hash, idempotencyKey: key } });
+      onDone();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card
+      title={journalIds.length === 1 ? `Void journal #${journalIds[0]}` : `Void ${journalIds.length} journals`}
+      description="Voiding posts the exact reversal of each journal, linked to it, so it comes to nothing. Nothing is deleted, and there's no new version."
+    >
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <div className={ui.inlineForm}>
+        <Field label="Void on" hint="Blank: each journal's own date.">
+          <DateInput value={voidDate} onChange={(event) => setVoidDate(event.target.value)} />
+        </Field>
+        <Field label="Why">
+          <input value={reason} maxLength={300} placeholder="For example: posted twice" onChange={(event) => setReason(event.target.value)} />
+        </Field>
+      </div>
+      {plan ? (
+        <>
+          {stuck.length > 0 ? (
+            <Notice tone="warning">
+              {stuck.map((item) => (
+                <div key={item.journalId}>
+                  #{item.journalId} {item.reference}: {item.blocked}
+                </div>
+              ))}
+              Take {stuck.length === 1 ? "it" : "them"} out to void the rest.
+            </Notice>
+          ) : null}
+          <table className={ui.table}>
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th className={ui.num}>Debit</th>
+                <th className={ui.num}>Credit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {plan.effect.map((line) => (
+                <tr key={line.accountCode}>
+                  <td>
+                    {line.accountCode} {line.accountName}
+                  </td>
+                  <td className={ui.num}>{line.debit === "0.00" ? "" : formatMoney(line.debit)}</td>
+                  <td className={ui.num}>{line.credit === "0.00" ? "" : formatMoney(line.credit)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      ) : (
+        <p className={ui.muted}>Working out what it does…</p>
+      )}
+      <div className={ui.actions}>
+        <Button variant="danger" disabled={busy || !plan || stuck.length > 0} onClick={() => void go()}>
+          {busy ? "Voiding…" : journalIds.length === 1 ? "Void it" : `Void ${journalIds.length} journals`}
+        </Button>
+        <Button variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 function KindBadge({ journal }: { journal: Journal }) {
   if (journal.correctionKind === "reversal") return <Badge tone="amber">Reversal</Badge>;
   if (journal.correctionKind === "replacement") return <Badge tone="blue">Replacement</Badge>;
@@ -98,11 +196,13 @@ function JournalDetail({
   journalId,
   onSelect,
   onCorrect,
+  onVoid,
 }: {
   organisationId: string;
   journalId: string;
   onSelect: (id: string) => void;
   onCorrect: (journal: JournalWithLines) => void;
+  onVoid: (journal: JournalWithLines) => void;
 }) {
   const { can } = useWorkspace();
   const details = useApiData<JournalDetails>(`/api/ledger/journals/${journalId}`, { organisationId });
@@ -117,9 +217,16 @@ function JournalDetail({
       description={`${formatDate(journal.postingDate)} · posted by ${personName(journal, "createdBy") ?? "unknown"} on ${formatDateTime(journal.createdAt)}`}
       actions={
         canCorrect && can("bookkeeper") ? (
-          <Button variant="secondary" onClick={() => onCorrect(journal)} title="A posted journal isn't changed in place: saving posts a correction (a reversal and the new version), so the history is kept.">
-            Edit this journal
-          </Button>
+          <>
+            <Button variant="secondary" onClick={() => onCorrect(journal)} title="A posted journal isn't changed in place: saving posts a correction (a reversal and the new version), so the history is kept.">
+              Edit this journal
+            </Button>
+            {voidable(journal) ? (
+              <Button variant="secondary" onClick={() => onVoid(journal)} title="Cancels it with its exact reversal, with no new version.">
+                Void
+              </Button>
+            ) : null}
+          </>
         ) : null
       }
     >
@@ -139,6 +246,7 @@ function JournalDetail({
         <Notice tone="warning">
           {/* AJV3: a journal the AI voided says so. */}
           {correctionJournals.some((entry) => entry.commandSource.startsWith("ai-void:")) ? <strong>Voided by the AI. </strong> : null}
+          {correctionJournals.some((entry) => entry.commandSource.startsWith("void:")) ? <strong>Voided. </strong> : null}
           {correctionJournals.some((entry) => entry.commandSource.startsWith("ai-void:")) ? "Reversed by" : (REVERSED_BY[journal.origin] ?? "Corrected by")}{" "}
           {correctionJournals.map((entry, index) => (
             <span key={entry.id}>
@@ -360,9 +468,11 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
   const accounts = useAccounts(organisationId);
   // Manual journals by default, 100 a page (decision 1564).
   const [filters, setFilters] = useState<Filters>({ from: "", to: "", reference: "", kind: "journals" });
+  // VP1: voided or corrected journals and their reversals are left out unless asked for.
+  const [showVoided, setShowVoided] = useState(false);
   const [applied, setApplied] = useState<Filters>(filters);
   const [page, setPage] = useState(1);
-  const list = useApiData<{ journals: Journal[]; page: number; pages: number; total: number }>("/api/ledger/journals", {
+  const list = useApiData<{ journals: Array<Journal & { voided?: "voided" | "corrected" }>; page: number; pages: number; total: number }>("/api/ledger/journals", {
     organisationId,
     postingDateFrom: applied.from,
     postingDateTo: applied.to,
@@ -370,8 +480,13 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
     kind: applied.kind,
     page: String(page),
     pageSize: "100",
+    hideVoided: showVoided ? null : "1",
   });
   const [selected, setSelected] = useState<string | null>(initialJournalId);
+  // Void (VJ1-VJ5): ticked journals, and the ones being voided.
+  const [ticked, setTicked] = useState<Set<string>>(new Set());
+  const [voiding, setVoiding] = useState<string[] | null>(null);
+  const [voidedNote, setVoidedNote] = useState<string | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   // Opening a journal from the list scrolls up to it.
   useEffect(() => {
@@ -482,8 +597,29 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
             setCorrecting(journal);
             window.scrollTo({ top: 0, behavior: "smooth" });
           }}
+          onVoid={(journal) => setVoiding([journal.id])}
         />
       ) : null}
+      {voiding ? (
+        <VoidPanel
+          key={voiding.join(",")}
+          organisationId={organisationId}
+          journalIds={voiding}
+          onCancel={() => setVoiding(null)}
+          onDone={() => {
+            setVoidedNote(voiding.length === 1 ? `Journal #${voiding[0]} is voided.` : `${voiding.length} journals are voided.`);
+            setVoiding(null);
+            setTicked(new Set());
+            list.reload();
+            if (selected) {
+              const keep = selected;
+              setSelected(null);
+              setTimeout(() => setSelected(keep), 0);
+            }
+          }}
+        />
+      ) : null}
+      {voidedNote ? <Notice tone="success">{voidedNote}</Notice> : null}
       {selected ? <RdLineTags key={`rd-journal-${selected}`} organisationId={organisationId} documentType="journal" documentId={selected} /> : null}
       {selected ? (
         <RecordExtrasPanel key={`journal-${selected}`} organisationId={organisationId} recordType="ledger_journal" recordId={selected} />
@@ -532,11 +668,32 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
               <option value="replacement">Replacements</option>
             </select>
           </Field>
+          <label className={ui.checkbox} style={{ alignSelf: "end" }}>
+            <input
+              type="checkbox"
+              checked={showVoided}
+              onChange={(event) => {
+                setPage(1);
+                setShowVoided(event.target.checked);
+              }}
+            />{" "}
+            Show voided and reversals
+          </label>
           <Button type="submit" variant="secondary">
             Filter
           </Button>
         </form>
         {list.error ? <Notice tone="error">{list.error}</Notice> : null}
+        {can("bookkeeper") && ticked.size > 0 ? (
+          <div className={ui.actions}>
+            <Button variant="secondary" onClick={() => setVoiding([...ticked])}>
+              Void {ticked.size} selected
+            </Button>
+            <Button variant="secondary" onClick={() => setTicked(new Set())}>
+              Clear
+            </Button>
+          </div>
+        ) : null}
         {pager}
         {list.data && journals.length === 0 ? (
           <Empty>No journals match.</Empty>
@@ -545,6 +702,11 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
             <table className={ui.table}>
               <thead>
                 <tr>
+                  {can("bookkeeper") ? (
+                    <th>
+                      <span className={ui.srOnly}>Select</span>
+                    </th>
+                  ) : null}
                   <th>#</th>
                   <th>Date</th>
                   <th>Reference</th>
@@ -560,12 +722,35 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
                     className={`${ui.clickableRow} ${selected === journal.id ? ui.selectedRow : ""}`}
                     onClick={() => setSelected(journal.id)}
                   >
+                    {can("bookkeeper") ? (
+                      <td onClick={(event) => event.stopPropagation()}>
+                        {voidable(journal) ? (
+                          <input
+                            type="checkbox"
+                            aria-label={`Select journal ${journal.id}`}
+                            checked={ticked.has(journal.id)}
+                            onChange={(event) => {
+                              const next = new Set(ticked);
+                              if (event.target.checked) next.add(journal.id);
+                              else next.delete(journal.id);
+                              setTicked(next);
+                            }}
+                          />
+                        ) : null}
+                      </td>
+                    ) : null}
                     <td>{journal.id}</td>
                     <td>{formatDate(journal.postingDate)}</td>
                     <td>{journal.reference}</td>
                     <td className={ui.muted}>{journal.description}</td>
                     <td>
                       <KindBadge journal={journal} />
+                      {journal.voided ? (
+                        <>
+                          {" "}
+                          <Badge tone="neutral">{journal.voided === "voided" ? "Voided" : "Corrected"}</Badge>
+                        </>
+                      ) : null}
                     </td>
                     <td className={ui.num}>
                       <Money value={journal.totalDebit} />

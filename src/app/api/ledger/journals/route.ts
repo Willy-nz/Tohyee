@@ -7,6 +7,7 @@ import { listJournals, postJournal } from "@/lib/ledger/journals";
  * beforeId (for the next page), limit (max 200). Or page (from 1) and pageSize
  * (default 100, max 200), which also give page, pages and total (decision 1564).
  * kind=journals is manual journals and their replacements, without reversals.
+ * hideVoided=1 leaves out voided or corrected journals and their reversals (VP1).
  */
 export const GET = route(async (request) => {
   const params = searchParams(request);
@@ -20,6 +21,7 @@ export const GET = route(async (request) => {
       limit: params.get("limit") ?? undefined,
       page: params.get("page") ?? undefined,
       pageSize: params.get("pageSize") ?? undefined,
+      hideVoided: params.get("hideVoided") ?? undefined,
     }),
   );
   return json(result);

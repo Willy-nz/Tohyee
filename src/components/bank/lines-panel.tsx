@@ -11,6 +11,7 @@ import { LineBaseValue } from "@/components/bank/foreign";
 import { useApiData } from "@/components/hooks";
 import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { RecodeForm } from "@/components/recode";
+import { EditInPlace } from "@/components/bank/recode-in-place";
 import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { Badge, Button, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -409,6 +410,7 @@ export function TransactionsPanel({ organisationId, account, focusTransactionId 
   const tracking = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
   const [recoding, setRecoding] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const [recoded, setRecoded] = useState<string | null>(null);
   if (focused && openedFocus !== focused.id) {
     setOpenedFocus(focused.id);
@@ -420,8 +422,9 @@ export function TransactionsPanel({ organisationId, account, focusTransactionId 
       {recoded ? <Notice tone="success">{recoded}</Notice> : null}
       {focus.error ? <Notice tone="error">{focus.error}</Notice> : null}
       <p className={ui.muted}>
-        Posted from reconciling. To undo one, unreconcile its line first (Statement lines tab), then void it here: voiding posts the exact
-        reversal on the date you choose.
+        Posted from reconciling. Edit corrects one in place on its own date and keeps it reconciled; Recode posts a correcting journal instead.
+        To undo one, unreconcile its line first (Statement lines tab), then void it here: voiding posts the exact reversal on the date you choose.{" "}
+        {can("bookkeeper") ? <Link href="/operations/bank-transactions/recode">Recode several at once</Link> : null}
       </p>
       <h3 className={ui.cardTitle}>Spend and receive money</h3>
       {transactions.error ? <Notice tone="error">{transactions.error}</Notice> : null}
@@ -484,7 +487,24 @@ export function TransactionsPanel({ organisationId, account, focusTransactionId 
                     <td>
                       {transaction.status === "posted" ? (
                         <span className={ui.rowButtons}>
-                          <Button variant="secondary" size="small" onClick={() => setRecoding(recoding === transaction.id ? null : transaction.id)}>
+                          <Button
+                            variant="secondary"
+                            size="small"
+                            onClick={() => {
+                              setRecoding(null);
+                              setEditing(editing === transaction.id ? null : transaction.id);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="small"
+                            onClick={() => {
+                              setEditing(null);
+                              setRecoding(recoding === transaction.id ? null : transaction.id);
+                            }}
+                          >
                             Recode
                           </Button>
                           <VoidButton
@@ -498,6 +518,22 @@ export function TransactionsPanel({ organisationId, account, focusTransactionId 
                     </td>
                   ) : null}
                 </tr>
+                {editing === transaction.id ? (
+                  <tr>
+                    <td colSpan={8}>
+                      <EditInPlace
+                        organisationId={organisationId}
+                        transaction={transaction}
+                        onCancel={() => setEditing(null)}
+                        onDone={(text) => {
+                          setRecoded(text);
+                          setEditing(null);
+                          transactions.reload();
+                        }}
+                      />
+                    </td>
+                  </tr>
+                ) : null}
                 {recoding === transaction.id ? (
                   <tr>
                     <td colSpan={8}>

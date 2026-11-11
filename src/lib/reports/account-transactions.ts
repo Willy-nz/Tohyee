@@ -72,6 +72,8 @@ export type AccountTransactions = {
   accounts: AccountTransactionsAccount[];
   totalDebit: string;
   totalCredit: string;
+  /** With `hideVoidedPairs` (VP3, decision 1586): how many journals and their reversals, both in the range, were left out. */
+  hiddenPairs: number;
 };
 
 /** From and to dates: `to` defaults to today and `from` to the start of `to`'s financial year. */
@@ -94,6 +96,7 @@ function parseAccountIds(input: unknown): string[] | null {
 
 type LineRow = SourceRow & {
   journal_id: string;
+  related_journal_id: string | null;
   line_order: number;
   account_id: string;
   posting_date: string;
@@ -110,7 +113,7 @@ type LineRow = SourceRow & {
 
 export async function accountTransactions(
   tx: OrgTx,
-  input: { accountId?: unknown; accountIds?: unknown; from?: unknown; to?: unknown; trackingCategoryId?: unknown; trackingValueId?: unknown },
+  input: { accountId?: unknown; accountIds?: unknown; from?: unknown; to?: unknown; trackingCategoryId?: unknown; trackingValueId?: unknown; hideVoidedPairs?: unknown },
 ): Promise<AccountTransactions> {
   const { from, to } = await parseReportPeriod(tx, input.from, input.to);
   const accountId = optionalId(input.accountId, "accountId");
@@ -143,7 +146,7 @@ export async function accountTransactions(
   );
   const lineRows = await tx.query<LineRow>(
     `with ${JOURNAL_SOURCES_SQL}
-     select l.journal_id::text, l.line_order, l.account_id::text, j.posting_date, j.origin, j.reference, j.correction_kind,
+     select l.journal_id::text, j.related_journal_id::text as related_journal_id, l.line_order, l.account_id::text, j.posting_date, j.origin, j.reference, j.correction_kind,
             j.description as journal_description, l.description as line_description,
             l.debit_amount::text, l.credit_amount::text, l.tracking, l.custom_fields, ${SOURCE_COLUMNS}
        from ledger_journal_lines l
@@ -156,8 +159,23 @@ export async function accountTransactions(
   );
 
   const opening = new Map(openingRows.rows.map((row) => [row.account_id, dec(row.balance)]));
+  // VP3: a journal and the reversal that voids or corrects it, both in the range, come to nothing: left out when asked.
+  let shown = lineRows.rows;
+  let hiddenPairs = 0;
+  if (input.hideVoidedPairs === true || input.hideVoidedPairs === "true" || input.hideVoidedPairs === "1") {
+    const inRange = new Set(lineRows.rows.map((row) => row.journal_id));
+    const hidden = new Set<string>();
+    for (const row of lineRows.rows) {
+      if (row.correction_kind === "reversal" && row.related_journal_id && inRange.has(row.related_journal_id) && !hidden.has(row.journal_id)) {
+        hidden.add(row.journal_id);
+        hidden.add(row.related_journal_id);
+        hiddenPairs += 1;
+      }
+    }
+    shown = lineRows.rows.filter((row) => !hidden.has(row.journal_id));
+  }
   const byAccount = new Map<string, LineRow[]>();
-  for (const row of lineRows.rows) byAccount.set(row.account_id, [...(byAccount.get(row.account_id) ?? []), row]);
+  for (const row of shown) byAccount.set(row.account_id, [...(byAccount.get(row.account_id) ?? []), row]);
 
   const accounts: AccountTransactionsAccount[] = [];
   const allDebits: Decimal[] = [];
@@ -211,5 +229,6 @@ export async function accountTransactions(
     accounts,
     totalDebit: money(sum(allDebits)),
     totalCredit: money(sum(allCredits)),
+    hiddenPairs,
   };
 }

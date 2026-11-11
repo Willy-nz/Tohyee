@@ -13906,6 +13906,62 @@ migration 0265.
       own name, so it's still clear which account is which. Tenant migration
       0269. Claude's details, not yet reviewed.
 
+### Sales when sent for orders invoiced without it (12 Nov 2026; decision 1583)
+
+1583. **Hold after invoicing (SWS12-SWS14).** Jess's issue 12: about 25
+      Glimmers orders had sales orders from before Sales when sent was on,
+      so their invoices went straight to sales. An order whose sales order
+      came before it, invoiced after, is now held when it's invoiced; orders
+      invoiced earlier can be chosen on Settings › Revenue recognition. Both
+      leave the invoice alone (it may be paid and in a payout) and post one
+      journal per order moving the unsent share from sales to Income in
+      advance, as Jess suggested; only what's still to send is held, and
+      fulfilments already counted aren't counted again. Stock came off with
+      the invoice, so it doesn't move again when sent. Tenant migration
+      0270. An AI tool for it isn't built yet. Not yet reviewed.
+
+### Doubled Shopify names and reference lines (12 Nov 2026; decision 1584)
+
+1584. **Small fixes from Jess's 11 Nov list (issues 4 and 8).** A Shopify
+      customer whose whole name is in both the first and last name fields
+      ("K A Monaghan K A Monaghan") comes in once; a last name that already
+      ends the first name isn't added again. An Analytics reference line
+      with a value and no kind is a constant line, and the guide for the AI
+      lists the kinds. Customers already brought in keep their names: fix
+      them on the contact. Not yet reviewed.
+
+### Void for manual journals (12 Nov 2026; decision 1585)
+
+1585. **Void posts only the reversal (VJ1-VJ5).** Jess's issue 9: a manual
+      journal that shouldn't exist could only be "edited", which always adds
+      a new version. Void posts the exact reversal, linked to the original,
+      on its own date or a chosen one, with the reason in its description,
+      as a correction's reversal does. Bookkeepers and up, one or several
+      after a preview by account. Manual journals and replacements only;
+      refused in locked periods and on reconciled journals, as corrections
+      are. Hiding voided pairs from lists is issue 10, next. Not yet
+      reviewed.
+
+### Leaving out voided pairs (12 Nov 2026; decision 1586)
+
+1586. **Voided and corrected pairs out of the way (VP1-VP3).** Jess's
+      issue 10. The Journals list leaves out a reversed journal and its
+      reversal unless asked; the ledger reports leave out a journal and its
+      reversal only when both are inside the dates, so no period total
+      changes. Off by default everywhere but on screen, so the accountant
+      pack and API keep every line. Not yet reviewed.
+
+### Recoding bank transactions in place (12 Nov 2026; decision 1587)
+
+1587. **Edit and Recode several (RC1-RC6).** Jess's issue 11: fix the
+      transaction, not post recoding journals. Spend and receive money are
+      corrected whole on their own date: voided and posted again with the
+      new coding, the statement line reconciled with the new one, in one
+      database transaction. Bank transactions can't be changed, so the
+      link from old to new is its own table (tenant migration 0271). The
+      older Recode, a correcting journal, stays for tracking changes. An AI
+      tool at Full access, as she asked. Not yet reviewed.
+
 ### A locked analytics file (12 Nov 2026; decision 1588)
 
 1588. **Wait, then say so plainly (Jess's issue 3).** An organisation's

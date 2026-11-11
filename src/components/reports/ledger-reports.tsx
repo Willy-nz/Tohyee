@@ -244,6 +244,8 @@ export function AccountTransactionsReport({
         : "",
   }));
   const [draft, setDraft] = useState({ accountId, filter });
+  // VP3: on screen, a journal and its reversal both in the range are left out unless asked for.
+  const [hideVoided, setHideVoided] = useState(true);
   const yearEndMonth = useYearEndMonth(organisationId);
   const accounts = useAccounts(organisationId, true);
   const tracking = useTracking(organisationId);
@@ -259,6 +261,7 @@ export function AccountTransactionsReport({
     to,
     trackingCategoryId: valueId || unassigned ? filter.categoryId : null,
     trackingValueId: valueId || (unassigned ? "unassigned" : null),
+    hideVoidedPairs: hideVoided ? "1" : null,
   });
   const data = report.data;
   const save = useSaveAsCustomReport(organisationId, "account_transactions", {
@@ -307,6 +310,9 @@ export function AccountTransactionsReport({
                 </select>
               </Field>
               )}
+              <label className={ui.checkbox} style={{ alignSelf: "end" }}>
+                <input type="checkbox" checked={hideVoided} onChange={(event) => setHideVoided(event.target.checked)} /> Leave out voided pairs
+              </label>
               {categories.length > 0 ? (
                 <Field label="Tracking">
                   <select
@@ -361,6 +367,12 @@ export function AccountTransactionsReport({
           These dates cross a financial year end ({formatDate(data.financialYearStart)} starts the first year): income and expense balances run on
           without restarting, so they won&apos;t match the trial balance at the end date.
         </Notice>
+      ) : null}
+      {data && data.hiddenPairs > 0 ? (
+        <p className={ui.muted} data-print="hide">
+          {data.hiddenPairs} voided or corrected {data.hiddenPairs === 1 ? "journal and its reversal are" : "journals and their reversals are"} left out: they come to nothing in
+          these dates. Untick Leave out voided pairs to see them.
+        </p>
       ) : null}
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}

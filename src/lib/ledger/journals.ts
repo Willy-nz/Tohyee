@@ -716,10 +716,12 @@ export type JournalListFilters = {
   page?: unknown;
   /** With `page`: 1 to 200, default 100. */
   pageSize?: unknown;
+  /** VP1 (decision 1586): leave out journals that have been voided or corrected, and their reversals. */
+  hideVoided?: unknown;
 };
 
 /** With `page`: which page this is, how many there are, and how many journals match. */
-export type JournalListPage = { journals: Journal[]; nextBeforeId: string | null; page?: number; pages?: number; total?: number };
+export type JournalListPage = { journals: Array<Journal & { voided?: "voided" | "corrected" }>; nextBeforeId: string | null; page?: number; pages?: number; total?: number };
 
 export async function listJournals(tx: OrgTx, filters: JournalListFilters = {}): Promise<JournalListPage> {
   const from = parseOptionalIsoDate(filters.postingDateFrom, "postingDateFrom");
@@ -778,6 +780,24 @@ export async function listJournals(tx: OrgTx, filters: JournalListFilters = {}):
   if (kind === "journals") conditions.push("(origin = 'manual' or (origin = 'correction' and correction_kind = 'replacement'))");
   // History brought in from another system (IM23) is left out unless asked for: there can be thousands.
   if (kind !== "history") conditions.push("origin <> 'history'");
+  // VP1: voided or corrected journals and their reversals cancel out, so they can be left out.
+  const hideVoided = filters.hideVoided === true || filters.hideVoided === "true" || filters.hideVoided === "1";
+  if (hideVoided) {
+    conditions.push("correction_kind is distinct from 'reversal'");
+    conditions.push("not exists (select 1 from ledger_journals reversal where reversal.related_journal_id = ledger_journals.id and reversal.correction_kind = 'reversal')");
+  }
+  // A "Voided" mark on journals that have a reversal (VP2).
+  const marked = async (journals: Journal[]): Promise<Array<Journal & { voided?: "voided" | "corrected" }>> => {
+    if (journals.length === 0) return journals;
+    const reversed = await tx.query<{ id: string; replaced: boolean }>(
+      `select related_journal_id::text as id, bool_or(correction_kind = 'replacement') as replaced from ledger_journals
+        where correction_kind in ('reversal', 'replacement') and related_journal_id = any($1::bigint[])
+        group by related_journal_id having bool_or(correction_kind = 'reversal')`,
+      [journals.map((journal) => journal.id)],
+    );
+    const how = new Map(reversed.rows.map((row) => [row.id, row.replaced ? ("corrected" as const) : ("voided" as const)]));
+    return journals.map((journal) => (how.has(journal.id) ? { ...journal, voided: how.get(journal.id) } : journal));
+  };
   const paged = filters.page != null && filters.page !== "";
   if (paged) {
     const page = Number(filters.page);
@@ -788,7 +808,7 @@ export async function listJournals(tx: OrgTx, filters: JournalListFilters = {}):
     const counted = await tx.query<{ total: string }>(`select count(*)::text as total from ledger_journals ${where}`, values);
     const total = Number(counted.rows[0].total);
     const rows = await tx.query<JournalRow>(`select ${JOURNAL_COLUMNS} from ledger_journals ${where} order by id desc limit ${sizeRaw} offset ${(page - 1) * sizeRaw}`, values);
-    return { journals: rows.rows.map(toJournal), nextBeforeId: null, page, pages: Math.max(1, Math.ceil(total / sizeRaw)), total };
+    return { journals: await marked(rows.rows.map(toJournal)), nextBeforeId: null, page, pages: Math.max(1, Math.ceil(total / sizeRaw)), total };
   }
   if (beforeId) conditions.push(`id < ${param(beforeId)}`);
 
@@ -801,7 +821,7 @@ export async function listJournals(tx: OrgTx, filters: JournalListFilters = {}):
   );
   const rows = result.rows.slice(0, limit);
   return {
-    journals: rows.map(toJournal),
+    journals: await marked(rows.map(toJournal)),
     nextBeforeId: result.rows.length > limit ? rows[rows.length - 1].id : null,
   };
 }

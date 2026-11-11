@@ -2477,6 +2477,75 @@ isn't reconciled.
   lines go in one preview and one batch. As Xero's Remove & Redo, except
   that it voids rather than deletes. Not yet reviewed.
 
+### Void for manual journals (VJ1-VJ5; Jess, 11 Nov 2026, issue 9; the details are Claude's, not yet reviewed)
+
+Tested in `tests/integration/void-journals.test.ts`.
+
+- **VJ1** A posted manual journal (or a correction's replacement) has
+  **Void** beside Edit this journal, for bookkeepers and up. It cancels the
+  journal with no new version. Not for reversals, or journals an invoice,
+  bill, payment or other record posted: those are undone at the record.
+- **VJ2** First a preview of what it does to each account. Two journals Dr
+  6010 / Cr 3000 of **100.00** (10 Jun) and **40.00** (12 Jun): 3000 debit
+  **140.00**, 6010 credit **140.00**.
+- **VJ3** Then each gets its exact reversal, linked to it, dated its own
+  day unless another date is chosen, described "Void of journal #n: " and
+  the reason. Nothing is deleted. The journal's page says "Voided". It
+  can't then be edited or voided again; a retry does nothing more.
+- **VJ4** Refused (the preview says why): a date in a locked period (a
+  date in an open period can be chosen instead), a line reconciled with a
+  bank statement line (unreconcile it first), already voided or corrected,
+  or something changed since the preview.
+- **VJ5** Several at once: tick manual journals in the Journals list, then
+  **Void selected** (up to 100), with the same preview. Viewers can't void.
+
+### Recoding spend and receive money in place (RC1-RC6; Jess, 11 Nov 2026, issue 11; the details are Claude's, not yet reviewed)
+
+Tested in `tests/integration/recode-bank-transactions.test.ts`. Two
+statement lines, 5 and 6 Jun 2026, -23.00 and -46.00, coded to 6140
+Printing and stationery (GST inclusive).
+
+- **RC1** On a bank account's Transactions tab, **Edit** on spend or
+  receive money changes its account, GST code, contact or description; on
+  several, Bank transactions › Recode (linked from that tab) finds them by
+  coded account, text and dates, ticks up to 100 and changes them together.
+  Bookkeepers and up; a Full access AI with `recode_bank_transactions`. The
+  existing Recode (a correcting journal, RCD1-RCD6) stays beside it.
+- **RC2** First a preview: each transaction, why any can't be recoded, and
+  what moves by month and account: 6140 to 6000 for June: 6000 **60.00**,
+  6140 **-60.00** (net of GST).
+- **RC3** Each is corrected as a whole on its own date: voided (kept) and
+  posted again with the new coding, linked to it. The statement line it was
+  reconciled with is reconciled with the new one. 6140 is then **0.00** and
+  6000 **60.00**; the bank is unchanged.
+- **RC4** One that isn't reconciled is voided and posted again the same way.
+- **RC5** Refused: a locked period, a voided one, nothing to change, a
+  split reconciliation or a line matched rather than coded (use Remove &
+  redo), a GST code change on amounts entered without GST (its total would
+  change), or a changed preview. A retry does nothing more.
+- **RC6** "Lines on" limits the change to lines on one account; blank
+  changes every line.
+
+### Leaving out voided pairs (VP1-VP3; Jess, 11 Nov 2026, issue 10; the details are Claude's, not yet reviewed)
+
+Tested in `tests/integration/void-journals.test.ts`. In October 2026: A
+(11.00) voided on its date; B (12.00) corrected on its date to 13.00; C
+(14.00); D (15.00) voided on 2 Nov.
+
+- **VP1** The Journals list leaves out voided or corrected journals and
+  their reversals unless **Show voided and reversals** is ticked: it shows
+  B's replacement and C (D's reversal isn't in October, but D has one, so
+  D is left out too).
+- **VP2** Ticked, voided journals show **Voided** and corrected ones
+  **Corrected**.
+- **VP3** Account transactions and the general ledger have **Leave out
+  voided pairs**, on by default on screen: a journal and its reversal both
+  within the dates are left out (A and B with theirs: 2 pairs, said above
+  the report), so October shows B's replacement 13.00, C 14.00 and D 15.00.
+  D stays because its void is outside the dates, so the period's figures
+  don't change. Balances are the same either way. The API, the accountant
+  pack and exports from other places keep everything unless asked.
+
 ### The AI voiding journals it posted (AJV1-AJV6; Jess, 11 Nov 2026; the details are Claude's, not yet reviewed)
 
 Tested in `tests/integration/ai-journal-void.test.ts`. 31 March year end.
@@ -19190,6 +19259,30 @@ sent** on and Income in advance **2350** (a current liability). Order
   (so it shows with Sales when sent off too), or from what's held when it's
   on, with the amount held, the total held and Mark as sent (SWS10). A
   sent or cancelled order isn't listed.
+
+### Sales when sent for orders invoiced without it (SWS12-SWS14; Jess, 11 Nov 2026, issue 12; the details are Claude's, not yet reviewed)
+
+Tested in `tests/integration/sales-when-sent.test.ts`. #1001 as in SWS1:
+pendant (stock) 100.00 + GST, kit 20.00 + GST, shipping 10.00 + GST.
+
+- **SWS12** An order whose sales order was made before Sales when sent was
+  on (placed 1 Nov, unpaid) and is invoiced after it's on (paid 2 Nov): the
+  invoice is as before (149.50, all to 4000 Sales, the pendant's stock off,
+  cost of goods sold **20.00**), and one journal on the invoice date moves
+  what's to be sent, **130.00**, from Sales to Income in advance. Sending
+  the pendant on 3 Nov moves **110.00** back (the pendant and, with the
+  first thing sent, the shipping), with no more stock off: held **20.00**.
+- **SWS13** An order invoiced in full to sales while it was off, not yet
+  fully sent: turning it on doesn't change it. Settings › Revenue
+  recognition lists such orders (order, invoice, date, Shopify's status,
+  total) with **Apply Sales when sent to these orders**. Applying marks
+  them; the next sync holds what each still has to send, in one journal per
+  order on its invoice date, logged against its invoice. The invoice and
+  its payment don't change (it may be in a payout already).
+- **SWS14** What Shopify had already sent stays in sales and isn't counted
+  again; the shipping is held only if nothing has been sent. #1001 with the
+  pendant sent on 1 Nov: **20.00** (the kit) is held; when the kit is sent
+  on 4 Nov it moves back, and sales are **130.00** again.
 
 ### Covers from paddock photos (AIW15-AIW19; #503, by Claude on 30 Oct 2026; not yet reviewed)
 
