@@ -27,6 +27,7 @@ import {
   type PayoutGuidance,
   type Settlement,
 } from "@/lib/sales-platforms/payout-match";
+import { settlementGuidanceForLine } from "@/lib/sales-platforms/gateway-settlements";
 import { listConnections } from "@/lib/sales-platforms/service";
 import { PAYOUT_SCOPES, SALES_PLATFORM_LABELS, type SalesPlatform } from "@/lib/sales-platforms/types";
 import { getGstRegistration, gstStatusOn, type GstStatus } from "@/lib/tax/registration";
@@ -322,6 +323,8 @@ export async function payoutMatchReport(tx: OrgTx, options: { connectionId?: unk
     const guidance = await payoutGuidanceForLine(tx, row.id);
     // Money out is listed only when it's a withdrawal payout (SPC40), not every bill paid from the account.
     if (!guidance && line.amount.startsWith("-")) continue;
+    // GS5: a payment gateway's own deposit (Afterpay, say), settling orders in its clearing account.
+    const gateway = guidance ? null : await settlementGuidanceForLine(tx, row.id);
     deposits.push({
       lineId: line.id,
       date: line.date,
@@ -337,7 +340,17 @@ export async function payoutMatchReport(tx: OrgTx, options: { connectionId?: unk
               ? { ...guidance.action, note: "A suggestion for a person to review on the bank reconcile screen; this tool doesn't reconcile." }
               : null,
           }
-        : { status: "not_a_payout", reason: "Nothing on the line or its account points to a platform payout." }),
+        : gateway
+          ? {
+              status: "gateway_settlement",
+              reason: gateway.reason,
+              gateway: gateway.gateway,
+              match: gateway.status,
+              choices: gateway.choices,
+              feesAccountCode: gateway.feesAccountCode,
+              suggestion: gateway.choices.length > 0 ? "Settle it on the bank reconcile screen: a transfer from the clearing account, with the fee. This tool doesn't reconcile." : null,
+            }
+          : { status: "not_a_payout", reason: "Nothing on the line or its account points to a platform payout." }),
     });
   }
   // Each clearing account once, however many connections share it (#570), so its balance is the ledger's.
@@ -371,6 +384,7 @@ export async function payoutMatchReport(tx: OrgTx, options: { connectionId?: unk
       missing_posting_setup: "The store isn't set up to post payouts into this account.",
       missing_settlement_data: "Tohyee has no settlement for this deposit (before the start date, or payouts can't be read).",
       unmatched: "Nothing fits; left for a person.",
+      gateway_settlement: "A payment gateway's deposit (Afterpay, say): the order payments in its clearing account it settles, less its fee.",
     },
   };
 }
