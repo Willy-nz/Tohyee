@@ -118,6 +118,7 @@ type ConnectionRow = {
   disconnected_by_email: string | null;
   disconnected_at: string | null;
   post_to_accounts: boolean;
+  stock_items: boolean;
   start_date: string | null;
   clearing_account_id: string | null;
   payout_account_id: string | null;
@@ -154,7 +155,7 @@ const COLUMNS =
   "id, platform, store_domain, store_name, store_currency, prices_include_tax, auth_method, credentials_ciphertext, " +
   "access_token_ciphertext, access_token_expires_at, webhook_key, webhook_subscription_ids, webhooks_note, sync_customers, " +
   "sync_products, status, customers_synced_until, products_synced_until, last_sync_at, last_successful_sync_at, last_error, failures, connected_by_email, " +
-  "connected_at, disconnected_by_email, disconnected_at, post_to_accounts, start_date, clearing_account_id, payout_account_id, " +
+  "connected_at, disconnected_by_email, disconnected_at, post_to_accounts, stock_items, start_date, clearing_account_id, payout_account_id, " +
   "fees_account_id, sales_account_id, shipping_account_id, chargebacks_account_id, reserve_account_id, sales_when_sent_account_id, untaxed_tax_code_id, granted_scopes, " +
   "orders_synced_until, payouts_synced_until, extras_synced_at, stats_synced_at, customer_scope, " +
   "(select count(*)::int from sales_platform_mappings v where v.connection_id = sales_platform_connections.id and v.record_kind = 'product_variant') as variants_linked, " +
@@ -198,6 +199,7 @@ function toConnection(row: ConnectionRow): SalesPlatformConnection {
     disconnectedByEmail: row.disconnected_by_email,
     disconnectedAt: iso(row.disconnected_at),
     postToAccounts: row.post_to_accounts,
+    stockItems: row.stock_items,
     startDate: row.start_date,
     clearingAccountCode: row.clearing_account_code,
     payoutAccountCode: row.payout_account_code,
@@ -499,6 +501,8 @@ export async function connectStore(
   // WooCommerce has no customer or product sync: customers are matched by email and lines by SKU.
   const syncCustomers = connector.syncsRecords && (optionalBoolean(body.syncCustomers, "syncCustomers") ?? true);
   const syncProducts = connector.syncsRecords && (optionalBoolean(body.syncProducts, "syncProducts") ?? true);
+  // Decision 1589 (SSD1): "I keep stock in Shopify". Untick for made to order; tracked products then come in as non-stock.
+  const stockItems = optionalBoolean(body.stockItems, "stockItems") ?? true;
   // Decision 1334: only customers who have ordered, unless "all" is chosen.
   const customerScope: CustomerScope = body.customerScope === undefined ? "buyers" : requireOneOf(body.customerScope, "customerScope", CUSTOMER_SCOPES);
   const now = options.now ?? new Date();
@@ -527,8 +531,8 @@ export async function connectStore(
       inserted = await tx.query<ConnectionRow>(
         `insert into sales_platform_connections (platform, store_domain, store_name, store_currency, prices_include_tax, auth_method,
                                                  credentials_ciphertext, access_token_ciphertext, access_token_expires_at, webhook_key,
-                                                 sync_customers, sync_products, connected_by_email, granted_scopes, customer_scope)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                                                 sync_customers, sync_products, connected_by_email, granted_scopes, customer_scope, stock_items)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          returning ${COLUMNS}`,
         [
           platform,
@@ -546,6 +550,7 @@ export async function connectStore(
           actor.email,
           store.scopes,
           customerScope,
+          stockItems,
         ],
       );
     } catch (error) {
@@ -556,13 +561,13 @@ export async function connectStore(
     await writeLog(tx, saved.id, {
       source: "connection",
       action: "connected",
-      message: `Connected ${store.storeName} (${input.storeDomain}). Its prices are in ${store.currency} and ${store.pricesIncludeTax ? "include" : "exclude"} tax. Syncing customers: ${syncCustomers ? (customerScope === "buyers" ? "only those who have ordered" : "all") : "off"}; products: ${syncProducts ? "on" : "off"}.`,
+      message: `Connected ${store.storeName} (${input.storeDomain}). Its prices are in ${store.currency} and ${store.pricesIncludeTax ? "include" : "exclude"} tax. Syncing customers: ${syncCustomers ? (customerScope === "buyers" ? "only those who have ordered" : "all") : "off"}; products: ${syncProducts ? (stockItems ? "on" : "on, as non-stock") : "off"}.`,
     });
     await writeAuditEvent(tx, {
       eventType: "sales_platform.connected",
       entityType: "sales_platform_connection",
       entityId: saved.id,
-      details: { platform, storeDomain: input.storeDomain, authMethod: input.authMethod, syncCustomers, customerScope, syncProducts },
+      details: { platform, storeDomain: input.storeDomain, authMethod: input.authMethod, syncCustomers, customerScope, syncProducts, stockItems },
     });
     return saved;
   });
@@ -769,6 +774,8 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
   const syncProducts = optionalBoolean(body.syncProducts, "syncProducts") ?? row.sync_products;
   const customerScope: CustomerScope = body.customerScope === undefined ? row.customer_scope : requireOneOf(body.customerScope, "customerScope", CUSTOMER_SCOPES);
   const postToAccounts = optionalBoolean(body.postToAccounts, "postToAccounts") ?? row.post_to_accounts;
+  // SSD1: a made-to-order shop says no, and its products come in as non-stock even when Shopify tracks them.
+  const stockItems = optionalBoolean(body.stockItems, "stockItems") ?? row.stock_items;
   const startDate = body.startDate === undefined ? row.start_date : parseOptionalIsoDate(body.startDate, "startDate");
   const shop = label(row.platform);
   const changes: string[] = [];
@@ -960,6 +967,10 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
     );
   }
   if (postToAccounts !== row.post_to_accounts) changes.push(`posting to the accounts: ${postToAccounts ? "on" : "off"}`);
+  if (stockItems !== row.stock_items) {
+    changes.push(`stock items for tracked products: ${stockItems ? "yes" : "no"}`);
+    await tx.query("update sales_platform_connections set stock_items = $2 where id = $1", [row.id, stockItems]);
+  }
   if (startDate !== row.start_date) changes.push(`start date: ${startDate ?? "none"}`);
   const named = (choice: AccountChoice | null | undefined, current: string | null, text: string) => {
     if (choice !== undefined && (choice?.id ?? null) !== current) changes.push(`${text}: ${choice ? `${choice.code} ${choice.name}` : "none"}`);
@@ -1533,7 +1544,9 @@ async function applyVariant(tx: OrgTx, context: ApplyContext, variant: PlatformV
 
   // Webhooks don't say whether inventory is tracked; the catch-up sync adds the item once it knows.
   if (variant.tracked === null) return;
-  const itemType = variant.tracked ? "stock" : "non_stock";
+  // SSD1: only when the store keeps stock in Tohyee's books.
+  const stockAllowed = (await tx.query<{ stock_items: boolean }>("select stock_items from sales_platform_connections where id = $1", [connectionId])).rows[0]?.stock_items ?? true;
+  const itemType = variant.tracked && stockAllowed ? "stock" : "non_stock";
   const { item } = await createItem(tx, {
     idempotencyKey: `sp-${connectionId}-variant-${variant.externalId}`,
     source: SOURCE,

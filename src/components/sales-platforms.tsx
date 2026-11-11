@@ -644,6 +644,9 @@ export function ConnectionCard({
           </div>
         ) : null}
         {connected && connection.platform === "shopify" && connection.postToAccounts ? (
+          <StockStuckNotice organisationId={organisationId} connectionId={connection.id} isAdmin={isAdmin} />
+        ) : null}
+        {connected && connection.platform === "shopify" && connection.postToAccounts ? (
           <span className={ui.muted}>
             Revenue is recognised {connection.salesWhenSentAccountCode ? `when fulfilled (held in ${connection.salesWhenSentAccountCode} until then)` : "when paid"}.{" "}
             <Link href="/operations/settings#revenue-recognition">Change it in Settings</Link>
@@ -669,6 +672,24 @@ export function ConnectionCard({
                       Products, as items
                     </label>
                   </div>
+                  {/* SSD1: a made-to-order shop says no, and its products come in as non-stock. */}
+                  <label className={ui.checkbox}>
+                    <input
+                      type="checkbox"
+                      checked={connection.stockItems}
+                      disabled={!isAdmin || busy || !connection.syncProducts}
+                      onChange={(event) =>
+                        void run(async () => {
+                          await api(path, { method: "PATCH", body: { organisationId, stockItems: event.target.checked } });
+                          return event.target.checked
+                            ? "Saved: products Shopify tracks stock for come in as stock items."
+                            : "Saved: new products come in as non-stock items, even when Shopify tracks their stock.";
+                        })
+                      }
+                    />{" "}
+                    I keep stock in Shopify: products it tracks come in as stock items
+                  </label>
+                  <span className={ui.muted}>Untick for things made to order. Items already brought in keep their type.</span>
                   <SkuNote connection={connection} />
                   {connection.pricesIncludeTax ? (
                     <span className={ui.muted}>This store&apos;s prices include tax, so they aren&apos;t copied to items (Tohyee&apos;s item prices exclude GST).</span>
@@ -823,5 +844,56 @@ export function SalesPlatformsManager({ organisationId }: { organisationId: stri
         </details>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * SSD2-SSD3: one warning for the store's orders stuck for no stock on hand,
+ * with a fix: make its stock items non-stock (and try the orders again), or
+ * allow negative stock in Settings.
+ */
+function StockStuckNotice({ organisationId, connectionId, isAdmin }: { organisationId: string; connectionId: string; isAdmin: boolean }) {
+  const confirm = useConfirm();
+  const stuck = useApiData<{ orders: Array<{ orderId: string; name: string | null }>; items: Array<{ id: string; code: string; name: string }> }>(
+    `/api/sales-platforms/connections/${connectionId}/stock-stuck`,
+    { organisationId },
+  );
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  if (message) return <Notice tone="success">{message}</Notice>;
+  if (!stuck.data || stuck.data.orders.length === 0) return null;
+  const { orders, items } = stuck.data;
+  async function fix() {
+    if (!(await confirm(`Make ${items.length} item${items.length === 1 ? "" : "s"} non-stock (${items.map((item) => item.code).join(", ")})? New products from this store will come in as non-stock too, and the next sync tries the ${orders.length} order${orders.length === 1 ? "" : "s"} again.`))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const done = await api<{ items: number; orders: number }>(`/api/sales-platforms/connections/${connectionId}/stock-stuck`, { method: "POST", query: { organisationId } });
+      setMessage(`${done.items} item${done.items === 1 ? " is" : "s are"} non-stock now. The next sync tries the ${done.orders} order${done.orders === 1 ? "" : "s"} again.`);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Notice tone="warning">
+      {orders.length} order{orders.length === 1 ? " isn't" : "s aren't"} invoiced because there&apos;s no stock on hand to take out (
+      {orders
+        .slice(0, 8)
+        .map((order) => order.name ?? order.orderId)
+        .join(", ")}
+      {orders.length > 8 ? ", …" : ""}). If you make things to order, they shouldn&apos;t be stock items.
+      {error ? <div>{error}</div> : null}
+      <div className={ui.actions} style={{ marginTop: 8 }}>
+        {isAdmin && items.length > 0 ? (
+          <Button variant="secondary" disabled={busy} onClick={() => void fix()}>
+            {busy ? "Working…" : `Make ${items.length} product${items.length === 1 ? "" : "s"} non-stock`}
+          </Button>
+        ) : null}
+        <Link href="/operations/settings#inventory">Or allow negative stock in Settings</Link>
+      </div>
+    </Notice>
   );
 }

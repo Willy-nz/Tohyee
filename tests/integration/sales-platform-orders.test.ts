@@ -7,6 +7,7 @@ import { runTile } from "@/lib/analytics/dashboards";
 import { closeAnalytics, listTables } from "@/lib/analytics/engine";
 import { builtInMeasures, measureFromSaved } from "@/lib/analytics/measure-library";
 import * as connectionRoute from "@/app/api/sales-platforms/connections/[connectionId]/route";
+import * as stockStuckRoute from "@/app/api/sales-platforms/connections/[connectionId]/stock-stuck/route";
 import * as logRoute from "@/app/api/sales-platforms/connections/[connectionId]/log/route";
 import * as webhookRoute from "@/app/api/sales-platforms/webhooks/[organisationId]/[webhookKey]/route";
 import type { SessionUser } from "@/lib/auth/sessions";
@@ -26,6 +27,7 @@ import { getOrganisation } from "@/lib/organisations/registry";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { getSalesOrder } from "@/lib/sales-orders/service";
 import { connectStore, listSyncLog, syncConnection, updateConnectionSettings } from "@/lib/sales-platforms/service";
+import { stockStuck } from "@/lib/sales-platforms/stock-stuck";
 import { SHOP_NOT_PERMITTED, setSalesPlatformFetchForTests } from "@/lib/sales-platforms/shopify";
 import { createTaxCode } from "@/lib/tax/codes";
 import {
@@ -544,6 +546,48 @@ describeWithDatabase("Shopify orders into the accounts (stage 2)", () => {
     // Tried again at the next sync (and logged once, not every time).
     await w.sync("2026-10-09T05:00:00Z");
     expect((await logFor(w, "5006")).filter((entry) => entry.action === "failed")).toHaveLength(1);
+  });
+
+  it("SSD1: with stock items off, a tracked product comes in as non-stock", async () => {
+    const w = await setup();
+    expect((await w.as((tx) => updateConnectionSettings(tx, w.connectionId, { stockItems: false }))).stockItems).toBe(false);
+    await w.sync("2026-10-01T01:00:00Z");
+    expect((await w.as((tx) => tx.query<{ item_type: string }>("select item_type from items where code = 'GIFTBOX'"))).rows[0].item_type).toBe("non_stock");
+    w.state.orders.push(order1004());
+    expect(await w.sync("2026-10-09T02:00:00Z")).toMatchObject({ failed: 0 });
+    const sold = (await doc(w, "order", "5004"))!;
+    expect(await journal(w, await journalIdOf(w, "sales_invoices", "approval_journal_id", sold.invoice_id))).toEqual({ "1100": "34.50", "2100": "-4.50", "4000": "-30.00" });
+    expect(await balance(w, "5000")).toBe("0.00");
+    await expect(w.as((tx) => updateConnectionSettings(tx, w.connectionId, { stockItems: "no" }))).rejects.toThrow();
+  });
+
+  it("SSD2-SSD3: an order stuck for no stock is found, and making the products non-stock lets it through", async () => {
+    const w = await setup();
+    await w.sync("2026-10-01T01:00:00Z");
+    expect(await w.as((tx) => stockStuck(tx, w.connectionId))).toEqual({ orders: [], items: [] });
+    w.state.orders.push(order1004());
+    expect(await w.sync("2026-10-09T02:00:00Z")).toMatchObject({ failed: 1 });
+    expect((await logFor(w, "5004")).at(-1)!.message).toContain("no stock on hand");
+    const stuck = await w.as((tx) => stockStuck(tx, w.connectionId));
+    expect(stuck.orders).toEqual([{ orderId: "5004", name: "#1004" }]);
+    expect(stuck.items.map((item) => item.code)).toEqual(["GIFTBOX"]);
+
+    // Viewers can't look; bookkeepers can look but not fix it; admins can.
+    const url = `/x?organisationId=${w.org}`;
+    const id = params({ connectionId: w.connectionId });
+    expect((await stockStuckRoute.GET(apiRequest(url, { cookie: await sessionCookieFor(viewer) }), id)).status).toBe(403);
+    expect((await stockStuckRoute.GET(apiRequest(url, { cookie: await sessionCookieFor(bookkeeper) }), id)).status).toBe(200);
+    expect((await stockStuckRoute.POST(apiRequest(url, { method: "POST", cookie: await sessionCookieFor(bookkeeper) }), id)).status).toBe(403);
+    const fixed = await stockStuckRoute.POST(apiRequest(url, { method: "POST", cookie: await sessionCookieFor(owner) }), id);
+    expect(fixed.status).toBe(200);
+    expect(await fixed.json()).toEqual({ items: 1, orders: 1 });
+    expect((await w.as((tx) => tx.query<{ item_type: string }>("select item_type from items where code = 'GIFTBOX'"))).rows[0].item_type).toBe("non_stock");
+    expect((await w.as((tx) => tx.query<{ s: boolean }>("select stock_items as s from sales_platform_connections"))).rows[0].s).toBe(false);
+
+    expect(await w.sync("2026-10-09T03:00:00Z")).toMatchObject({ failed: 0 });
+    const sold = (await doc(w, "order", "5004"))!;
+    expect(await journal(w, await journalIdOf(w, "sales_invoices", "approval_journal_id", sold.invoice_id))).toEqual({ "1100": "34.50", "2100": "-4.50", "4000": "-30.00" });
+    expect(await w.as((tx) => stockStuck(tx, w.connectionId))).toEqual({ orders: [], items: [] });
   });
 
   it("SPC19: a client-credentials token is renewed near expiry, stored encrypted, and never shown", async () => {

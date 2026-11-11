@@ -6910,6 +6910,35 @@ Built (decisions 1334-1341). Tests:
 unit tests `sales-platform-customer-matches`, `sales-platform-setup`,
 `sales-platform-orders` and `sales-platforms`.
 
+### Shopify products as stock or non-stock (SSD1-SSD3; Jess, 11 Nov 2026, issue 6; the details are Claude's, not yet reviewed)
+
+Products Shopify tracks stock for came in as stock items with nothing on
+hand, so with negative stock off their orders waited and were never
+invoiced. A made-to-order shop now says so, and a stuck order shows one
+warning with a fix. Made-up store, same as SPC17.
+
+- **SSD1** Connecting, the shop answers "Do you track stock in Shopify?"
+  with **No, things are made to order** (or later unticks "I keep stock in
+  Shopify" under What comes in). Gift box (SKU GIFTBOX, tracked in Shopify)
+  comes in as **non-stock** item GIFTBOX. Order **#1004** (5004), 1 ×
+  GIFTBOX at 34.50, tax 4.50, paid: invoice **Dr 1100 34.50 / Cr 4000 30.00
+  / Cr 2100 4.50**, and no cost of sales. Items already brought in keep
+  their type. Answering Yes (the default, and how stores connected before
+  this) is SPC17.
+- **SSD2** With Yes, and nothing on hand for GIFTBOX, #1004 fails at the
+  invoice ("There's no stock on hand to take out"). The store's settings
+  show one warning: "1 order isn't invoiced because there's no stock on
+  hand to take out (#1004)", with **Make 1 product non-stock** and **Or
+  allow negative stock in Settings**. It lists the store's orders with no
+  invoice whose last try failed for no stock, and the store's stock items
+  that have never had stock in or out. Bookkeepers see it; viewers don't.
+- **SSD3** An admin chooses **Make 1 product non-stock** and confirms.
+  GIFTBOX becomes non-stock, the store stops making new stock items (as
+  SSD1), and the next sync tries #1004 again: posted as in SSD1. The
+  warning goes. A stock item that has had stock in or out isn't changed;
+  allowing negative stock (or entering the stock on hand) is the way
+  through for those.
+
 ### WooCommerce orders into the accounts (item 7 part 2, approved by Jess, 5 Oct 2026)
 
 Jess, 5 Oct 2026: WooCommerce next; **each payment method is mapped to an
