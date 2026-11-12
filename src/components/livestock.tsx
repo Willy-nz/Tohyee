@@ -2020,7 +2020,7 @@ function HighPricedCard({ organisationId, canEdit }: { organisationId: string; c
   return (
     <Card
       title="High-priced livestock"
-      description={<>An animal that cost at least 500.00 and five times its class&apos;s NAMV is valued on its own.{" "}<InfoTip label="High-priced livestock">It&apos;s valued at cost in the year bought, then less IRD&apos;s depreciation rate each year, until it&apos;s at or below its class&apos;s NAMV. Record its purchase as a movement too.</InfoTip></>}
+      description={<>An animal that cost at least 500.00 and five times its class&apos;s NAMV is valued on its own.{" "}<InfoTip label="High-priced livestock">It&apos;s valued at cost in the year bought, then less IRD&apos;s depreciation rate each year, until it&apos;s at or below its class&apos;s NAMV. Record its purchase as a movement too. One bought before livestock&apos;s first year opens that year at its value then, apart from its class: keep its head in the class&apos;s opening head, and its value out of the class&apos;s opening value.</InfoTip></>}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {animals.data && animals.data.animals.length === 0 ? <Empty>None recorded.</Empty> : null}

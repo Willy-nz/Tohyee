@@ -14105,6 +14105,17 @@ migration 0265.
       tractor jobs. Empty sections inside a record or a form get no picture,
       so busy screens stay quiet.
 
+### High-priced animals bought before livestock starts (13 Nov 2026; decision 1602)
+
+1602. **A high-priced animal bought before livestock's first year is carried
+      in, instead of refused (#243).** It was tested on an earlier return, so
+      the cost and five-times-NAMV test isn't run again. It opens the first
+      year at cost less IRD's rate for each year since the year bought, apart
+      from its class, and carries on as LV25. Its head stays in its class's
+      opening head; its value stays out of the class's opening value. It's
+      refused once any year is approved, and when it would already be worth
+      nothing. Worked example LV25B.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
