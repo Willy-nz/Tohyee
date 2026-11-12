@@ -8,7 +8,7 @@ import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { add, cmp, dec, type Decimal, isNegative, isZero, mul, mulDiv, neg, parseDecimalInput, sub, sum, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { optionalSource, optionalString, requireIdempotencyKey, requireOneOf, requireString } from "@/lib/validation";
 import { CHATHAM_KINDS, classesOf, classKey, className, findClass, KIND_NAMES, LIVESTOCK_KINDS, type LivestockKind, NSC_KIND_NAMES, NSC_RATE_KIND } from "./classes";
-import { type HighPricedAnimal, highPricedValueAt, listHighPriced } from "./high-priced";
+import { carriedOpeningValue, type HighPricedAnimal, highPricedValueAt, listHighPriced } from "./high-priced";
 import { getLivestockSettings, requireLivestock, requireYearEnd, yearFacts, type YearFacts } from "./movements";
 
 /*
@@ -422,6 +422,13 @@ export async function workOut(tx: OrgTx, yearEnd: string): Promise<{ workings: W
   const before = problems.length;
   const { values: opening, previousMethods, highPriced: highPricedOpening } = await openingValues(tx, settings.firstYearStart, facts.yearStart, problems);
   const animals = await listHighPriced(tx);
+  // The first year opens with any high-priced animals bought before it, at their value then (LV25B, decision 1602).
+  if (facts.yearStart === settings.firstYearStart) {
+    for (const animal of animals) {
+      const value = carriedOpeningValue(animal, settings.firstYearStart, settings.financialYearEndMonth);
+      if (value !== null && (animal.leftOn === null || animal.leftOn >= settings.firstYearStart)) highPricedOpening.set(animal.id, money(value));
+    }
+  }
   const missingPrevious = problems.length > before;
 
   for (const step of facts.ageing.needsSplit) {

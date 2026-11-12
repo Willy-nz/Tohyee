@@ -268,7 +268,7 @@ function DesktopMenus({ menus }: { menus: Menu[] }) {
   );
 }
 
-/** "+ New": every create action in one place (bookkeepers and up). */
+/** "+ New": every create action in one place (the books for bookkeepers and up; the farm's quick records, decision 1599). */
 function NewMenu({ groups }: { groups: MenuGroup[] }) {
   const pathname = usePathname();
   const search = useSearchParams();
@@ -777,7 +777,7 @@ function Shell({ app: layoutApp, children, warnings }: { app: AppKey; children: 
   const menus = useMemo(() => visibleMenus(app, { can, modules, farmWorker }), [app, can, modules, farmWorker]);
   // Ctrl K finds the farm's pages from any app (decision 1110).
   const farmMenus = useMemo(() => (app === "farm" ? [] : visibleMenus("farm", { can, modules, farmWorker })), [app, can, modules, farmWorker]);
-  const newActions = useMemo(() => visibleNewActions({ can, modules }), [can, modules]);
+  const newActions = useMemo(() => visibleNewActions({ can, modules, farmWorker }), [can, modules, farmWorker]);
   const settings = useMemo(() => (app === "accounting" ? visibleSettings({ can, modules }) : []), [app, can, modules]);
   const items = useMemo<Destination[]>(
     () =>

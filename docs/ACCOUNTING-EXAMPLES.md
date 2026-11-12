@@ -18662,8 +18662,8 @@ refusal test in `livestock-valuation.test.ts`. Decision 509.
     (it reverts to its class at NAMV).
   - **Reverting:** an animal at or below its class's NAMV (with any
     ratio) at a year end reverts.
-  - **Not supported:** high-priced animals bought before livestock's first
-    year, and those in classes not in the herd scheme.
+  - **Not supported:** high-priced animals in classes not in the herd
+    scheme. (Those bought before livestock's first year: LV25B.)
 - **LV26** comes out as drafted. With the NSC election's "male breeding
   stock in the herd scheme", the rams are revalued from 4,000.00 to
   4,310.00 (310.00 non-taxable). Without it, they're refused.
@@ -22409,6 +22409,54 @@ Records only: nothing posts (decisions 1487-1494). Tested in
   photo of cow 5 with both references, and its suggestion names them.
   Another organisation has **no references, no photos to score**, and can't
   suggest on this one.
+
+## Farming: stock and treatments in the Log (LS1-LS5; built by Claude 13 Nov 2026, common NZ practice, the details are Claude's, not yet reviewed)
+
+Decisions 1598-1599, #447 items 8 and 10. Made-up farm: Home farm, mob "R2 heifers"
+(40 head, in paddock 3), mob "Ewes" (200 head), mob "Ewe hoggets" (50 head).
+
+- **LS1 Move.** Log → Move a mob → R2 heifers → paddock 7 → today → Save.
+  Saved on the phone as "R2 heifers to Paddock 7, today" and sent to the
+  mob's move action with its operation id: the mob is **in paddock 7 from
+  today**, the same as moving it on the Mobs screen. Paddock 3 isn't
+  offered. Sending it again does nothing more.
+- **LS2 Births.** Births go into the young-stock mob, so only mobs of a
+  class that has births are listed: Ewe hoggets is offered, Ewes and R2
+  heifers aren't. 12 born into Ewe hoggets today: Ewe hoggets is **62 head**.
+- **LS3 Deaths.** 2 died from R2 heifers, note "Bloat": the mob is **38
+  head**. 41 is refused (more than the mob has). A mob with tagged animals
+  says to record tagged deaths on the mob's page.
+- **LS4 Treatment.** R2 heifers, "Test drench", 10 mL each, 38 head, meat
+  14 days, no milk, given by Sam, today: one treatment in the register,
+  safe to send to slaughter **14 days after today**, the same as typed on
+  the Treatments screen. Product, dose and who gave it can't be left blank.
+- **LS5 "+ New".** With Farming on, a bookkeeper's "+ New" has Sales,
+  Purchases and **Farm** (Farm walk … Add a photo or note). "Move a mob"
+  opens the Log at LS1's first question. Sam, farm staff, sees **only
+  Farm**. A viewer sees no "+ New". With Farming off, there's no Farm group.
+
+## Livestock: a high-priced animal bought before the first year (LV25B; built by Claude 13 Nov 2026 from IRD OS 25/02 paras 68-71, the details are Claude's, not yet reviewed)
+
+Decision 1602, #243. Made-up farm: livestock starts 1 July 2025 (30 June
+balance date). The farm bought the bull Te Mana on 1 Aug 2023 for
+**30,000.00**; the accountant's IRD rate is 25% straight line.
+
+- **Openings:** mature cows 100 head, 200,000.00; breeding bulls **1 head,
+  0.00** (the bull's head is counted in its class; his value isn't). The
+  opening journal is 200,000.00 + 22,500.00 = **222,500.00**.
+- **Recording:** Te Mana is recorded with his cost, rate and its source.
+  The high-priced test isn't run again, because he was tested on an
+  earlier return, and last year's NAMV isn't asked for.
+- **Opening value:** cost in 2023-24 (30,000.00 at 30 June 2024), less 25%
+  of cost for 2024-25: **22,500.00** at 30 June 2025.
+- **2025-26:** closing **15,000.00**, apart from his class. The cows'
+  revaluation to NAMV (2,376.00 a head) is **37,600.00**, not taxable;
+  the taxable change is the bull's **-7,500.00**. Closing value
+  237,600.00 + 15,000.00 = **252,600.00**.
+- **Refused:** a bull bought in 2020-21 (worth nothing by 30 June 2025 at
+  25%, so already back in his class); a typed NAMV for one carried in; and
+  adding one once any year is approved, because it changes the first
+  year's opening.
 
 ## Livestock: purchased bobby calves under NSC (LV28; built by Claude 13 Nov 2026 from IRD's NSC determinations, the details are Claude's, not yet reviewed)
 

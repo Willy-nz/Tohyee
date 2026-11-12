@@ -395,7 +395,7 @@ export function ExpenseClaimList({ organisationId }: { organisationId: string })
       </div>
       {list.error ? <Notice tone="error">{list.error}</Notice> : null}
       {!list.data && !list.error ? <p className={ui.muted}>Loading…</p> : null}
-      {list.data && list.data.claims.length === 0 ? <Empty>{filter.empty}</Empty> : null}
+      {list.data && list.data.claims.length === 0 ? <Empty picture="receipt">{filter.empty}</Empty> : null}
       {list.data && list.data.claims.length > 0 ? (
         <div className={ui.tableWrap}>
           <table className={`${ui.table} ${ui.stackOnPhone}`}>

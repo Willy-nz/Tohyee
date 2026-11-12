@@ -14076,6 +14076,46 @@ migration 0265.
       it was closer. Tenant migration 0277. Not tried against the live
       service; not yet reviewed.
 
+### Stock and treatments in the farm Log, and farm items in "+ New" (13 Nov 2026; decisions 1598-1599)
+
+1598. **The Log sheet now records a mob move, births, deaths and a treatment
+      (#447 item 10).** One question a screen, saved on the phone first and
+      sent with an operation id like the other quick logs. They go through the
+      mob's own actions and the treatment register, so the checks are the same
+      as on the Mobs and Treatments screens: the mob must be on the farm being
+      worked, deaths can't exceed the head, and births are offered only for
+      young-stock classes that have them (lambs, calves, fawns, kids). Selling, buying and reclassing stay on the Mobs
+      screen because they touch the books. Tagged deaths are pointed to the
+      mob's page so the animal register stays right. Worked examples LS1-LS4.
+1599. **"+ New" offers the farm's quick records while Farming is on (#447
+      item 8).** Farm walk, a grazing, a cover reading, moving a mob, births,
+      deaths, a treatment, rain, and a photo or note; each opens that flow in
+      the Log. Bookkeepers and up see them with the books' items; farm staff,
+      who used to get no "+ New" at all (decision 904), now see only these.
+      Viewers still see none, because they can't record. Worked example LS5.
+
+### Pictures on empty lists (13 Nov 2026; decision 1600)
+
+1600. **A page's main list, when empty, shows a small illustration (#509
+      Deliverable 3).** `Empty` takes an optional `picture`, one of the
+      illustrated icons, drawn at 48 px and hidden from screen readers; the
+      sentence and any action stay as they were. It's used on the farm
+      calendar and tasks, Analytics reports, CRM companies, people, tasks,
+      leads and campaigns, expense claims, IRD documents, R&D files and
+      tractor jobs. Empty sections inside a record or a form get no picture,
+      so busy screens stay quiet.
+
+### High-priced animals bought before livestock starts (13 Nov 2026; decision 1602)
+
+1602. **A high-priced animal bought before livestock's first year is carried
+      in, instead of refused (#243).** It was tested on an earlier return, so
+      the cost and five-times-NAMV test isn't run again. It opens the first
+      year at cost less IRD's rate for each year since the year bought, apart
+      from its class, and carries on as LV25. Its head stays in its class's
+      opening head; its value stays out of the class's opening value. It's
+      refused once any year is approved, and when it would already be worth
+      nothing. Worked example LV25B.
+
 ### Purchased bobby calves under NSC (13 Nov 2026; decision 1603)
 
 1603. **A purchase of beef or dairy cattle into a rising one-year class can

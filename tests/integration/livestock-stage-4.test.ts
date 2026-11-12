@@ -193,4 +193,29 @@ describeWithDatabase("livestock stage 4 (LV21-LV26)", () => {
       ["5210", "7500.00", "0.00"],
     ]);
   });
+
+  it("LV25B: a high-priced bull bought before livestock's first year opens at its value then (decision 1602)", async () => {
+    const org = "livestock-high-priced-carried";
+    // The bull's head is in breeding bulls' opening head; its value isn't in their opening value.
+    await farm(org, 6, "2025-07-01", [["beef_cattle", "ma_cows", 100, "200000.00"], ["beef_cattle", "breeding_bulls", 1, "0.00"]], "222500.00");
+    const bull = { kind: "beef_cattle", classCode: "breeding_bulls", boughtOn: "2023-08-01", cost: "30000.00", ratePercent: "25", rateSource: "IRD high-priced livestock rate (typed for the test)" };
+    // Tested on an earlier return, so no NAMV is asked for, and none is taken.
+    await expect(run(org, (tx) => recordHighPriced(tx, { ...bull, description: "Te Mana", priorYearNamv: "4900.00" }))).rejects.toThrow(/only for an animal bought since/);
+    // Bought in 2020-21 at 25%, it's worth nothing by 30 June 2025: back in its class already.
+    await expect(run(org, (tx) => recordHighPriced(tx, { ...bull, description: "Old", boughtOn: "2020-08-01" }))).rejects.toThrow(/worth nothing by 2025-06-30/);
+    await run(org, (tx) => recordHighPriced(tx, { ...bull, description: "Te Mana" }));
+    await run(org, (tx) => recordElection(tx, { kind: "beef_cattle", method: "herd_scheme", fromIncomeYear: 2026 }));
+
+    const first = await run(org, (tx) => previewValuation(tx, { yearEnd: "2026-06-30" }));
+    expect(first.problems).toEqual([]);
+    expect(first.ledgerOpening).toBe("222500.00");
+    const beef = first.workings.kinds[0];
+    // Bought in 2023-24: cost at 30 June 2024, 22,500.00 at 30 June 2025, 15,000.00 at 30 June 2026.
+    expect(beef.highPriced).toEqual([expect.objectContaining({ description: "Te Mana", openingValue: "22500.00", closingValue: "15000.00", status: "high_priced" })]);
+    expect(beef.classes.map((entry) => entry.classCode)).toEqual(["ma_cows"]);
+    expect(beef).toMatchObject({ openingValue: "222500.00", closingValue: "252600.00", revaluation: "37600.00", valueChange: "-7500.00", taxableProfit: "-7500.00" });
+    await run(org, (tx) => approveValuation(tx, { yearEnd: "2026-06-30", idempotencyKey: key("v") }));
+    // An approved year means the opening is settled.
+    await expect(run(org, (tx) => recordHighPriced(tx, { ...bull, description: "Late" }))).rejects.toThrow(/is approved/);
+  });
 });
