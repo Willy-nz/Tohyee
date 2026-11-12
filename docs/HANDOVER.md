@@ -173,6 +173,7 @@ kind".)
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
+- **0.34.0 ready to publish from main** (12 Nov 2026): #668-#671. Notes in docs/releases/0.34.0.md.
 - **0.33.0 ready to publish from main** (12 Nov 2026): #650-#666. Notes in docs/releases/0.33.0.md.
 - **0.32.0 ready to publish from main** (11 Nov 2026): #637-#648. Notes in docs/releases/0.32.0.md.
 - **0.31.0 ready to publish from main** (10 Nov 2026): #633-#635. Notes in docs/releases/0.31.0.md.
