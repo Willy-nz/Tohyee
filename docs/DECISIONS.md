@@ -14105,7 +14105,7 @@ migration 0265.
       with the NSC election is fine). Tenant migration 0280. Two things stay
       unbuilt because IRD's statement doesn't settle them: valuing an
       increase above the base number by another method, and how a long-term
-      bailee accounts. Worked example LV30.
+      bailee accounts. Worked example LV31.
 
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 

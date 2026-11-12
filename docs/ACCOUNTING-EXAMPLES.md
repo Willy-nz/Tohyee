@@ -18566,7 +18566,7 @@ were read from IRD's determinations on 11 Oct 2026).
 
 - An increase in a class valued by another method (paras 42-44).
 - Associated-person transfers and the base number (OS example 2). The
-  herd scheme rule for associated purchases is built (LV30). Valuing an
+  herd scheme rule for associated purchases is built (LV31). Valuing an
   increase above the base number by another method is still refused: OS
   25/02 doesn't say which method, or how the increase carries forward.
 - Long-term bailments.
@@ -22438,7 +22438,7 @@ Decisions 1598-1599, #447 items 8 and 10. Made-up farm: Home farm, mob "R2 heife
   opens the Log at LS1's first question. Sam, farm staff, sees **only
   Farm**. A viewer sees no "+ New". With Farming off, there's no Farm group.
 
-## Livestock: bought from an associated person (LV30; built by Claude 13 Nov 2026 from OS 25/02 paras 54-58 and s EC 4B, the details are Claude's, not yet reviewed)
+## Livestock: bought from an associated person (LV31; built by Claude 13 Nov 2026 from OS 25/02 paras 54-58 and s EC 4B, the details are Claude's, not yet reviewed)
 
 Decision 1605, #243. Made-up farm: dairy, 31 May balance date, 300 mixed-age
 cows at the start. On 1 Oct 2025 the farmer buys 60 cows from their father

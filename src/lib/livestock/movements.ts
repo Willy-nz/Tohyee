@@ -113,7 +113,7 @@ export type Movement = {
   toClassCode: string | null;
   head: number;
   amount: string | null;
-  /** Purchases: from an associated person who used the herd scheme, so it stays in the herd scheme (LV30). */
+  /** Purchases: from an associated person who used the herd scheme, so it stays in the herd scheme (LV31). */
   boundToHerdScheme: boolean;
   locationId: string | null;
   locationName: string | null;
@@ -620,7 +620,7 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
   if (salesInvoiceLineId && movementType !== "sale") throw new ValidationError("Only a sale can be linked to an invoice line.");
   if (billLineId && movementType !== "purchase") throw new ValidationError("Only a purchase can be linked to a bill line.");
   const note = optionalString(input.note, "note", { maxLength: 1000 });
-  // From an associated person who used the herd scheme (LV30, decision 1605; s EC 4B): it stays in the herd scheme.
+  // From an associated person who used the herd scheme (LV31, decision 1605; s EC 4B): it stays in the herd scheme.
   const boundToHerdScheme = input.boundToHerdScheme === true || input.boundToHerdScheme === "true";
   if (boundToHerdScheme && movementType !== "purchase") throw new ValidationError("Only a purchase can be from an associated person.");
 
@@ -639,7 +639,7 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     billLineId,
     rationsFor,
     note,
-    // Only when set, so a replay of a movement recorded before LV30 still matches.
+    // Only when set, so a replay of a movement recorded before LV31 still matches.
     ...(boundToHerdScheme ? { boundToHerdScheme } : {}),
   });
   const earlier = await tx.query<{ id: string; request_hash: string }>(

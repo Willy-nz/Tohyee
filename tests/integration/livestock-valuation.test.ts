@@ -222,7 +222,7 @@ describeWithDatabase("livestock year-end valuation (LV4-LV12)", () => {
     expect(classes.filter((entry) => entry.classCode !== "r1_heifers").reduce((total, entry) => total + Number(entry.closingValue) * 100, 0)).toBe(48033250);
   });
 
-  it("LV30: stock bought from an associated person who used the herd scheme stays in the herd scheme (decision 1605)", async () => {
+  it("LV31: stock bought from an associated person who used the herd scheme stays in the herd scheme (decision 1605)", async () => {
     const org = "livestock-associated";
     await farm(org, 5, "2025-06-01", [["dairy_cattle", "ma_cows", 300, "357000.00"]], "357000.00");
     const fromDad = { kind: "dairy_cattle", movementType: "purchase", movementDate: "2025-10-01", classCode: "ma_cows", head: 60, amount: "150000.00", boundToHerdScheme: true };
