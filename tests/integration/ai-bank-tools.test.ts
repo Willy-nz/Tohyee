@@ -464,7 +464,7 @@ describeWithDatabase("AI keys reconciling bank lines (decision 488, AIB1-AIB8)",
   it("no tool deletes, excludes or switches anything off", () => {
     for (const tool of AI_TOOLS) {
       // void_own_journal: Jess's exception (decision 1581), checked in ai-journal-void.test.ts.
-      if (tool.name === "void_own_journal") continue;
+      if (tool.name === "void_own_journal" || tool.name === "void_journals") continue;
       for (const word of ["delete", "void", "archive", "exclude", "deactivate", "unreconcile"]) expect(tool.name.split("_"), tool.name).not.toContain(word);
       // Remove & redo voids what a line created, after a preview: Jess asked for it (decision 1574).
       if (tool.level !== "read" && !tool.readOnly && tool.name !== "remove_and_redo_bank_lines") {

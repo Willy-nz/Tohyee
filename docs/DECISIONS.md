@@ -14640,3 +14640,21 @@ show, 100 a page, and clicking one should let her edit it.
       with no account to choose (GL1). It has the same tracking filter,
       export, print and Save as custom report. Account transactions keeps
       its account picker.
+
+### AI tools for every screen action (13 Nov 2026; decision 1600)
+
+1600. **Every screen action gets an AI tool, area by area.** Will: "can you
+      just add the AI tool for everything rather than fixing 1 little
+      thing", choosing proper tools with previews, accounting areas first,
+      over a single gateway tool. src/lib/ai/screen-coverage.ts lists every
+      POST, PUT, PATCH and DELETE under /api with its tool, or "person"
+      (left to a person on purpose: signing in, AI keys, server settings,
+      members, connecting other services with their secrets), or "next"
+      (not built yet, by area). A test fails when a new screen action isn't
+      listed. Each tool calls the same service as its screen, at the same
+      role, so none is new behaviour. The first set: list_orders_to_hold,
+      apply_sales_when_sent, list_held_orders, mark_order_sent,
+      sync_sales_platform, retry_sales_platform_payouts and void_journals
+      (the Journals page's Void, for any manual journal, after its
+      preview). Claude's details, not yet reviewed.
+
