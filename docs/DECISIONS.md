@@ -14094,6 +14094,18 @@ migration 0265.
       who used to get no "+ New" at all (decision 904), now see only these.
       Viewers still see none, because they can't record. Worked example LS5.
 
+### Pigs under the herd scheme (13 Nov 2026; decision 1604)
+
+1604. **Pigs are a kind of livestock, valued under the herd scheme only
+      (#243).** Classes and 2026 NAMVs are IRD's NAMV 2026 determination's
+      (tenant migration 0279). Piglets are recorded when weaned, because
+      sucklings are nil; nothing ages at balance date, because the classes
+      go by weeks, so pigs move class with a class change. An NSC election
+      is refused: pigs' NSC has its own formulas, not built. Stock units
+      default to 0, because the table has no pig rows. Dairy steers and
+      bulls stay refused under NSC: IRD publishes no rising two-year male
+      dairy NSC for clause 5 of the 1993 determination. Worked example LV29.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
