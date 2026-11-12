@@ -7,6 +7,7 @@ import { operationId, useFarmDrafts } from "@/components/farm-drafts";
 import { EffluentLogButtons } from "@/components/farm-effluent-log";
 import { LogRainfall } from "@/components/farm-rainfall";
 import { LogSafetyReport } from "@/components/farm-safety-reports";
+import { StockLog, type StockFlowKind } from "@/components/farm-log-stock";
 import { PasturePhotoPicker, type PickedPhoto } from "@/components/pasture-photos";
 import { useCanRecordFarmWork } from "@/components/farm-selector";
 import type { FarmContext } from "@/components/farm-workspace";
@@ -31,7 +32,12 @@ import styles from "./farm-workspace.module.css";
 
 const NATURAL = new Intl.Collator("en-NZ", { numeric: true, sensitivity: "base" });
 
-type Flow = { kind: "cover" | "in" | "out" | "feed" | "photo"; paddockId?: string | null; grazingId?: string | null } | { kind: "walk" } | { kind: "rain" } | { kind: "safety"; type: "hazard" | "near_miss" | "incident" };
+type Flow =
+  | { kind: "cover" | "in" | "out" | "feed" | "photo"; paddockId?: string | null; grazingId?: string | null }
+  | { kind: "walk" }
+  | { kind: "rain" }
+  | { kind: "safety"; type: "hazard" | "near_miss" | "incident" }
+  | { kind: "stock"; type: StockFlowKind };
 
 const STATUS_TONE: Record<DraftStatus, "neutral" | "green" | "amber"> = { saved: "neutral", synced: "green", attention: "amber" };
 
@@ -71,7 +77,9 @@ export function FarmLog(context: FarmContext) {
           ? { kind: "rain" }
         : record === "hazard" || record === "near_miss" || record === "incident"
           ? { kind: "safety", type: record }
-          : null;
+          : record === "move" || record === "births" || record === "deaths" || record === "treatment"
+            ? { kind: "stock", type: record }
+            : null;
   const [flow, setFlow] = useState<Flow | null>(initial);
   const canRecord = useCanRecordFarmWork();
   if (!canRecord) return <Notice tone="info">Recording farm work needs the farm staff or bookkeeper role. An owner or admin can change your role.</Notice>;
@@ -80,6 +88,8 @@ export function FarmLog(context: FarmContext) {
   if (flow?.kind === "rain") return <LogRainfall organisationId={context.organisationId} farm={context.farm} onClose={() => setFlow(null)} />;
   // Safety reports (#446, decision 962): the Safety page's report, saved on the phone first.
   if (flow?.kind === "safety") return <LogSafetyReport organisationId={context.organisationId} farm={context.farm} type={flow.type} onClose={() => setFlow(null)} />;
+  // Stock and treatments (#447 item 10, decision 1598).
+  if (flow?.kind === "stock") return <StockLog {...context} kind={flow.type} onClose={() => setFlow(null)} />;
   if (flow) return <QuickLog {...context} flow={flow} onClose={() => setFlow(null)} />;
   return <LogHome {...context} onStart={setFlow} />;
 }
@@ -121,6 +131,25 @@ function LogHome({ organisationId, farm, onStart }: FarmContext & { onStart: (fl
           <button type="button" className={styles.bigButton} onClick={() => onStart({ kind: "rain" })}>
             Rain gauge
             <small>Today&apos;s rain in mm</small>
+          </button>
+        </div>
+        <h3>Stock</h3>
+        <div className={styles.bigButtons}>
+          <button type="button" className={styles.bigButton} onClick={() => onStart({ kind: "stock", type: "move" })}>
+            Move a mob
+            <small>To another paddock</small>
+          </button>
+          <button type="button" className={styles.bigButton} onClick={() => onStart({ kind: "stock", type: "births" })}>
+            Births
+            <small>Born into a mob</small>
+          </button>
+          <button type="button" className={styles.bigButton} onClick={() => onStart({ kind: "stock", type: "deaths" })}>
+            Deaths
+            <small>Died from a mob</small>
+          </button>
+          <button type="button" className={styles.bigButton} onClick={() => onStart({ kind: "stock", type: "treatment" })}>
+            Treatment
+            <small>Drench, vaccine, other animal remedy</small>
           </button>
         </div>
         <h3>Safety</h3>
@@ -281,7 +310,7 @@ function stepsFor(kind: "cover" | "in" | "out" | "feed" | "photo", given: { padd
 
 const TITLES = { cover: "Cover reading", in: "Mob in", out: "Mob out", feed: "Feed", photo: "Paddock photo" } as const;
 
-function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow: Exclude<Flow, { kind: "walk" } | { kind: "safety" } | { kind: "rain" }>; onClose: () => void }) {
+function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow: Exclude<Flow, { kind: "walk" } | { kind: "safety" } | { kind: "rain" } | { kind: "stock" }>; onClose: () => void }) {
   const today = todayInBrowser();
   const { store, change, sync, stored, retryStorage } = useFarmDrafts(organisationId);
   const statuses = useApiData<{ paddocks: PaddockStatus[] }>(`/api/farming/farms/${farm.id}/paddock-status`, { organisationId, onDate: today });

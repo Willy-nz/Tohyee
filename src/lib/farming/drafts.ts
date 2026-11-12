@@ -19,7 +19,7 @@
  *   as saved on the phone: see `draftStatusLabel` (#463).
  */
 
-export type DraftKind = "reading" | "grazing_in" | "grazing_out" | "feed";
+export type DraftKind = "reading" | "grazing_in" | "grazing_out" | "feed" | "mob_action" | "treatment";
 export type DraftStatus = "saved" | "synced" | "attention";
 
 /** The device queue's words (#472, decision 1011): a draft is kept on the device and waiting to send until Tohyee has it. */
@@ -176,6 +176,13 @@ export function draftRequest(draft: Draft): { method: "POST" | "PATCH"; path: st
       const { grazingId, ...rest } = draft.payload;
       return { method: "PATCH", path: `/api/farming/grazings/${String(grazingId)}`, body: rest };
     }
+    // #447 item 10 (decision 1598): a mob moved, births or deaths, through the mob's own action, checked against the farm.
+    case "mob_action": {
+      const { mobId, ...rest } = draft.payload;
+      return { method: "POST", path: `/api/farming/mobs/${String(mobId)}/actions`, body: { ...rest, farmId: draft.farmId, operationId: draft.operationId } };
+    }
+    case "treatment":
+      return { method: "POST", path: `/api/farming/farms/${draft.farmId}/treatments`, body };
   }
 }
 

@@ -408,6 +408,21 @@ export const NEW_ACTIONS: MenuGroup[] = [
       { href: "/operations/expense-claims/new", label: "New expense claim", minRole: "bookkeeper" },
     ],
   },
+  // #447 item 8 (decision 1599): the Log's quick records, when Farming is on. Farm staff see these and nothing else.
+  {
+    heading: "Farm",
+    links: [
+      { href: "/operations/farm/log?record=walk", label: "Farm walk", module: "farming", minRole: "bookkeeper" },
+      { href: "/operations/farm/log?record=in", label: "Record a grazing", module: "farming", minRole: "bookkeeper" },
+      { href: "/operations/farm/log?record=cover", label: "Add a cover reading", module: "farming", minRole: "bookkeeper" },
+      { href: "/operations/farm/log?record=move", label: "Move a mob", module: "farming", minRole: "bookkeeper" },
+      { href: "/operations/farm/log?record=births", label: "Record births", module: "farming", minRole: "bookkeeper" },
+      { href: "/operations/farm/log?record=deaths", label: "Record deaths", module: "farming", minRole: "bookkeeper" },
+      { href: "/operations/farm/log?record=treatment", label: "Record a treatment", module: "farming", minRole: "bookkeeper" },
+      { href: "/operations/farm/log?record=rain", label: "Record rain", module: "farming", minRole: "bookkeeper" },
+      { href: "/operations/farm/log?record=photo", label: "Add a photo or note", module: "farming", minRole: "bookkeeper" },
+    ],
+  },
 ];
 
 /**
@@ -698,10 +713,13 @@ export function visibleSettings(access: Access): MenuGroup[] {
   return filterGroups(SETTINGS, access);
 }
 
-/** The "+ New" actions someone may start (bookkeepers and up, today). */
+/** The "+ New" actions someone may start: the books for bookkeepers and up, the farm's quick records for anyone who may log (decision 1599). */
 export function visibleNewActions(access: Access): MenuGroup[] {
-  if (access.modules?.accounting === false || access.farmWorker) return [];
-  return filterGroups(NEW_ACTIONS, access);
+  if (access.modules?.accounting === false) return [];
+  if (!access.farmWorker) return filterGroups(NEW_ACTIONS, access);
+  // Farm staff record farm work (decision 904) but none of the books: only the farm's links, whatever their role says.
+  const farmLinks = NEW_ACTIONS.flatMap((group) => group.links).filter((link) => link.module === "farming" && moduleOn(link.module, access.modules) && farmWorkLink(link.href));
+  return farmLinks.length ? [{ heading: "Farm", links: farmLinks }] : [];
 }
 
 /** One row in the command palette: where it goes and what it's called. */
