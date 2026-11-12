@@ -14061,6 +14061,21 @@ migration 0265.
       weather or growth models, no paid imagery (tenant migration 0276).
       Not tried on real readings; not yet reviewed.
 
+### Daily farm weather from MetService, and weather in modelled cover (12 Nov 2026; decision 1597)
+
+1597. **MetService's forecasts as the farm's weather history (FW1-FW8,
+      MCV9).** Jess: rainfall matters, she has no gauges, and MetService
+      should be the source ("use MetService and their history"). Each
+      finished day's rain and temperature is worked out from the forecasts
+      Tohyee keeps (each hour from the forecast fetched closest before it)
+      plus MetService's five days of recent history fetched daily, and
+      saved per farm. A gauge reading wins where there is one. It runs only
+      under the existing records and combine switches (decision 1556).
+      Modelled cover compares greenness alone with greenness plus rain (and
+      temperature) on the same left-out dates and uses the weather only if
+      it was closer. Tenant migration 0277. Not tried against the live
+      service; not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

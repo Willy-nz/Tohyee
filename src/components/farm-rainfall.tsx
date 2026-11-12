@@ -15,6 +15,7 @@ import { addDays, shortDate } from "@/lib/farming/farm-words";
 import type { Position } from "@/lib/farming/geometry";
 import type { Farm, FarmingSettings, Paddock } from "@/lib/farming/paddocks";
 import type { RainGauge, RainImportPreview, RainReading, RainfallSummary } from "@/lib/farming/rainfall";
+import type { RecentWeather } from "@/lib/farming/weather-history";
 import { comparedText, latestRainDay, mmText, type Period, rainDayFor, readDayFor, tryMm } from "@/lib/farming/rainfall-rules";
 import { formatDateTime, todayInBrowser } from "@/lib/format";
 import { newOperationId } from "@/lib/offline/queue";
@@ -25,8 +26,8 @@ import styles from "./farm-workspace.module.css";
  * on the phone first and sent through the device's one queue (so it works
  * with no signal and is kept once), and Farm › More › Rainfall with the
  * gauges, the history by month and season beside last year's, each day's
- * readings to change or backdate, and importing a file. Tohyee fetches no
- * outside weather.
+ * readings to change or backdate, and importing a file. Daily rain and
+ * temperature from kept MetService forecasts sit above them (FW4).
  */
 
 export const RAIN_KIND = "farm.rainfall";
@@ -232,6 +233,7 @@ export function FarmRainfall({ organisationId, farm }: FarmContext) {
             ))}
         </div>
       ) : null}
+      <DailyWeather organisationId={organisationId} farmId={farm.id} />
       {gauge ? <RainHistory key={gauge.id} organisationId={organisationId} gauge={gauge} /> : null}
       {gauge ? <RainReadings key={`r${gauge.id}`} organisationId={organisationId} farm={farm} gauge={gauge} canRecord={canRecord} canRemove={can("bookkeeper")} onChanged={gauges.reload} /> : null}
       {canRecord ? (
@@ -811,6 +813,69 @@ function ImportRain({ organisationId, gauge, onImported }: { organisationId: str
           </>
         ) : null}
       </details>
+    </Card>
+  );
+}
+
+/**
+ * FW4: the last 30 days' rain and temperature. A gauge reading wins; else
+ * MetService's, worked out from the forecasts Tohyee kept. Days MetService
+ * had fewer than 24 hours for say so.
+ */
+function DailyWeather({ organisationId, farmId }: { organisationId: string; farmId: string }) {
+  const answer = useApiData<{ weather: RecentWeather }>(`/api/farming/farms/${farmId}/weather-days`, { organisationId });
+  const weather = answer.data?.weather;
+  if (answer.error) return <Notice tone="error">{answer.error}</Notice>;
+  if (!weather) return null;
+  if (!weather.on) {
+    return (
+      <Card title="Daily rain from MetService">
+        <p className={ui.muted}>
+          {weather.why} Once forecasts are on, records kept and combining allowed, each day&apos;s rain and temperature are worked out from them here. <Link href="/operations/settings/weather">Weather settings</Link>
+        </p>
+      </Card>
+    );
+  }
+  return (
+    <Card
+      title="Daily rain from MetService"
+      description="Each hour from the forecast fetched closest before it, added up for the day (midnight to midnight). Your gauge's reading is used instead where there is one."
+    >
+      {weather.days.length === 0 ? (
+        <p className={ui.muted}>No finished days yet. They&apos;re worked out each morning from the forecasts kept.</p>
+      ) : (
+        <table className={ui.table}>
+          <thead>
+            <tr>
+              <th scope="col">Day</th>
+              <th scope="col" className={ui.num}>
+                Rain (mm)
+              </th>
+              <th scope="col">From</th>
+              <th scope="col" className={ui.num}>
+                Average °C
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {weather.days.map((day) => (
+              <tr key={day.day}>
+                <td>{shortDate(day.day, todayInBrowser())}</td>
+                <td className={ui.num}>{day.rainMm === null ? "–" : mmText(day.rainMm)}</td>
+                <td>
+                  {day.rainSource === "gauge" ? "Your gauge" : day.rainSource === "metservice" ? "MetService" : "–"}
+                  {day.rainSource === "gauge" && day.metserviceRainMm !== null ? <span className={ui.muted}> (MetService {mmText(day.metserviceRainMm)})</span> : null}
+                  {day.hours !== null && day.hours < 24 && day.rainSource === "metservice" ? <span className={ui.muted}> ({day.hours} of 24 hours)</span> : null}
+                </td>
+                <td className={ui.num}>{day.temperatureC ?? "–"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p className={ui.muted} style={{ margin: 0 }}>
+        {weather.attribution}
+      </p>
     </Card>
   );
 }

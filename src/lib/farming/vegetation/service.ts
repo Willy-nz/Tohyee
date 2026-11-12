@@ -10,7 +10,9 @@ import type { Grid } from "@/lib/farming/vegetation/raster";
 import { attributionText, farmState, PROCESSOR_VERSION, type Quality, type QualityFlag, THRESHOLD_LIMITS, type VegetationState } from "@/lib/farming/vegetation/rules";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
 import type { ModelledCover } from "@/lib/farming/vegetation/cover-fit";
-import { activeCoverModel, type CoverModel, estimateFor } from "@/lib/farming/vegetation/cover-estimates";
+import { activeCoverModel, type CoverModel, estimateFor, usesWeather } from "@/lib/farming/vegetation/cover-estimates";
+import { weatherMaps } from "@/lib/farming/weather-history";
+import { rainBefore, RAIN_WINDOW_DAYS, shiftDay, temperatureBefore } from "@/lib/farming/weather-history-rules";
 import { requireId } from "@/lib/validation";
 
 /*
@@ -683,9 +685,19 @@ function toObservation(row: ObservationRow): PaddockObservation {
   };
 }
 
-/** MCV6: each observation with its modelled cover from the farm's line in use, if any. */
-function withEstimates(observations: PaddockObservation[], model: CoverModel | null): PaddockObservation[] {
-  return model ? observations.map((observation) => ({ ...observation, modelledCover: estimateFor(model, observation) })) : observations;
+/** MCV6, MCV9: each observation with its modelled cover from the farm's line in use, if any (with the weather before it, if the line uses it). */
+async function withEstimates(tx: OrgTx, farmId: string, observations: PaddockObservation[], model: CoverModel | null): Promise<PaddockObservation[]> {
+  if (!model || observations.length === 0) return observations;
+  const dates = observations.map((observation) => observation.acquiredOn).sort();
+  const weather = usesWeather(model) ? await weatherMaps(tx, farmId, shiftDay(dates[0], -RAIN_WINDOW_DAYS), dates[dates.length - 1]) : null;
+  return observations.map((observation) => ({
+    ...observation,
+    modelledCover: estimateFor(
+      model,
+      observation,
+      weather ? { rain14: rainBefore(weather.rain, observation.acquiredOn), temperature14: temperatureBefore(weather.temperature, observation.acquiredOn) } : {},
+    ),
+  }));
 }
 
 export type FarmVegetation = {
@@ -765,7 +777,7 @@ export async function getFarmVegetation(tx: OrgTx, farmIdInput: unknown, options
     thresholds: { minCoveragePct: settings.min_coverage_pct, minValidPixels: settings.min_valid_pixels },
     scenes,
     scene,
-    observations: scene ? withEstimates(await sceneObservations(tx, scene.id), model) : [],
+    observations: scene ? await withEstimates(tx, farm.id, await sceneObservations(tx, scene.id), model) : [],
     attribution: provider ? attributionText(provider, scene ? [Number(scene.acquiredAt.slice(0, 4))] : []) : "",
     coverEstimates: model
       ? { meanError: model.meanError, likelyWithin: model.likelyWithin, acceptableError: model.acceptableError, turnedOnAt: model.turnedOnAt, turnedOnBy: model.turnedOnBy }
@@ -794,7 +806,7 @@ export async function getPaddockTrend(tx: OrgTx, paddockIdInput: unknown, option
     paddockId,
     paddockName: paddock.name,
     farmId: paddock.farm_id,
-    observations: withEstimates(rows.rows.map(toObservation), await activeCoverModel(tx, paddock.farm_id)),
+    observations: await withEstimates(tx, paddock.farm_id, rows.rows.map(toObservation), await activeCoverModel(tx, paddock.farm_id)),
     provider,
     attribution: provider ? attributionText(provider, rows.rows.map((row) => Number(row.acquired_at.slice(0, 4)))) : "",
   };

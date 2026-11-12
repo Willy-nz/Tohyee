@@ -195,6 +195,16 @@ export async function register() {
     }
   }
 
+  // Each farm's daily rain and temperature from kept MetService forecasts (decision 1597).
+  if (process.env.TOHYEE_FARM_WEATHER_SCHEDULER !== "off") {
+    try {
+      const { startFarmWeatherScheduler } = await import("@/lib/farming/weather-history");
+      startFarmWeatherScheduler();
+    } catch (error) {
+      console.warn("[tohyee] Farm weather history couldn't start:", error instanceof Error ? error.message : error);
+    }
+  }
+
   // The farm safety records' weekly copy off the farm (#446, decision 958).
   if (process.env.TOHYEE_SAFETY_COPY !== "off") {
     const { startSafetyCopyScheduler } = await import("@/lib/safety/weekly-copy");

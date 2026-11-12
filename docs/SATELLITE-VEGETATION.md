@@ -243,8 +243,13 @@ enough, and turns estimates on.
   in Analytics or the offline pack's covers.
 - **Privacy:** only your organisation's readings are used, only for your
   farms' lines. Nothing is shared with other Tohyee servers.
-- **Not used:** weather, soil moisture or growth models (they'd need
-  licensed data sources), and paid imagery.
+- **Weather (rain and temperature):** where the 14 days before a picture
+  have known rain (your gauge's, else MetService's, see Farm › Rainfall),
+  the card also checks a line with rain, and rain and temperature, on the
+  same readings and left-out dates. It's used only if it was closer on
+  average than greenness alone; then a date with unknown weather gets no
+  estimate.
+- **Not used:** soil moisture or growth models, and paid imagery.
 
 Not tried against a farm's real plate-meter readings yet.
 

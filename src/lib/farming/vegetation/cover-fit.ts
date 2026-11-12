@@ -12,7 +12,18 @@
 import { abs, add, cmp, dec, divide, isZero, mul, roundHalfUp, sub, sum, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 
 /** A measured reading and a clear satellite view of the same paddock close enough in time to compare (MCV2). */
-export type CoverPair = { farmId: string; paddockId: string; sceneId: string; imageOn: string; measuredOn: string; ndvi: string; cover: number };
+export type CoverPair = {
+  farmId: string;
+  paddockId: string;
+  sceneId: string;
+  imageOn: string;
+  measuredOn: string;
+  ndvi: string;
+  cover: number;
+  /** Rain (mm) and mean temperature (°C) in the 14 days before the picture (MCV9), when known. */
+  rain14?: string | null;
+  temperature14?: string | null;
+};
 
 /** A reading and a view at most this many days apart are paired (MCV2). */
 export const PAIR_DAYS = 3;
@@ -22,7 +33,9 @@ export const MIN_DATES = 4;
 /** Estimates are rounded to this many kg DM/ha: they aren't more exact than that. */
 export const ROUND_TO = 10;
 
-export type Line = { intercept: string; slope: string };
+export type Line = { intercept: string; slope: string; rain?: string; temperature?: string };
+export type Terms = "greenness" | "rain" | "rain_temperature";
+export const TERMS_WORDS: Record<Terms, string> = { greenness: "Greenness only", rain: "Greenness and rain", rain_temperature: "Greenness, rain and temperature" };
 
 export type Season = "summer" | "autumn" | "winter" | "spring";
 export const SEASON_WORDS: Record<Season, string> = { summer: "Summer (Dec-Feb)", autumn: "Autumn (Mar-May)", winter: "Winter (Jun-Aug)", spring: "Spring (Sep-Nov)" };
@@ -57,9 +70,45 @@ export function fitLine(pairs: readonly Pick<CoverPair, "ndvi" | "cover">[]): Li
   return { intercept: toFixedString(roundHalfUp(intercept, 4), 4), slope: toFixedString(slope, 4) };
 }
 
-/** The line's cover for a greenness, rounded to ten and never below nothing. */
-export function predict(line: Line, ndvi: string): number {
-  const raw = add(dec(line.intercept), mul(dec(line.slope), dec(ndvi)));
+/**
+ * MCV9: least squares with greenness and the weather before the picture, by
+ * the normal equations solved exactly. Null when they can't be told apart.
+ */
+export function fitWithWeather(pairs: readonly CoverPair[], terms: Exclude<Terms, "greenness">): Line | null {
+  const rows = pairs.map((pair) => {
+    const x = [dec("1"), dec(pair.ndvi), dec(pair.rain14!)];
+    if (terms === "rain_temperature") x.push(dec(pair.temperature14!));
+    return { x, y: dec(String(pair.cover)) };
+  });
+  const k = rows[0]?.x.length ?? 0;
+  if (rows.length <= k) return null;
+  // The augmented normal equations [XᵀX | Xᵀy], solved by Gauss-Jordan elimination.
+  const m = Array.from({ length: k }, (_, i) => [
+    ...Array.from({ length: k }, (_, j) => sum(rows.map((row) => mul(row.x[i], row.x[j])))),
+    sum(rows.map((row) => mul(row.x[i], row.y))),
+  ]);
+  for (let col = 0; col < k; col += 1) {
+    let pivot = col;
+    for (let row = col + 1; row < k; row += 1) if (cmp(abs(m[row][col]), abs(m[pivot][col])) > 0) pivot = row;
+    if (isZero(roundHalfUp(m[pivot][col], 6))) return null;
+    [m[col], m[pivot]] = [m[pivot], m[col]];
+    const lead = m[col][col];
+    m[col] = m[col].map((value) => divide(value, lead, 14));
+    for (let row = 0; row < k; row += 1) {
+      if (row === col) continue;
+      const factor = m[row][col];
+      m[row] = m[row].map((value, j) => sub(value, mul(factor, m[col][j])));
+    }
+  }
+  const coefficient = (i: number) => toFixedString(roundHalfUp(m[i][k], 4), 4);
+  return { intercept: coefficient(0), slope: coefficient(1), rain: coefficient(2), ...(terms === "rain_temperature" ? { temperature: coefficient(3) } : {}) };
+}
+
+/** The line's cover for a greenness (and the weather, if it uses it), rounded to ten and never below nothing. */
+export function predict(line: Line, ndvi: string, weather: { rain14?: string | null; temperature14?: string | null } = {}): number {
+  let raw = add(dec(line.intercept), mul(dec(line.slope), dec(ndvi)));
+  if (line.rain !== undefined) raw = add(raw, mul(dec(line.rain), dec(weather.rain14 ?? "0")));
+  if (line.temperature !== undefined) raw = add(raw, mul(dec(line.temperature), dec(weather.temperature14 ?? "0")));
   const tens = roundHalfUp(divide(raw, dec(String(ROUND_TO)), 6), 0);
   const value = Number(toFixedString(mul(tens, dec(String(ROUND_TO))), 0));
   return value < 0 ? 0 : value;
@@ -103,6 +152,20 @@ export type Validation = {
   otherFarms: ErrorSummary | null;
   /** Why no line is offered yet, if not. */
   notReady: string | null;
+  /**
+   * MCV9: the same check with the weather before each picture, on the readings whose weather is known, beside
+   * greenness alone on those same readings. Null when too few readings have their weather known.
+   */
+  weather: {
+    pairs: number;
+    dates: number;
+    greennessOnly: ErrorSummary;
+    options: Array<{ terms: Exclude<Terms, "greenness">; line: Line; withheldDates: ErrorSummary }>;
+    /** The terms that did best on dates they weren't fitted on: greenness alone unless the weather did better. */
+    best: Terms;
+  } | null;
+  /** Readings whose weather isn't known yet (MCV9). */
+  weatherMissing: number;
 };
 
 /**
@@ -114,7 +177,8 @@ export function validate(pairs: readonly CoverPair[], others: readonly CoverPair
   const dates = [...new Set(pairs.map((pair) => pair.sceneId))];
   const ndvis = pairs.map((pair) => dec(pair.ndvi)).sort(cmp);
   const range = ndvis.length > 0 ? { min: toFixedString(ndvis[0], 4), max: toFixedString(ndvis[ndvis.length - 1], 4) } : null;
-  const empty = { pairs: pairs.length, dates: dates.length, ndviRange: range, withheldDates: null, bySeason: [], otherFarms: null };
+  const weatherMissing = pairs.filter((pair) => pair.rain14 === null || pair.rain14 === undefined).length;
+  const empty = { pairs: pairs.length, dates: dates.length, ndviRange: range, withheldDates: null, bySeason: [], otherFarms: null, weather: null, weatherMissing };
   if (pairs.length < MIN_PAIRS || dates.length < MIN_DATES) {
     return {
       ...empty,
@@ -140,14 +204,63 @@ export function validate(pairs: readonly CoverPair[], others: readonly CoverPair
   });
   const otherLine = fitLine(others);
   const otherFarms = otherLine && others.length >= MIN_PAIRS ? summarise(pairs.map((pair) => ({ predicted: predict(otherLine, pair.ndvi), measured: pair.cover }))) : null;
-  return { ...empty, line, withheldDates: summarise(withheld), bySeason, otherFarms, notReady: null };
+  return { ...empty, line, withheldDates: summarise(withheld), bySeason, otherFarms, notReady: null, weather: weatherCheck(pairs) };
+}
+
+/** Each satellite date left out in turn, with a fitter: the errors on the dates left out. */
+function leaveDatesOut(pairs: readonly CoverPair[], fit: (rest: readonly CoverPair[]) => Line | null): Array<{ predicted: number; measured: number }> {
+  const out: Array<{ predicted: number; measured: number }> = [];
+  for (const sceneId of new Set(pairs.map((pair) => pair.sceneId))) {
+    const fitted = fit(pairs.filter((pair) => pair.sceneId !== sceneId));
+    if (!fitted) continue;
+    for (const pair of pairs.filter((candidate) => candidate.sceneId === sceneId)) out.push({ predicted: predict(fitted, pair.ndvi, pair), measured: pair.cover });
+  }
+  return out;
+}
+
+/**
+ * MCV9: greenness alone against greenness with rain (and temperature), on the
+ * same readings and the same left-out dates. The weather is used only when
+ * it was off by less on average.
+ */
+function weatherCheck(pairs: readonly CoverPair[]): Validation["weather"] {
+  const known = pairs.filter((pair) => pair.rain14 !== null && pair.rain14 !== undefined);
+  const dates = new Set(known.map((pair) => pair.sceneId)).size;
+  if (known.length < MIN_PAIRS || dates < MIN_DATES) return null;
+  const greennessOnly = summarise(leaveDatesOut(known, fitLine));
+  if (!greennessOnly) return null;
+  const options: NonNullable<Validation["weather"]>["options"] = [];
+  const candidates: Array<{ terms: Exclude<Terms, "greenness">; pairs: readonly CoverPair[] }> = [{ terms: "rain", pairs: known }];
+  const withTemperature = known.filter((pair) => pair.temperature14 !== null && pair.temperature14 !== undefined);
+  if (withTemperature.length === known.length) candidates.push({ terms: "rain_temperature", pairs: known });
+  for (const candidate of candidates) {
+    const line = fitWithWeather(candidate.pairs, candidate.terms);
+    const withheldDates = summarise(leaveDatesOut(candidate.pairs, (rest) => fitWithWeather(rest, candidate.terms)));
+    if (line && withheldDates) options.push({ terms: candidate.terms, line, withheldDates });
+  }
+  let best: Terms = "greenness";
+  let bestError = greennessOnly.meanError;
+  for (const option of options) {
+    if (option.withheldDates.meanError < bestError) {
+      best = option.terms;
+      bestError = option.withheldDates.meanError;
+    }
+  }
+  return { pairs: known.length, dates, greennessOnly, options, best };
 }
 
 export type ModelledCover = { cover: number; low: number; high: number; outsideRange: boolean };
 
 /** An estimate with its band (MCV6): never below nothing, and flagged when the greenness is outside what the line was checked on. */
-export function modelledCover(model: { line: Line; likelyWithin: number; ndviMin: string; ndviMax: string }, ndvi: string): ModelledCover {
-  const cover = predict(model.line, ndvi);
+export function modelledCover(
+  model: { line: Line; likelyWithin: number; ndviMin: string; ndviMax: string },
+  ndvi: string,
+  weather: { rain14?: string | null; temperature14?: string | null } = {},
+): ModelledCover | null {
+  // A line that uses the weather needs it for this date.
+  if (model.line.rain !== undefined && (weather.rain14 === null || weather.rain14 === undefined)) return null;
+  if (model.line.temperature !== undefined && (weather.temperature14 === null || weather.temperature14 === undefined)) return null;
+  const cover = predict(model.line, ndvi, weather);
   const value = dec(ndvi);
   return {
     cover,
