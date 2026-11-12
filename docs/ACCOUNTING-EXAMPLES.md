@@ -22410,6 +22410,31 @@ Records only: nothing posts (decisions 1487-1494). Tested in
   Another organisation has **no references, no photos to score**, and can't
   suggest on this one.
 
+## Farming: stock and treatments in the Log (LS1-LS5; built by Claude 13 Nov 2026, common NZ practice, the details are Claude's, not yet reviewed)
+
+Decisions 1598-1599, #447 items 8 and 10. Made-up farm: Home farm, mob "R2 heifers"
+(40 head, in paddock 3), mob "Ewes" (200 head), mob "Ewe hoggets" (50 head).
+
+- **LS1 Move.** Log → Move a mob → R2 heifers → paddock 7 → today → Save.
+  Saved on the phone as "R2 heifers to Paddock 7, today" and sent to the
+  mob's move action with its operation id: the mob is **in paddock 7 from
+  today**, the same as moving it on the Mobs screen. Paddock 3 isn't
+  offered. Sending it again does nothing more.
+- **LS2 Births.** Births go into the young-stock mob, so only mobs of a
+  class that has births are listed: Ewe hoggets is offered, Ewes and R2
+  heifers aren't. 12 born into Ewe hoggets today: Ewe hoggets is **62 head**.
+- **LS3 Deaths.** 2 died from R2 heifers, note "Bloat": the mob is **38
+  head**. 41 is refused (more than the mob has). A mob with tagged animals
+  says to record tagged deaths on the mob's page.
+- **LS4 Treatment.** R2 heifers, "Test drench", 10 mL each, 38 head, meat
+  14 days, no milk, given by Sam, today: one treatment in the register,
+  safe to send to slaughter **14 days after today**, the same as typed on
+  the Treatments screen. Product, dose and who gave it can't be left blank.
+- **LS5 "+ New".** With Farming on, a bookkeeper's "+ New" has Sales,
+  Purchases and **Farm** (Farm walk … Add a photo or note). "Move a mob"
+  opens the Log at LS1's first question. Sam, farm staff, sees **only
+  Farm**. A viewer sees no "+ New". With Farming off, there's no Farm group.
+
 ## Livestock: a high-priced animal bought before the first year (LV25B; built by Claude 13 Nov 2026 from IRD OS 25/02 paras 68-71, the details are Claude's, not yet reviewed)
 
 Decision 1602, #243. Made-up farm: livestock starts 1 July 2025 (30 June
