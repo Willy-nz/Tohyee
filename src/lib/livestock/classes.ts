@@ -124,7 +124,7 @@ export const LIVESTOCK_CLASSES: readonly LivestockClass[] = [
   { kind: "goats_dairy", code: "does", name: "Does over one year", birth: false, agesTo: null, nsc: "mature" },
   { kind: "goats_dairy", code: "breeding_bucks", name: "Breeding bucks", birth: false, agesTo: null, nsc: "unsupported", maleBreeding: true },
   { kind: "goats_dairy", code: "culls", name: "Other dairy goats (culls)", birth: false, agesTo: null, nsc: "mature" },
-  // Pigs (decision 1604, LV29): NAMV 2026's classes. They're by weeks of age, not by balance date, so nothing ages
+  // Pigs (decision 1604, LV30): NAMV 2026's classes. They're by weeks of age, not by balance date, so nothing ages
   // at balance date: move pigs to their class with a class change. Sucklings are valued at nil (OS 25/02 para 25),
   // so piglets are recorded when weaned, as weaners.
   { kind: "pigs", code: "weaners", name: "Weaners less than 10 weeks (not sucklings)", birth: true, agesTo: null, nsc: "unsupported" },

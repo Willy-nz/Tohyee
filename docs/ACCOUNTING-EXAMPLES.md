@@ -18567,7 +18567,7 @@ were read from IRD's determinations on 11 Oct 2026).
 - An increase in a class valued by another method (paras 42-44).
 - Associated-person transfers and the base number (OS example 2).
 - Long-term bailments.
-- Pigs under NSC. (Pigs under the herd scheme: LV29.)
+- Pigs under NSC. (Pigs under the herd scheme: LV30.)
 - Dairy steers and bulls under NSC. Still refused: the 1993 NSC
   determination (clause 5) needs an NSC for rising two-year male
   non-breeding dairy cattle, and IRD's yearly NSC determinations don't
@@ -22438,7 +22438,7 @@ Decisions 1598-1599, #447 items 8 and 10. Made-up farm: Home farm, mob "R2 heife
   opens the Log at LS1's first question. Sam, farm staff, sees **only
   Farm**. A viewer sees no "+ New". With Farming off, there's no Farm group.
 
-## Livestock: pigs under the herd scheme (LV29; built by Claude 13 Nov 2026 from IRD's NAMV 2026 and OS 25/02, the details are Claude's, not yet reviewed)
+## Livestock: pigs under the herd scheme (LV30; built by Claude 13 Nov 2026 from IRD's NAMV 2026 and OS 25/02, the details are Claude's, not yet reviewed)
 
 Decision 1604, #243. The classes are NAMV 2026's, with its figures:
 breeding sows less than one year **314.00**, over one year **395.00**,

@@ -20682,7 +20682,7 @@ alter table vegetation_cover_models add column temperature_coefficient numeric(1
     version: "0279",
     name: "livestock_pigs",
     sql: `
--- Pigs under the herd scheme (#243, decision 1604; LV29): IRD's 2026 NAMVs
+-- Pigs under the herd scheme (#243, decision 1604; LV30): IRD's 2026 NAMVs
 -- for pigs, from the Income Tax (National Average Market Values of Specified
 -- Livestock) Determination 2026, read from IRD's site on 13 Nov 2026.
 insert into livestock_rates (income_year, rate_kind, kind, category, amount, source, entered_by_email)

@@ -222,7 +222,7 @@ describeWithDatabase("livestock year-end valuation (LV4-LV12)", () => {
     expect(classes.filter((entry) => entry.classCode !== "r1_heifers").reduce((total, entry) => total + Number(entry.closingValue) * 100, 0)).toBe(48033250);
   });
 
-  it("LV29: pigs under the herd scheme at IRD's 2026 NAMVs, moved between classes by hand (decision 1604)", async () => {
+  it("LV30: pigs under the herd scheme at IRD's 2026 NAMVs, moved between classes by hand (decision 1604)", async () => {
     const org = "livestock-pigs";
     await farm(org, 6, "2025-07-01", [["pigs", "sows_over_1", 20, "7600.00"]], "7600.00");
     const pigs = { kind: "pigs" };

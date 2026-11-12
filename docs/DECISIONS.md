@@ -14104,7 +14104,7 @@ migration 0265.
       is refused: pigs' NSC has its own formulas, not built. Stock units
       default to 0, because the table has no pig rows. Dairy steers and
       bulls stay refused under NSC: IRD publishes no rising two-year male
-      dairy NSC for clause 5 of the 1993 determination. Worked example LV29.
+      dairy NSC for clause 5 of the 1993 determination. Worked example LV30.
 
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
