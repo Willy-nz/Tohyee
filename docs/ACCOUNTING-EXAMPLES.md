@@ -22410,9 +22410,9 @@ Records only: nothing posts (decisions 1487-1494). Tested in
   Another organisation has **no references, no photos to score**, and can't
   suggest on this one.
 
-## Farming: stock and treatments in the Log (LS1-LS4; built by Claude 13 Nov 2026, common NZ practice, the details are Claude's, not yet reviewed)
+## Farming: stock and treatments in the Log (LS1-LS5; built by Claude 13 Nov 2026, common NZ practice, the details are Claude's, not yet reviewed)
 
-Decision 1598, #447 item 10. Made-up farm: Home farm, mob "R2 heifers"
+Decisions 1598-1599, #447 items 8 and 10. Made-up farm: Home farm, mob "R2 heifers"
 (40 head, in paddock 3), mob "Ewes" (200 head), mob "Ewe hoggets" (50 head).
 
 - **LS1 Move.** Log → Move a mob → R2 heifers → paddock 7 → today → Save.
@@ -22430,3 +22430,7 @@ Decision 1598, #447 item 10. Made-up farm: Home farm, mob "R2 heifers"
   14 days, no milk, given by Sam, today: one treatment in the register,
   safe to send to slaughter **14 days after today**, the same as typed on
   the Treatments screen. Product, dose and who gave it can't be left blank.
+- **LS5 "+ New".** With Farming on, a bookkeeper's "+ New" has Sales,
+  Purchases and **Farm** (Farm walk … Add a photo or note). "Move a mob"
+  opens the Log at LS1's first question. Sam, farm staff, sees **only
+  Farm**. A viewer sees no "+ New". With Farming off, there's no Farm group.

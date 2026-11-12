@@ -65,12 +65,31 @@ describe("top bar menus", () => {
       "New supplier credit note",
       "Pay bills",
       "New expense claim",
+      "Farm walk",
+      "Record a grazing",
+      "Add a cover reading",
+      "Move a mob",
+      "Record births",
+      "Record deaths",
+      "Record a treatment",
+      "Record rain",
+      "Add a photo or note",
     ]);
   });
 
   it("shows + New to bookkeepers and up, never to viewers", () => {
     expect(visibleNewActions(access("viewer"))).toEqual([]);
     expect(visibleNewActions(access("bookkeeper")).flatMap((group) => group.links)).toHaveLength(11);
+  });
+
+  it("adds the farm's quick records to + New while Farming is on, and gives farm staff only those (decision 1599)", () => {
+    const farming = { crm: false, reporting: false, notForProfit: false, analytics: false, gst: true, farming: true };
+    expect(visibleNewActions(access("bookkeeper", farming)).map((group) => group.heading)).toEqual(["Sales", "Purchases", "Farm"]);
+    expect(visibleNewActions(access("viewer", farming))).toEqual([]);
+    const staff = visibleNewActions({ can: () => false, modules: farming, farmWorker: true });
+    expect(staff.map((group) => group.heading)).toEqual(["Farm"]);
+    expect(staff[0].links[3]).toMatchObject({ label: "Move a mob", href: "/operations/farm/log?record=move" });
+    expect(visibleNewActions({ can: () => false, modules: { ...farming, farming: false }, farmWorker: true })).toEqual([]);
   });
 
   it("still filters links by role and module", () => {
@@ -382,7 +401,7 @@ describe("the Farm app (#498 item 1, decisions 1110-1111)", () => {
 describe("farm staff (decision 904)", () => {
   const modules = { crm: false, reporting: false, notForProfit: false, analytics: false, gst: false, livestock: false, farming: true };
   const access = { can: () => false, modules, farmWorker: true };
-  it("have the field-work pages only, nothing to make and no settings", () => {
+  it("have the field-work pages only, only the farm's quick records to make, and no settings", () => {
     const menus = visibleMenus("farm", access);
     expect(menus.map((menu) => menu.label)).toEqual(["Today", "Map", "Log", "Safety", "Effluent", "More"]);
     expect(menus.at(-1)!.groups.flatMap((group) => group.links.map((link) => link.href))).toEqual([
@@ -404,7 +423,7 @@ describe("farm staff (decision 904)", () => {
     ]);
     // On their profile page (in Accounting) they see the same farm menus.
     expect(visibleMenus("accounting", access)).toEqual(menus);
-    expect(visibleNewActions(access)).toEqual([]);
+    expect(visibleNewActions(access).map((group) => group.heading)).toEqual(["Farm"]); // decision 1599
     expect(visibleSettings(access)).toEqual([]);
     expect(visibleMenus("crm", access)).toEqual([]);
   });

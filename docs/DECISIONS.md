@@ -14076,7 +14076,7 @@ migration 0265.
       it was closer. Tenant migration 0277. Not tried against the live
       service; not yet reviewed.
 
-### Stock and treatments in the farm Log (13 Nov 2026; decision 1598)
+### Stock and treatments in the farm Log, and farm items in "+ New" (13 Nov 2026; decisions 1598-1599)
 
 1598. **The Log sheet now records a mob move, births, deaths and a treatment
       (#447 item 10).** One question a screen, saved on the phone first and
@@ -14087,6 +14087,12 @@ migration 0265.
       young-stock classes that have them (lambs, calves, fawns, kids). Selling, buying and reclassing stay on the Mobs
       screen because they touch the books. Tagged deaths are pointed to the
       mob's page so the animal register stays right. Worked examples LS1-LS4.
+1599. **"+ New" offers the farm's quick records while Farming is on (#447
+      item 8).** Farm walk, a grazing, a cover reading, moving a mob, births,
+      deaths, a treatment, rain, and a photo or note; each opens that flow in
+      the Log. Bookkeepers and up see them with the books' items; farm staff,
+      who used to get no "+ New" at all (decision 904), now see only these.
+      Viewers still see none, because they can't record. Worked example LS5.
 
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
