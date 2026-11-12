@@ -222,6 +222,28 @@ describeWithDatabase("livestock year-end valuation (LV4-LV12)", () => {
     expect(classes.filter((entry) => entry.classCode !== "r1_heifers").reduce((total, entry) => total + Number(entry.closingValue) * 100, 0)).toBe(48033250);
   });
 
+  it("LV30: stock bought from an associated person who used the herd scheme stays in the herd scheme (decision 1605)", async () => {
+    const org = "livestock-associated";
+    await farm(org, 5, "2025-06-01", [["dairy_cattle", "ma_cows", 300, "357000.00"]], "357000.00");
+    const fromDad = { kind: "dairy_cattle", movementType: "purchase", movementDate: "2025-10-01", classCode: "ma_cows", head: 60, amount: "150000.00", boundToHerdScheme: true };
+    await expect(move(org, { ...fromDad, movementType: "sale" })).rejects.toThrow(/Only a purchase/);
+    const bought = await move(org, fromDad);
+    expect(bought.movement.boundToHerdScheme).toBe(true);
+    await run(org, (tx) => recordElection(tx, { kind: "dairy_cattle", method: "nsc", fromIncomeYear: 2026 }));
+    const nsc = await run(org, (tx) => previewValuation(tx, { yearEnd: "2026-05-31" }));
+    expect(nsc.problems).toContain(
+      "Dairy cattle: 60 mixed-age cows bought on 2025-10-01 came from an associated person who used the herd scheme, so they must stay in the herd scheme (s EC 4B). Elect the herd scheme for dairy cattle, or correct the purchase if an exception applies.",
+    );
+    // Under the herd scheme it's valued as usual: 360 cows at 2,824.00.
+    const other = "livestock-associated-herd";
+    await farm(other, 5, "2025-06-01", [["dairy_cattle", "ma_cows", 300, "357000.00"]], "357000.00");
+    await move(other, fromDad);
+    await run(other, (tx) => recordElection(tx, { kind: "dairy_cattle", method: "herd_scheme", fromIncomeYear: 2026 }));
+    const herd = await run(other, (tx) => previewValuation(tx, { yearEnd: "2026-05-31" }));
+    expect(herd.problems).toEqual([]);
+    expect(herd.workings.totals).toMatchObject({ closingValue: "1016640.00" });
+  });
+
   it("LV10, LV11: Tussock's beef herd scheme and sheep NSC in one journal", async () => {
     const org = "livestock-tussock";
     await farm(
