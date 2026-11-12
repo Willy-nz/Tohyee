@@ -15,6 +15,17 @@ import { runRepeatingInvoiceNow, setRepeatingStatus } from "@/lib/repeating/serv
 import { updateSalesperson, createSalesperson } from "@/lib/salespeople/service";
 import { createTaxCode, updateTaxCode } from "@/lib/tax/codes";
 import { renameBudget, setBudgetArchived } from "@/lib/budgets/service";
+import {
+  addCustomFieldOption,
+  createCustomField,
+  createCustomFieldSection,
+  deleteCustomFieldSection,
+  getCustomFieldSetup,
+  updateCustomField,
+  updateCustomFieldOption,
+  updateCustomFieldSection,
+} from "@/lib/custom-fields/service";
+import { CUSTOM_FIELD_RECORDS, CUSTOM_FIELD_TYPES, CONTACT_USES, DOCUMENT_KINDS } from "@/lib/custom-fields/values";
 
 /**
  * AI tools for screen actions, part 3 (decision 1600): journals, the lock
@@ -25,6 +36,13 @@ import { renameBudget, setBudgetArchived } from "@/lib/budgets/service";
  * 1601).
  */
 
+const RECORD = { type: "string", enum: [...CUSTOM_FIELD_RECORDS], description: "What it's on: contact, document (invoices, bills and so on), line (their lines), person or opportunity (CRM)." } as const;
+const USED_ON = {
+  type: "array",
+  items: { type: "string", enum: [...CONTACT_USES, ...DOCUMENT_KINDS] },
+  description: "For a contact field: customer, supplier and/or prospect. For a document or line field: invoice, bill, credit_note, supplier_credit_note, spend, receive and/or journal. Left out for people and opportunities.",
+} as const;
+const MOVE = { type: "string", enum: ["up", "down"], description: "Moves it one place up or down." } as const;
 const KIND = { type: "string", enum: ["days_after_invoice", "days_after_month_end", "day_of_next_month"] } as const;
 const MONEY = { type: "string", description: "A decimal, e.g. \"120.00\"." } as const;
 const JOURNAL_LINE = {
@@ -138,6 +156,133 @@ export const SETTINGS_ACTION_TOOLS: AiTool[] = [
     input: { salespersonId: ID("salesperson"), name: { type: "string", maxLength: 200 }, email: { type: "string", maxLength: 320 }, isActive: { type: "boolean" } },
     required: ["salespersonId"],
     act: (tx, args) => updateSalesperson(tx, args.salespersonId, { name: args.name, email: args.email, isActive: args.isActive }),
+  }),
+
+  // Custom fields: Settings › Custom fields. Values never reach the ledger.
+  {
+    name: "get_custom_fields",
+    title: "Custom fields",
+    description: "Settings › Custom fields: every custom field with what it's on, its type, where it's used, its options and sections. Values are filled in on the records themselves (invoices, contacts and so on take customFields).",
+    level: "read",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    run: (tx) => getCustomFieldSetup(tx),
+  },
+  tool({
+    name: "create_custom_field",
+    title: "Add a custom field",
+    description:
+      "Settings › Custom fields › Add: a field of your own on contacts, documents, lines, people or opportunities, e.g. \"Pet's name\" (text) on invoices. A list or multiple select takes options. Only for information and reports: it never changes the accounts.",
+    role: "admin",
+    level: "post",
+    input: {
+      record: RECORD,
+      label: { type: "string", maxLength: 100 },
+      type: { type: "string", enum: [...CUSTOM_FIELD_TYPES] },
+      usedOn: USED_ON,
+      help: { type: "string", maxLength: 500 },
+      isRequired: { type: "boolean" },
+      defaultValue: { description: "A value of the field's type." },
+      showInList: { type: "boolean", description: "Show it as a column in the record's list." },
+      options: { type: "array", maxItems: 200, items: { type: "string", maxLength: 100 }, description: "For a list or multiple select." },
+      sectionId: { type: "string", description: "A section from get_custom_fields (contacts, people and opportunities)." },
+    },
+    required: ["record", "label", "type"],
+    act: (tx, args) =>
+      createCustomField(tx, {
+        record: args.record,
+        label: args.label,
+        type: args.type,
+        usedOn: args.usedOn,
+        help: args.help,
+        isRequired: args.isRequired,
+        defaultValue: args.defaultValue,
+        showInList: args.showInList,
+        options: args.options,
+        sectionId: args.sectionId,
+      }),
+  }),
+  tool({
+    name: "update_custom_field",
+    title: "Change a custom field",
+    description:
+      "Settings › Custom fields: rename it, change its help, where it's used, whether it's required, its default, its list column, section or place (move), or switch it off (isActive false, confirmed first since it's hidden from every record). Values already filled in are kept.",
+    role: "admin",
+    level: "full",
+    input: {
+      fieldId: ID("custom field"),
+      label: { type: "string", maxLength: 100 },
+      help: { type: "string", maxLength: 500 },
+      usedOn: USED_ON,
+      isRequired: { type: "boolean" },
+      defaultValue: { description: "A value of the field's type, or null." },
+      showInList: { type: "boolean" },
+      isActive: { type: "boolean" },
+      sectionId: { type: ["string", "null"] },
+      move: MOVE,
+    },
+    required: ["fieldId"],
+    act: (tx, args) =>
+      updateCustomField(tx, args.fieldId, {
+        label: args.label,
+        help: args.help,
+        usedOn: args.usedOn,
+        isRequired: args.isRequired,
+        defaultValue: args.defaultValue,
+        showInList: args.showInList,
+        isActive: args.isActive,
+        sectionId: args.sectionId,
+        move: args.move,
+      }),
+  }),
+  tool({
+    name: "add_custom_field_option",
+    title: "Add an option to a list field",
+    description: "Settings › Custom fields: another choice on a list or multiple select field.",
+    role: "admin",
+    level: "post",
+    input: { fieldId: ID("custom field"), name: { type: "string", maxLength: 100 } },
+    required: ["fieldId", "name"],
+    act: (tx, args) => addCustomFieldOption(tx, args.fieldId, { name: args.name }),
+  }),
+  tool({
+    name: "update_custom_field_option",
+    title: "Rename or switch off a list option",
+    description: "Settings › Custom fields: rename a choice, or switch it off (isActive false) so it's no longer offered; records that have it keep it.",
+    role: "admin",
+    level: "full",
+    input: { optionId: ID("option"), name: { type: "string", maxLength: 100 }, isActive: { type: "boolean" } },
+    required: ["optionId"],
+    act: (tx, args) => updateCustomFieldOption(tx, args.optionId, { name: args.name, isActive: args.isActive }),
+  }),
+  tool({
+    name: "create_custom_field_section",
+    title: "Add a custom field section",
+    description: "Settings › Custom fields: a heading grouping fields on contacts, people or opportunities.",
+    role: "admin",
+    level: "post",
+    input: { record: RECORD, name: { type: "string", maxLength: 100 } },
+    required: ["record", "name"],
+    act: (tx, args) => createCustomFieldSection(tx, { record: args.record, name: args.name }),
+  }),
+  tool({
+    name: "update_custom_field_section",
+    title: "Rename or move a custom field section",
+    description: "Settings › Custom fields: rename a section, or move it up or down.",
+    role: "admin",
+    level: "post",
+    input: { sectionId: ID("section"), name: { type: "string", maxLength: 100 }, move: MOVE },
+    required: ["sectionId"],
+    act: (tx, args) => updateCustomFieldSection(tx, args.sectionId, { name: args.name, move: args.move }),
+  }),
+  tool({
+    name: "delete_custom_field_section",
+    title: "Delete a custom field section",
+    description: "Settings › Custom fields: removes a section heading; its fields stay, without a section.",
+    role: "admin",
+    level: "full",
+    input: { sectionId: ID("section") },
+    required: ["sectionId"],
+    act: (tx, args) => deleteCustomFieldSection(tx, args.sectionId),
   }),
 
   // Expense claims.

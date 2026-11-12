@@ -14679,4 +14679,12 @@ show, 100 a page, and clicking one should let her edit it.
       repeating invoices and bills, stock movements and transfers, item
       units, and renaming and archiving budgets. Same services and roles as
       the screens. Claude's details, not yet reviewed.
+1603. **Custom fields through the AI.** Will asked for it. get_custom_fields
+      reads Settings › Custom fields. Owners and admins can add, change,
+      move and switch off fields, list choices and sections (switching off
+      and deleting a section are confirmed first). Fields on documents and
+      lines still need Advanced reporting on, as on the screen. Draft
+      invoices and bills made or edited by the AI now take document custom
+      fields too (lines already did), and their details show them. Claude's
+      details, not yet reviewed.
 

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import { findAiTool } from "@/lib/ai/catalogue";
 import type { ToolContext } from "@/lib/ai/tools";
 import type { SessionUser } from "@/lib/auth/sessions";
+import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, key, startTestServer, type TestServer } from "../helpers/test-server";
 
 const ORG = "ai-document-actions";
@@ -115,5 +116,31 @@ describeWithDatabase("AI tools for document actions", () => {
     ).rejects.toThrow(/lock/i);
     const unlock = await call("set_lock_date", { lockDate: null, reason: "Test done" });
     await call("set_lock_date", { lockDate: null, reason: "Test done", confirmHash: unlock.confirmHash, idempotencyKey: key("ul") });
+  });
+
+  it("custom fields: add \"Pet's name\" on invoices and a list on lines, then fill one in on an invoice", async () => {
+    await expect(call("create_custom_field", { record: "document", label: "Pet's name", type: "text", usedOn: ["invoice"] }, "bookkeeper")).rejects.toThrow("owners and admins");
+    // Fields on documents and lines need Advanced reporting on, as on the screen.
+    await expect(call("create_custom_field", { record: "document", label: "Pet's name", type: "text", usedOn: ["invoice"], idempotencyKey: key("cf0") })).rejects.toThrow("Advanced reporting is off");
+    await inOrganisation(ORG, { userId: owner.id, email: owner.email }, (tx) => updateOrganisationSettings(tx, { advancedFeatures: true }));
+    const setup = await call("create_custom_field", { record: "document", label: "Pet's name", type: "text", usedOn: ["invoice"], idempotencyKey: key("cf") });
+    const fields = (setup.fields as Array<{ id: string; label: string }>) ?? [];
+    const petName = fields.find((field) => field.label === "Pet's name");
+    expect(petName).toBeTruthy();
+    await call("create_custom_field", { record: "line", label: "Print", type: "list", usedOn: ["invoice"], options: ["Paw", "Nose"], idempotencyKey: key("cf2") });
+    const listed = await call("get_custom_fields", {});
+    expect(JSON.stringify(listed)).toContain("Nose");
+    const invoice = await call("create_draft_invoice", {
+      idempotencyKey: key("ci"),
+      contactId: customerId,
+      invoiceDate: "2026-06-12",
+      dueDate: "2026-06-30",
+      amountsMode: "no_tax",
+      customFields: { [petName!.id]: "Biscuit (made up)" },
+      lines: [{ description: "Pendant", quantity: "1", unitPrice: "100.00", accountCode: "4000" }],
+    });
+    expect(JSON.stringify(invoice)).toContain("Biscuit (made up)");
+    const off = await call("update_custom_field", { fieldId: petName!.id, isActive: false });
+    expect(off).toMatchObject({ preview: true });
   });
 });

@@ -3,6 +3,7 @@ import { roleAtLeast } from "@/lib/auth/roles";
 import { type AiTool, DATE, schema } from "@/lib/ai/tools";
 import { ID, IDEMPOTENCY, idempotencyKey } from "@/lib/ai/write-tools";
 import { ForbiddenError, ValidationError } from "@/lib/errors";
+import { requireId } from "@/lib/validation";
 import { MAX_VOID_JOURNALS, planVoidJournals, voidJournals } from "@/lib/ledger/void-journals";
 import { applyWhenSentToInvoiced, ordersToApplyWhenSent } from "@/lib/sales-platforms/apply-when-sent";
 import { retryPayouts, syncConnection } from "@/lib/sales-platforms/service";
@@ -46,6 +47,8 @@ export const CATCH_UP_READ_TOOLS: AiTool[] = [
     level: "read",
     inputSchema: schema({ connectionId: CONNECTION, limit: limitInput(100, 500), cursor: CURSOR }, ["connectionId"]),
     async run(tx, args) {
+      const connection = await tx.query("select 1 from sales_platform_connections where id = $1 and platform = 'shopify'", [requireId(args.connectionId, "connectionId")]);
+      if (connection.rowCount === 0) throw new ValidationError("That isn't a Shopify store connected here.");
       const orders = await listHeldOrders(tx, String(args.connectionId));
       const page = pageByPosition(orders, args.cursor, boundedLimit(args.limit, 100, 500));
       return { total: orders.length, orders: page.rows, more: page.more, nextCursor: page.nextCursor };
