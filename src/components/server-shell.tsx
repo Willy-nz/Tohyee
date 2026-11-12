@@ -20,6 +20,7 @@ export const SERVER_LINKS = [
   { href: "/server/bank-files", label: "Bank files folders" },
   { href: "/server/backups", label: "Backups" },
   { href: "/server/updates", label: "Updates" },
+  { href: "/server/logs", label: "Logs" },
 ];
 
 /** The server settings area: no accounting here, only the server itself. */

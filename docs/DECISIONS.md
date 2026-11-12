@@ -14161,6 +14161,20 @@ migration 0265.
       bobby calves can be marked so, and are left out of b (tenant migration
       0281). Worked example LV32.
 
+### Server › Logs (13 Nov 2026; decision 1607)
+
+1607. **The server's logs on a page (Server › Logs).** Will asked to see the
+      logs in Tohyee instead of opening %ProgramData%\Tohyee\logs, after
+      "Something went wrong" errors could only be explained from that
+      folder. The page lists the *.log files directly in the log folder
+      (TOHYEE_LOG_DIR, else the "logs" folder beside TOHYEE_BACKUP_DIR) and
+      shows the newest 512 KB of one, newest line first, with a search and
+      an "errors only" filter. It's read-only and for server admins on the
+      server computer, like every other Server page, because logs can name
+      people, organisations and paths. Nothing else in the folder (such as
+      tohyee.env) can be read. The Windows service now sets TOHYEE_LOG_DIR.
+      Claude's details, not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
