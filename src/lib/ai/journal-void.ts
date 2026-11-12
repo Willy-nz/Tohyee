@@ -116,7 +116,8 @@ export async function aiVoidJournal(
   input: { journalId: unknown; previewHash: unknown; idempotencyKey: string; source: string },
 ): Promise<{ created: boolean; journalId: string; reversalJournalId: string }> {
   const journalId = requireId(input.journalId, "journalId");
-  await tx.query("select id from ledger_journals where id = $1 for update", [journalId]);
+  // An advisory lock, not FOR UPDATE: the runtime login has no UPDATE on posted journals.
+  await tx.query("select pg_advisory_xact_lock(hashtext('ledger_journal_void:' || $1))", [journalId]);
   const journal = await getJournal(tx, journalId);
   const commandSource = `ai-void:${input.source}`;
   const earlier = await tx.query<{ id: string }>("select id from ledger_journals where command_source = $1 and idempotency_key = $2", [commandSource, input.idempotencyKey]);
