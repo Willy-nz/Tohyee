@@ -411,6 +411,9 @@ tray icon's menu) runs them straight away. Data and settings
 live in `%ProgramData%\Tohyee` and are kept when you update or uninstall.
 The installer is built and tested on Windows by
 `.github/workflows/windows-installer.yml` from [`installer/windows`](installer/windows).
+Each release's installer comes with `TohyeeSetup-<version>.exe.sig`, its
+fingerprint signed with Tohyee's release key; the server app's **Install**
+only runs an installer whose signature matches the key built into Tohyee.
 
 **Docker:** `tohyee-v<version>-windows-docker.zip` runs Tohyee in Docker
 Desktop instead (see [`deploy/windows`](deploy/windows) and its

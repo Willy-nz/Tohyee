@@ -1,3 +1,4 @@
+import { sign } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,6 +15,7 @@ import { resetCounters } from "@/lib/server-stats/counters";
 import { resetStats, takeSample } from "@/lib/server-stats/sampler";
 import { recordServerStart } from "@/lib/updates/server-starts";
 import { resetUpdateCheckState } from "@/lib/updates/update-checker";
+import { releaseSignedText } from "@/lib/updates/release-signature";
 import { apiRequest, createTestOrganisation, createTestUser, describeWithDatabase, sessionCookieFor, startTestServer, type TestServer } from "../helpers/test-server";
 
 const ORG = "update-co";
@@ -28,11 +30,22 @@ async function body(response: Response) {
 }
 
 /** GitHub answering with a newer release that has a Windows installer (with or without a digest). */
+// A made-up release key for the tests (decision 1601): the server trusts it instead of Tohyee's real one.
+const TEST_KEY = await vi.hoisted(async () => {
+  const { generateKeyPairSync } = await import("node:crypto");
+  const pair = generateKeyPairSync("ed25519");
+  return { privateKey: pair.privateKey, publicPem: pair.publicKey.export({ type: "spki", format: "pem" }).toString() };
+});
+vi.mock("@/lib/updates/release-signature", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/updates/release-signature")>()), RELEASE_PUBLIC_KEYS: [TEST_KEY.publicPem] }));
+
 function stubNewerRelease(digest: string | null) {
+  const setupName = `TohyeeSetup-${NEWER}.exe`;
+  const hash = digest?.replace(/^sha256:/, "") ?? "";
+  const signature = () => sign(null, Buffer.from(releaseSignedText(setupName, hash)), TEST_KEY.privateKey).toString("base64");
   vi.stubGlobal(
     "fetch",
-    vi.fn<typeof fetch>(async () =>
-      Response.json({
+    vi.fn<typeof fetch>(async (url) =>
+      String(url).endsWith(".sig") ? new Response(signature()) : Response.json({
         tag_name: `v${NEWER}`,
         name: `Tohyee v${NEWER}`,
         html_url: `https://github.com/Willy-nz/Tohyee/releases/tag/v${NEWER}`,
@@ -47,6 +60,7 @@ function stubNewerRelease(digest: string | null) {
             content_type: "application/octet-stream",
             digest,
           },
+          { name: `${setupName}.sig`, browser_download_url: `https://github.com/Willy-nz/Tohyee/releases/download/v${NEWER}/${setupName}.sig`, size: 89, content_type: "text/plain", digest: null },
         ],
       }),
     ),
@@ -147,7 +161,7 @@ describeWithDatabase("server updates and stats (decisions 328 to 332)", () => {
     expect(result).toMatchObject({
       currentVersion: packageJson.version,
       version: NEWER,
-      setup: { name: `TohyeeSetup-${NEWER}.exe`, sha256: HASH, sha256From: "github-digest", size: 200_000_000 },
+      setup: { name: `TohyeeSetup-${NEWER}.exe`, sha256: HASH, sha256From: "github-digest", signed: true, size: 200_000_000 },
     });
     expect((result.backups as { organisationId: string | null; status: string; trigger: string }[]).map((r) => [r.organisationId, r.status, r.trigger])).toEqual([
       [null, "ok", "update"],

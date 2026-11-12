@@ -1,3 +1,5 @@
+import { generateKeyPairSync, sign } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import packageJson from "../../package.json";
 import { summariseStartup } from "@/lib/updates/server-starts";
@@ -12,8 +14,16 @@ import {
   windowsSetupFor,
 } from "@/lib/updates/update-checker";
 import { summariseCheck } from "@/lib/updates/updates";
+import { RELEASE_PUBLIC_KEYS, RELEASE_SIGNATURE_LINE, releaseSignatureValid, releaseSignedText, signatureFromFile } from "@/lib/updates/release-signature";
 
 const HASH = "a".repeat(40) + "0123456789abcdef01234567";
+// Made-up release keys for the tests (decision 1601).
+const ours = generateKeyPairSync("ed25519");
+const theirs = generateKeyPairSync("ed25519");
+const OUR_KEYS = [ours.publicKey.export({ type: "spki", format: "pem" }).toString()];
+const signed = (fileName: string, hash: string, key = ours.privateKey) => sign(null, Buffer.from(releaseSignedText(fileName, hash)), key).toString("base64");
+/** A fetch that answers .sig files with `sig` and .sha256 files with `sha`. */
+const files = (sig: string, sha = `${HASH}  TohyeeSetup-1.2.0.exe\n`) => vi.fn<typeof fetch>(async (url) => new Response(String(url).endsWith(".sig") ? sig : sha));
 
 function latest(version: string, assets: { name: string; digest?: string | null }[]): LatestReleaseCheck {
   return {
@@ -104,19 +114,22 @@ describe("the Windows installer and its fingerprint (decision 331)", () => {
 
   it("uses GitHub's digest first, then the .sha256 file, and refuses without either", async () => {
     const noFetch = vi.fn<typeof fetch>();
-    expect(await windowsSetupFor(latest("1.2.0", [{ name: "TohyeeSetup-1.2.0.exe", digest: `sha256:${HASH}` }]), noFetch)).toEqual({
+    const sigOnly = files(signed("TohyeeSetup-1.2.0.exe", HASH));
+    expect(await windowsSetupFor(latest("1.2.0", [{ name: "TohyeeSetup-1.2.0.exe", digest: `sha256:${HASH}` }, { name: "TohyeeSetup-1.2.0.exe.sig" }]), sigOnly, OUR_KEYS)).toEqual({
       setup: {
         name: "TohyeeSetup-1.2.0.exe",
         downloadUrl: "https://github.com/Willy-nz/Tohyee/releases/download/v1.2.0/TohyeeSetup-1.2.0.exe",
         size: 123,
         sha256: HASH,
         sha256From: "github-digest",
+        signed: true,
       },
     });
-    expect(noFetch).not.toHaveBeenCalled();
+    // Only the signature was fetched: GitHub's digest needs no .sha256 file.
+    expect(sigOnly.mock.calls.map((call) => String(call[0]))).toEqual(["https://github.com/Willy-nz/Tohyee/releases/download/v1.2.0/TohyeeSetup-1.2.0.exe.sig"]);
 
-    const sidecar = vi.fn<typeof fetch>(async () => new Response(`${HASH}  TohyeeSetup-1.2.0.exe\n`));
-    const fromFile = await windowsSetupFor(latest("1.2.0", [{ name: "TohyeeSetup-1.2.0.exe" }, { name: "TohyeeSetup-1.2.0.exe.sha256" }]), sidecar);
+    const sidecar = files(signed("TohyeeSetup-1.2.0.exe", HASH));
+    const fromFile = await windowsSetupFor(latest("1.2.0", [{ name: "TohyeeSetup-1.2.0.exe" }, { name: "TohyeeSetup-1.2.0.exe.sha256" }, { name: "TohyeeSetup-1.2.0.exe.sig" }]), sidecar, OUR_KEYS);
     expect(fromFile).toMatchObject({ setup: { sha256: HASH, sha256From: "sha256-file" } });
     expect(sidecar.mock.calls[0][0]).toBe("https://github.com/Willy-nz/Tohyee/releases/download/v1.2.0/TohyeeSetup-1.2.0.exe.sha256");
     // Issue #154: the fingerprint fetch has a time limit too.
@@ -132,6 +145,42 @@ describe("the Windows installer and its fingerprint (decision 331)", () => {
     expect(await windowsSetupFor(latest("1.2.0", [{ name: "tohyee-server-1.2.0.tar.gz" }]), noFetch)).toEqual({
       problem: "Release v1.2.0 has no TohyeeSetup-1.2.0.exe, so it can't be installed from here.",
     });
+  });
+
+  it("installs only an installer signed with Tohyee's release key (#154, decision 1601)", async () => {
+    const release = (extra: { name: string }[] = [{ name: "TohyeeSetup-1.2.0.exe.sig" }]) => latest("1.2.0", [{ name: "TohyeeSetup-1.2.0.exe", digest: `sha256:${HASH}` }, ...extra]);
+    // No signature on the release: refused, and nothing else asked for.
+    const noFetch = vi.fn<typeof fetch>();
+    expect(await windowsSetupFor(release([]), noFetch, OUR_KEYS)).toEqual({
+      problem: "TohyeeSetup-1.2.0.exe isn't signed with Tohyee's release key, so it won't be installed from here. Download it from the release page and run it yourself only if you trust where it came from.",
+    });
+    expect(noFetch).not.toHaveBeenCalled();
+    // Signed by some other key, for another file, for another fingerprint, or not a signature at all: refused.
+    const mismatch = "The signature on TohyeeSetup-1.2.0.exe doesn't match Tohyee's release key, so it won't be installed. Don't run this file; tell whoever looks after Tohyee.";
+    for (const sig of [signed("TohyeeSetup-1.2.0.exe", HASH, theirs.privateKey), signed("TohyeeSetup-1.1.0.exe", HASH), signed("TohyeeSetup-1.2.0.exe", "b".repeat(64)), "nope"]) {
+      expect(await windowsSetupFor(release(), files(sig), OUR_KEYS)).toEqual({ problem: mismatch });
+    }
+    // GitHub not sending it: refused, saying so.
+    expect(await windowsSetupFor(release(), vi.fn<typeof fetch>(async () => new Response("", { status: 502 })), OUR_KEYS)).toEqual({
+      problem: "GitHub didn't send the signature for TohyeeSetup-1.2.0.exe (status 502), so it can't be checked. Try again later.",
+    });
+    const stalled = vi.fn<typeof fetch>(async () => Promise.reject(new DOMException("timeout", "TimeoutError")));
+    expect(await windowsSetupFor(release(), stalled, OUR_KEYS)).toHaveProperty("problem", "GitHub didn't send the signature for TohyeeSetup-1.2.0.exe within 15 seconds, so it can't be checked. Try again later.");
+    expect(stalled.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
+    // A real signature, with a new line at the end as the workflow writes it: accepted.
+    expect(await windowsSetupFor(release(), files(`${signed("TohyeeSetup-1.2.0.exe", HASH)}\n`), OUR_KEYS)).toMatchObject({ setup: { signed: true } });
+  });
+
+  it("checks against the key built into Tohyee, and the workflow signs the same text", () => {
+    expect(RELEASE_PUBLIC_KEYS).toHaveLength(1);
+    // A test key's signature is no good against the real key.
+    expect(releaseSignatureValid("TohyeeSetup-1.2.0.exe", HASH, signed("TohyeeSetup-1.2.0.exe", HASH))).toBe(false);
+    expect(releaseSignatureValid("TohyeeSetup-1.2.0.exe", HASH, signed("TohyeeSetup-1.2.0.exe", HASH), OUR_KEYS)).toBe(true);
+    expect(releaseSignedText("TohyeeSetup-1.2.0.exe", HASH.toUpperCase())).toBe(`tohyee-release-signature-v1\nTohyeeSetup-1.2.0.exe\n${HASH}\n`);
+    expect(signatureFromFile("abc")).toBeNull();
+    const workflow = readFileSync(".github/workflows/windows-installer.yml", "utf8");
+    expect(workflow).toContain(RELEASE_SIGNATURE_LINE);
+    expect(workflow).toContain("TOHYEE_RELEASE_SIGNING_KEY");
   });
 
   it("gives up on the .sha256 file after 15 seconds and says why", async () => {

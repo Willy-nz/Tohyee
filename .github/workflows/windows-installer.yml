@@ -155,3 +155,36 @@ jobs:
             gh release create "$tag" --title "$tag" --generate-notes || sleep 30
           fi
           gh release upload "$tag" dist/windows/TohyeeSetup-*
+
+      # Signs the installer's fingerprint with Tohyee's release key (#154,
+      # decision 1601), so a server installs it only if it came from here.
+      # The private key is only in the TOHYEE_RELEASE_SIGNING_KEY secret; the
+      # public half is in src/lib/updates/release-signature.ts. The signed text
+      # must match releaseSignedText there. Uploaded after the installer, so a
+      # missing key fails this job loudly but older servers can still update.
+      - name: Sign the installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TOHYEE_RELEASE_SIGNING_KEY: ${{ secrets.TOHYEE_RELEASE_SIGNING_KEY }}
+        run: |
+          if [ -z "$TOHYEE_RELEASE_SIGNING_KEY" ]; then
+            echo "::error::The TOHYEE_RELEASE_SIGNING_KEY secret isn't set, so this installer isn't signed. Servers on 0.35.0 or later won't install it from Tohyee."
+            exit 1
+          fi
+          cd dist/windows
+          for exe in TohyeeSetup-*.exe; do
+            node -e '
+              const crypto = require("node:crypto");
+              const fs = require("node:fs");
+              const file = process.argv[1];
+              const hash = crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+              const text = "tohyee-release-signature-v1\n" + file + "\n" + hash + "\n";
+              const key = crypto.createPrivateKey(process.env.TOHYEE_RELEASE_SIGNING_KEY);
+              const sig = crypto.sign(null, Buffer.from(text, "utf8"), key);
+              if (!crypto.verify(null, Buffer.from(text, "utf8"), crypto.createPublicKey(key), sig)) throw new Error("signature check failed");
+              fs.writeFileSync(file + ".sig", sig.toString("base64") + "\n");
+              console.log("Signed " + file + " (" + hash + ")");
+            ' "$exe"
+          done
+          gh release upload "$GITHUB_REF_NAME" TohyeeSetup-*.exe.sig

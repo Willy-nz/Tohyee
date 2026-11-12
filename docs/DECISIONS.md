@@ -14076,6 +14076,24 @@ migration 0265.
       it was closer. Tenant migration 0277. Not tried against the live
       service; not yet reviewed.
 
+### Signed installers (13 Nov 2026; decision 1601)
+
+1601. **The server app installs only an installer signed with Tohyee's
+      release key (#154 part 1).** A SHA-256 from GitHub proves the download
+      is the file on the release, not who put it there. The release workflow
+      now signs "tohyee-release-signature-v1, file name, SHA-256" with an
+      Ed25519 key held only in the `TOHYEE_RELEASE_SIGNING_KEY` secret and
+      uploads `TohyeeSetup-<version>.exe.sig`. The public key is built into
+      Tohyee (`src/lib/updates/release-signature.ts`), so the check doesn't
+      trust anything GitHub sends. No signature, a bad one, or a signature
+      GitHub won't send means no **Install**, with the reason shown; the
+      person can still download and run the file themselves. The step runs
+      after the installer is uploaded, so a missing secret fails the release
+      loudly while older servers (which don't check) can still update. This
+      is instead of Authenticode signing, which needs a paid certificate; it
+      can be added later. To change the key, add the new public key, keep the
+      old one until its releases are gone, and replace the secret.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
