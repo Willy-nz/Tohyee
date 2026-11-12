@@ -3,7 +3,7 @@ import path from "node:path";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 
 /**
- * Server › Logs (Will, 13 Nov 2026; decision 1599): the server's own log
+ * Server › Logs (Will, 13 Nov 2026; decision 1607): the server's own log
  * files (the Windows service's out and err logs and the installer's
  * setup.log), read-only, for server admins on the server computer, so an
  * error the app only reports as "Something went wrong" can be looked up

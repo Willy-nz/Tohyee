@@ -14631,9 +14631,9 @@ show, 100 a page, and clicking one should let her edit it.
       export, print and Save as custom report. Account transactions keeps
       its account picker.
 
-### Server › Logs (13 Nov 2026; decision 1599)
+### Server › Logs (13 Nov 2026; decision 1607)
 
-1599. **The server's logs on a page (Server › Logs).** Will asked to see the
+1607. **The server's logs on a page (Server › Logs).** Will asked to see the
       logs in Tohyee instead of opening %ProgramData%\Tohyee\logs, after
       "Something went wrong" errors could only be explained from that
       folder. The page lists the *.log files directly in the log folder

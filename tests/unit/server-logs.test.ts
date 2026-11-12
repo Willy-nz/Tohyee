@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { listLogFiles, logDirectory, readLogTail } from "@/lib/server-admin/logs";
 
-/** Server › Logs (decision 1599): only *.log files in the log folder, newest part, searchable. */
+/** Server › Logs (decision 1607): only *.log files in the log folder, newest part, searchable. */
 describe("server logs", () => {
   async function folder() {
     const dir = await mkdtemp(path.join(os.tmpdir(), "tohyee-logs-"));

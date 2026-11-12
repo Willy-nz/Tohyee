@@ -15,7 +15,7 @@ function size(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-/** Server › Logs (decision 1599): the server's log files, newest part first, read-only. */
+/** Server › Logs (decision 1607): the server's log files, newest part first, read-only. */
 export default function LogsPage() {
   const { user } = useWorkspace();
   const [file, setFile] = useState<string | null>(null);
