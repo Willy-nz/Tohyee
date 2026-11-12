@@ -14555,3 +14555,18 @@ show, 100 a page, and clicking one should let her edit it.
       with no account to choose (GL1). It has the same tracking filter,
       export, print and Save as custom report. Account transactions keeps
       its account picker.
+
+### The AI correcting manual journals (12 Nov 2026; decision 1598)
+
+1598. **correct_journal (AJC1-AJC5).** Will asked for a tool so the AI can
+      fix a manual journal without a browser, after 19 journals posted in
+      the screens needed one line moved from 1290 to 4000. It does what
+      Edit this journal does: the original is kept, and a reversal and the
+      new version are posted, after a preview showing the effect by account.
+      It covers a manual journal or a correction's replacement, whoever
+      posted it, because a person can already do this on the Journals page.
+      Never a record's journal. Refused in a locked period and on journals
+      matched to a bank line, like void_own_journal. Full access only, with
+      the original's date by default. Claude's details, not yet reviewed.
+      This is the third exception to decision 1277's "an AI never voids".
+

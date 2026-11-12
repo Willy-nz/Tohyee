@@ -154,6 +154,7 @@ export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel;
   { name: "review_mixed_use_line", level: "full", words: "Review a line on a personal or mixed-use account as business, private, split or a refund (posting what the screen would)" },
   { name: "review_mixed_use_lines", level: "full", words: "Review up to 100 lines on personal or mixed-use accounts as a batch" },
   { name: "unreview_mixed_use_line", level: "full", words: "Undo its own review within 24 hours (voiding what it posted on the line's date); anything else is for a person" },
+  { name: "correct_journal", level: "full", words: "Correct a manual journal (a reversal and the new version), after showing the effect by account" },
   { name: "void_own_journal", level: "full", words: "Void a manual journal an AI posted, after showing what it will reverse" },
   { name: "discard_own_draft_journal", level: "full", words: "Discard a draft journal an AI made, unless a person has edited it" },
   { name: "recode_bank_transactions", level: "full", words: "Recode spend and receive money in place, after showing the effect by account and month" },
