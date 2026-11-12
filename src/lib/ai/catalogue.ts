@@ -1,3 +1,4 @@
+import { DOCUMENT_ACTION_TOOLS } from "@/lib/ai/document-action-tools";
 import { CATCH_UP_READ_TOOLS, CATCH_UP_WRITE_TOOLS } from "@/lib/ai/catch-up-tools";
 import { type AiAccessLevel, levelAllows } from "@/lib/ai/access-levels";
 import { ANALYTICS_READ_TOOLS, ANALYTICS_WRITE_TOOLS } from "@/lib/ai/analytics-tools";
@@ -40,6 +41,7 @@ export const AI_TOOLS: readonly AiTool[] = [
   ...TAX_WRITE_TOOLS,
   ...ANALYTICS_WRITE_TOOLS,
   ...CATCH_UP_WRITE_TOOLS,
+  ...DOCUMENT_ACTION_TOOLS,
 ];
 
 export function findAiTool(name: unknown): AiTool | null {

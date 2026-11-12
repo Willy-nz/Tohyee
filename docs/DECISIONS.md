@@ -14657,4 +14657,16 @@ show, 100 a page, and clicking one should let her edit it.
       sync_sales_platform, retry_sales_platform_payouts and void_journals
       (the Journals page's Void, for any manual journal, after its
       preview). Claude's details, not yet reviewed.
+1601. **Part 2: sales, purchases and bank actions, confirmed first.** Voids,
+      removals, deletes (drafts only, as on the screens), excluding a
+      statement line, OK on a confident match and rejecting bank coding
+      rows are Full access tools that take two calls: the first shows what
+      it acts on and a confirmHash, changing nothing; the second, with the
+      same arguments and the hash, does it. Will chose "proper tools with
+      previews" (decision 1600). This replaces decision 347's "no tool
+      deletes or voids" with "only at Full access, and only after showing
+      what it acts on"; the tests now check that instead. Moving quotes,
+      sales orders and purchase orders on (accept, decline, copy, invoice,
+      bill, close, cancel) are "post" tools. All at the screens' role,
+      bookkeepers and up. Claude's details, not yet reviewed.
 
