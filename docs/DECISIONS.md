@@ -14630,3 +14630,18 @@ show, 100 a page, and clicking one should let her edit it.
       with no account to choose (GL1). It has the same tracking filter,
       export, print and Save as custom report. Account transactions keeps
       its account picker.
+
+### Server › Logs (13 Nov 2026; decision 1599)
+
+1599. **The server's logs on a page (Server › Logs).** Will asked to see the
+      logs in Tohyee instead of opening %ProgramData%\Tohyee\logs, after
+      "Something went wrong" errors could only be explained from that
+      folder. The page lists the *.log files directly in the log folder
+      (TOHYEE_LOG_DIR, else the "logs" folder beside TOHYEE_BACKUP_DIR) and
+      shows the newest 512 KB of one, newest line first, with a search and
+      an "errors only" filter. It's read-only and for server admins on the
+      server computer, like every other Server page, because logs can name
+      people, organisations and paths. Nothing else in the folder (such as
+      tohyee.env) can be read. The Windows service now sets TOHYEE_LOG_DIR.
+      Claude's details, not yet reviewed.
+
