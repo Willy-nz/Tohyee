@@ -617,7 +617,7 @@ export const SCREEN_COVERAGE: Record<string, ScreenCoverage> = {
   "PUT /api/ledger/journal-drafts/[draftId]": {"tool": "update_draft_journal"},
   "DELETE /api/ledger/journal-drafts/[draftId]": {"tool": "discard_own_draft_journal"},
   "POST /api/ledger/journal-drafts": {"tool": "create_draft_journal"},
-  "POST /api/ledger/journals/corrections": {"next": "accounting"},
+  "POST /api/ledger/journals/corrections": {"tool": "correct_journal"},
   "POST /api/ledger/journals": {"tool": "post_journal"},
   "POST /api/ledger/journals/void": {"tool": "void_journals"},
   "POST /api/ledger/period-close": {"next": "accounting"},

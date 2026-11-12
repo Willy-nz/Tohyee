@@ -14161,6 +14161,20 @@ migration 0265.
       bobby calves can be marked so, and are left out of b (tenant migration
       0281). Worked example LV32.
 
+### Server › Logs (13 Nov 2026; decision 1607)
+
+1607. **The server's logs on a page (Server › Logs).** Will asked to see the
+      logs in Tohyee instead of opening %ProgramData%\Tohyee\logs, after
+      "Something went wrong" errors could only be explained from that
+      folder. The page lists the *.log files directly in the log folder
+      (TOHYEE_LOG_DIR, else the "logs" folder beside TOHYEE_BACKUP_DIR) and
+      shows the newest 512 KB of one, newest line first, with a search and
+      an "errors only" filter. It's read-only and for server admins on the
+      server computer, like every other Server page, because logs can name
+      people, organisations and paths. Nothing else in the folder (such as
+      tohyee.env) can be read. The Windows service now sets TOHYEE_LOG_DIR.
+      Claude's details, not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
@@ -14641,6 +14655,19 @@ show, 100 a page, and clicking one should let her edit it.
       export, print and Save as custom report. Account transactions keeps
       its account picker.
 
+### The AI correcting manual journals (12 Nov 2026; decision 1598)
+
+1598. **correct_journal (AJC1-AJC5).** Will asked for a tool so the AI can
+      fix a manual journal without a browser, after 19 journals posted in
+      the screens needed one line moved from 1290 to 4000. It does what
+      Edit this journal does: the original is kept, and a reversal and the
+      new version are posted, after a preview showing the effect by account.
+      It covers a manual journal or a correction's replacement, whoever
+      posted it, because a person can already do this on the Journals page.
+      Never a record's journal. Refused in a locked period and on journals
+      matched to a bank line, like void_own_journal. Full access only, with
+      the original's date by default. Claude's details, not yet reviewed.
+      This is the third exception to decision 1277's "an AI never voids".
 ### AI tools for every screen action (13 Nov 2026; decision 1600)
 
 1600. **Every screen action gets an AI tool, area by area.** Will: "can you

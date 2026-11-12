@@ -231,6 +231,7 @@ export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel;
   { name: "create_custom_field_section", level: "post", words: "Add a custom field section (owners and admins)" },
   { name: "update_custom_field_section", level: "post", words: "Rename or move a custom field section (owners and admins)" },
   { name: "delete_custom_field_section", level: "full", words: "Delete a custom field section; its fields stay (owners and admins), after confirming" },
+  { name: "correct_journal", level: "full", words: "Correct a manual journal (a reversal and the new version), after showing the effect by account" },
   { name: "void_own_journal", level: "full", words: "Void a manual journal an AI posted, after showing what it will reverse" },
   { name: "discard_own_draft_journal", level: "full", words: "Discard a draft journal an AI made, unless a person has edited it" },
   { name: "recode_bank_transactions", level: "full", words: "Recode spend and receive money in place, after showing the effect by account and month" },

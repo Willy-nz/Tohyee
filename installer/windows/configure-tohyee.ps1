@@ -258,6 +258,7 @@ try {
   <env name="TOHYEE_CLOUDFLARED_PATH" value="$(X $CloudflaredExe)"/>
   <env name="TOHYEE_PG_BIN" value="$(X $PgBin)"/>
   <env name="TOHYEE_BACKUP_DIR" value="$(X (Join-Path $DataRoot 'backups'))"/>
+  <env name="TOHYEE_LOG_DIR" value="$(X $LogDir)"/>
   <env name="TOHYEE_ANALYTICS_DIR" value="$(X (Join-Path $DataRoot 'analytics'))"/>
   <env name="TEMP" value="$(X $TempDir)"/>
   <env name="TMP" value="$(X $TempDir)"/>
