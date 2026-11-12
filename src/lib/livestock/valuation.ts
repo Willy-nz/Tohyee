@@ -291,6 +291,7 @@ export async function recordElection(
   if (herdValueRatio === "0.3" && !CHATHAM_KINDS.includes(kind)) throw new ValidationError("The Chatham Islands ratio (0.3) is for sheep and beef cattle only.");
   if (input.maleBreedingHerdScheme !== undefined && typeof input.maleBreedingHerdScheme !== "boolean") throw new ValidationError("maleBreedingHerdScheme must be true or false.");
   const maleBreedingHerdScheme = input.maleBreedingHerdScheme === true;
+  if (kind === "pigs" && method !== "herd_scheme") throw new ValidationError("Pigs are valued under the herd scheme in Tohyee: their national standard cost isn't built.");
   if (maleBreedingHerdScheme && method !== "nsc") throw new ValidationError("Male breeding stock in the herd scheme goes with an NSC election; under the herd scheme they're in it already.");
   const later = await tx.query("select 1 from livestock_valuations where income_year >= $1 and status = 'approved'", [fromIncomeYear]);
   if (later.rowCount) throw new ConflictError(`A valuation for the ${fromIncomeYear} income year or later is approved. Replace it before changing elections.`);

@@ -43,7 +43,8 @@ describe("mob rules (MOB8)", () => {
     expect(kindFrom("Dairy cows")).toBe("dairy_cattle");
     expect(kindFrom("beef")).toBe("beef_cattle");
     expect(kindFrom("Red deer")).toBe("deer_red");
-    expect(kindFrom("pigs")).toBeNull();
+    expect(kindFrom("pigs")).toBe("pigs");
+    expect(kindFrom("alpacas")).toBeNull();
     expect(classFrom("sheep", "Two-tooth ewes")).toBe("two_tooth_ewes");
     expect(classFrom("sheep", "ewe_hoggets")).toBe("ewe_hoggets");
     expect(classFrom("dairy_cattle", "Cows")).toBeNull();

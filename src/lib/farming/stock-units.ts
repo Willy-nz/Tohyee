@@ -76,6 +76,13 @@ export const STOCK_UNIT_DEFAULTS: readonly StockUnitDefault[] = [
   { kind: "goats_dairy", classCode: "does", factor: "2.00", basis: "Dairy does, grass only, 550 L" },
   { kind: "goats_dairy", classCode: "breeding_bucks", factor: "2.00", basis: "Dairy does, grass only (no buck row; check)" },
   { kind: "goats_dairy", classCode: "culls", factor: "1.50", basis: "Dairy does, browsing" },
+  // Pigs (decision 1604): the table has no pig rows, and pigs are mostly fed grain rather than grazed. 0 until a farm sets its own.
+  ...["weaners", "growing_10_17", "growing_over_17", "sows_under_1", "sows_over_1", "breeding_boars"].map((classCode) => ({
+    kind: "pigs",
+    classCode,
+    factor: "0.00",
+    basis: "No pig row in the table (pigs are mostly fed grain, not grazed); set your own",
+  })),
 ];
 
 export type StockUnitFactor = StockUnitDefault & { changed: boolean; defaultFactor: string };

@@ -1,6 +1,6 @@
 /**
  * The livestock Tohyee records (decision 503: dairy cattle, beef cattle and
- * sheep; decision 508 adds deer and goats; pigs are left out for now), using the classes in IRD's national average market values
+ * sheep; decision 508 adds deer and goats; decision 1604 adds pigs, under the herd scheme only), using the classes in IRD's national average market values
  * determination (NAMV 2026), so the herd scheme can value each class.
  * Shared with the browser, so no server imports.
  *
@@ -9,7 +9,7 @@
  * at balance date, ageing moves each class to the next (LV1).
  */
 
-export const LIVESTOCK_KINDS = ["dairy_cattle", "beef_cattle", "sheep", "deer_red", "deer_other", "goats_angora", "goats_cashmere", "goats_dairy"] as const;
+export const LIVESTOCK_KINDS = ["dairy_cattle", "beef_cattle", "sheep", "deer_red", "deer_other", "goats_angora", "goats_cashmere", "goats_dairy", "pigs"] as const;
 export type LivestockKind = (typeof LIVESTOCK_KINDS)[number];
 
 export const KIND_NAMES: Readonly<Record<LivestockKind, string>> = {
@@ -21,6 +21,7 @@ export const KIND_NAMES: Readonly<Record<LivestockKind, string>> = {
   goats_angora: "Goats (Angora)",
   goats_cashmere: "Goats (cashmere or cashgora)",
   goats_dairy: "Goats (dairy)",
+  pigs: "Pigs",
 };
 
 /** Which IRD national standard cost a kind uses: both deer kinds share deer's, Angora and cashmere goats share meat and fibre's (NSC 2026). */
@@ -33,6 +34,8 @@ export const NSC_RATE_KIND: Readonly<Record<LivestockKind, string>> = {
   goats_angora: "goats_meat_fibre",
   goats_cashmere: "goats_meat_fibre",
   goats_dairy: "goats_dairy",
+  // Pigs' NSC has its own formulas (weaners, growing pigs), not built: pigs are herd scheme only (decision 1604).
+  pigs: "pigs",
 };
 
 /** NSC rates are by IRD's kinds: deer and meat-and-fibre goats each cover two of Tohyee's kinds. */
@@ -121,6 +124,15 @@ export const LIVESTOCK_CLASSES: readonly LivestockClass[] = [
   { kind: "goats_dairy", code: "does", name: "Does over one year", birth: false, agesTo: null, nsc: "mature" },
   { kind: "goats_dairy", code: "breeding_bucks", name: "Breeding bucks", birth: false, agesTo: null, nsc: "unsupported", maleBreeding: true },
   { kind: "goats_dairy", code: "culls", name: "Other dairy goats (culls)", birth: false, agesTo: null, nsc: "mature" },
+  // Pigs (decision 1604, LV30): NAMV 2026's classes. They're by weeks of age, not by balance date, so nothing ages
+  // at balance date: move pigs to their class with a class change. Sucklings are valued at nil (OS 25/02 para 25),
+  // so piglets are recorded when weaned, as weaners.
+  { kind: "pigs", code: "weaners", name: "Weaners less than 10 weeks (not sucklings)", birth: true, agesTo: null, nsc: "unsupported" },
+  { kind: "pigs", code: "growing_10_17", name: "Growing pigs 10 to 17 weeks (porkers and baconers)", birth: false, agesTo: null, nsc: "unsupported" },
+  { kind: "pigs", code: "growing_over_17", name: "Growing pigs over 17 weeks (baconers)", birth: false, agesTo: null, nsc: "unsupported" },
+  { kind: "pigs", code: "sows_under_1", name: "Breeding sows less than one year", birth: false, agesTo: null, nsc: "unsupported" },
+  { kind: "pigs", code: "sows_over_1", name: "Breeding sows over one year", birth: false, agesTo: null, nsc: "unsupported" },
+  { kind: "pigs", code: "breeding_boars", name: "Breeding boars", birth: false, agesTo: null, nsc: "unsupported", maleBreeding: true },
 ];
 
 export function classKey(kind: string, code: string): string {

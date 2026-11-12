@@ -18567,8 +18567,11 @@ were read from IRD's determinations on 11 Oct 2026).
 - An increase in a class valued by another method (paras 42-44).
 - Associated-person transfers and the base number (OS example 2).
 - Long-term bailments.
-- Pigs under NSC.
-- Dairy steers and bulls under NSC.
+- Pigs under NSC. (Pigs under the herd scheme: LV30.)
+- Dairy steers and bulls under NSC. Still refused: the 1993 NSC
+  determination (clause 5) needs an NSC for rising two-year male
+  non-breeding dairy cattle, and IRD's yearly NSC determinations don't
+  publish one (checked NSC 2023-2026, 13 Nov 2026).
 - ~~Purchased bobby calves.~~ Built: LV29.
 
 ### Questions for Jess
@@ -22487,3 +22490,28 @@ calves" on the purchase.
   takes them out at the average (LV23). Clause 3 leaves deaths out of
   a + b, which differs only when bought stock and deaths are both in the
   class. That needs a separate look.
+
+## Livestock: pigs under the herd scheme (LV30; built by Claude 13 Nov 2026 from IRD's NAMV 2026 and OS 25/02, the details are Claude's, not yet reviewed)
+
+Decision 1604, #243. The classes are NAMV 2026's, with its figures:
+breeding sows less than one year **314.00**, over one year **395.00**,
+breeding boars **423.00**, weaners less than 10 weeks (not sucklings)
+**149.00**, growing pigs 10 to 17 weeks **287.00**, over 17 weeks **369.00**.
+Sucklings are valued at nil (OS 25/02 para 25), so piglets are recorded when
+weaned. The classes go by weeks of age, so nothing ages at balance date:
+pigs move class with a class change.
+
+Made-up farm: 30 June balance date, livestock from 1 July 2025, opening 20
+sows over one year at **7,600.00** (380.00 each).
+
+- **Movements:** 150 weaned (births into weaners), 5 weaners die, 100
+  weaners move to growing pigs 10-17 weeks, 60 of those sold for 18,000.00.
+- **Closing:** weaners 45 x 149.00 = 6,705.00; growing pigs 40 x 287.00 =
+  11,480.00; sows 20 x 395.00 = 7,900.00. Total **26,085.00**.
+- **Herd scheme:** the opening sows are revalued from 7,600.00 to 7,900.00:
+  **300.00**, not taxable. Change in value 18,185.00; taxable profit
+  18,185.00 + sales 18,000.00 = **36,185.00**.
+- **Refused:** births into any class but weaners; an NSC election for pigs
+  (pigs' NSC has its own formulas, not built).
+- **Stock units:** the stock-unit table has no pig rows, so pigs default
+  to 0. A farm can set its own.
