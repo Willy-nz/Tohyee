@@ -151,6 +151,29 @@ describe("syncing", () => {
     expect(draftRequest({ ...store.drafts[0], kind: "grazing_out", payload: { grazingId: "77", outOn: "2026-10-27", farmId: "1" } })).toEqual({ method: "PATCH", path: "/api/farming/grazings/77", body: { outOn: "2026-10-27", farmId: "1" } });
   });
 
+  it("sends a mob move, births, deaths and a treatment to their own records (decision 1598)", () => {
+    const base = addDraft(EMPTY_STORE, reading("1", "a0000000-0000-4000-8000-000000000007")).drafts[0];
+    expect(draftRequest({ ...base, kind: "mob_action", payload: { mobId: "12", action: "move", toPaddockId: "5", onDate: "2026-11-12" } })).toEqual({
+      method: "POST",
+      path: "/api/farming/mobs/12/actions",
+      body: { action: "move", toPaddockId: "5", onDate: "2026-11-12", farmId: "1", operationId: "a0000000-0000-4000-8000-000000000007" },
+    });
+    expect(draftRequest({ ...base, kind: "mob_action", payload: { mobId: "12", action: "deaths", head: 2, onDate: "2026-11-12", note: "Bloat" } }).body).toEqual({
+      action: "deaths",
+      head: 2,
+      onDate: "2026-11-12",
+      note: "Bloat",
+      farmId: "1",
+      operationId: "a0000000-0000-4000-8000-000000000007",
+    });
+    const treatment = { mobId: "12", head: 40, treatedOn: "2026-11-12", product: "Test drench", dose: "10 mL each", meatWithholdingDays: 14, milkWithholdingHours: null, givenBy: "Sam" };
+    expect(draftRequest({ ...base, kind: "treatment", payload: treatment })).toEqual({
+      method: "POST",
+      path: "/api/farming/farms/1/treatments",
+      body: { ...treatment, operationId: "a0000000-0000-4000-8000-000000000007" },
+    });
+  });
+
   it("lets synced drafts go after a week, never unsynced ones", () => {
     let store = addDraft(EMPTY_STORE, { ...reading("1", "a0000000-0000-4000-8000-000000000005"), createdAt: "2026-10-01T00:00:00.000Z" });
     store = addDraft(store, { ...reading("1", "a0000000-0000-4000-8000-000000000006"), createdAt: "2026-10-01T00:00:00.000Z" });
