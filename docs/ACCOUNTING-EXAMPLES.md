@@ -18570,9 +18570,12 @@ were read from IRD's determinations on 11 Oct 2026).
   increase above the base number by another method is still refused: OS
   25/02 doesn't say which method, or how the increase carries forward.
 - Long-term bailments.
-- Pigs under NSC.
-- Dairy steers and bulls under NSC.
-- Purchased bobby calves.
+- Pigs under NSC. (Pigs under the herd scheme: LV30.)
+- Dairy steers and bulls under NSC. Still refused: the 1993 NSC
+  determination (clause 5) needs an NSC for rising two-year male
+  non-breeding dairy cattle, and IRD's yearly NSC determinations don't
+  publish one (checked NSC 2023-2026, 13 Nov 2026).
+- ~~Purchased bobby calves.~~ Built: LV29.
 
 ### Questions for Jess
 
@@ -18665,8 +18668,8 @@ refusal test in `livestock-valuation.test.ts`. Decision 509.
     (it reverts to its class at NAMV).
   - **Reverting:** an animal at or below its class's NAMV (with any
     ratio) at a year end reverts.
-  - **Not supported:** high-priced animals bought before livestock's first
-    year, and those in classes not in the herd scheme.
+  - **Not supported:** high-priced animals in classes not in the herd
+    scheme. (Those bought before livestock's first year: LV25B.)
 - **LV26** comes out as drafted. With the NSC election's "male breeding
   stock in the herd scheme", the rams are revalued from 4,000.00 to
   4,310.00 (310.00 non-taxable). Without it, they're refused.
@@ -22437,6 +22440,84 @@ Decisions 1598-1599, #447 items 8 and 10. Made-up farm: Home farm, mob "R2 heife
   Purchases and **Farm** (Farm walk … Add a photo or note). "Move a mob"
   opens the Log at LS1's first question. Sam, farm staff, sees **only
   Farm**. A viewer sees no "+ New". With Farming off, there's no Farm group.
+
+## Livestock: a high-priced animal bought before the first year (LV25B; built by Claude 13 Nov 2026 from IRD OS 25/02 paras 68-71, the details are Claude's, not yet reviewed)
+
+Decision 1602, #243. Made-up farm: livestock starts 1 July 2025 (30 June
+balance date). The farm bought the bull Te Mana on 1 Aug 2023 for
+**30,000.00**; the accountant's IRD rate is 25% straight line.
+
+- **Openings:** mature cows 100 head, 200,000.00; breeding bulls **1 head,
+  0.00** (the bull's head is counted in its class; his value isn't). The
+  opening journal is 200,000.00 + 22,500.00 = **222,500.00**.
+- **Recording:** Te Mana is recorded with his cost, rate and its source.
+  The high-priced test isn't run again, because he was tested on an
+  earlier return, and last year's NAMV isn't asked for.
+- **Opening value:** cost in 2023-24 (30,000.00 at 30 June 2024), less 25%
+  of cost for 2024-25: **22,500.00** at 30 June 2025.
+- **2025-26:** closing **15,000.00**, apart from his class. The cows'
+  revaluation to NAMV (2,376.00 a head) is **37,600.00**, not taxable;
+  the taxable change is the bull's **-7,500.00**. Closing value
+  237,600.00 + 15,000.00 = **252,600.00**.
+- **Refused:** a bull bought in 2020-21 (worth nothing by 30 June 2025 at
+  25%, so already back in his class); a typed NAMV for one carried in; and
+  adding one once any year is approved, because it changes the first
+  year's opening.
+
+## Livestock: purchased bobby calves under NSC (LV29; built by Claude 13 Nov 2026 from IRD's NSC determinations, the details are Claude's, not yet reviewed)
+
+Decision 1603, #243. The formula is clause 3 of the National Standard Costs
+for Livestock Determination 1993 (TIB Vol 5 No 2 appendix): rising one-year
+stock is valued at ((a + b - c) x d) + e + (f x g), shared over a + b, where
+f is the bobby calves bought in the year and g is IRD's NSC for acquired
+bobby calves. Clause 2: bobby calves are bred from a dairy dam, bought for
+rearing, not weaned off milk when bought, and not bought at foot with the
+dam. The NSC 2026 determination sets g at **282.50** (listed under dairy
+cattle; clause 3 applies it to beef or dairy cattle).
+
+Made-up farm: Kōwhai, as LV6 (dairy, NSC, 31 May balance date), and on 1
+Sep 2025 it buys **20 bobby heifer calves for 2,400.00**, marked "Bobby
+calves" on the purchase.
+
+- **Rising one-year heifers:** 80 farm-bred x 788.90 = 63,112.00, plus the
+  bought calves' cost 2,400.00, plus 20 x 282.50 = 5,650.00: **71,162.00**
+  for 100 head.
+- **Totals:** closing value **551,494.50** (LV6's 543,444.50 + 8,050.00);
+  change in value 57,974.50; taxable profit **97,574.50**, LV6's plus the
+  bobby calves' NSC of 5,650.00 (their cost is both a purchase and in
+  closing stock).
+- **Refused:** "Bobby calves" on a sale, on anything but beef or dairy
+  cattle, or into a class that isn't rising one-year; and the valuation, if
+  the year has no bobby calf NSC.
+- **Not changed:** how rising one-year stock that die are taken out. Tohyee
+  takes them out at the average (LV23). Clause 3 leaves deaths out of
+  a + b, which differs only when bought stock and deaths are both in the
+  class. That needs a separate look.
+
+## Livestock: pigs under the herd scheme (LV30; built by Claude 13 Nov 2026 from IRD's NAMV 2026 and OS 25/02, the details are Claude's, not yet reviewed)
+
+Decision 1604, #243. The classes are NAMV 2026's, with its figures:
+breeding sows less than one year **314.00**, over one year **395.00**,
+breeding boars **423.00**, weaners less than 10 weeks (not sucklings)
+**149.00**, growing pigs 10 to 17 weeks **287.00**, over 17 weeks **369.00**.
+Sucklings are valued at nil (OS 25/02 para 25), so piglets are recorded when
+weaned. The classes go by weeks of age, so nothing ages at balance date:
+pigs move class with a class change.
+
+Made-up farm: 30 June balance date, livestock from 1 July 2025, opening 20
+sows over one year at **7,600.00** (380.00 each).
+
+- **Movements:** 150 weaned (births into weaners), 5 weaners die, 100
+  weaners move to growing pigs 10-17 weeks, 60 of those sold for 18,000.00.
+- **Closing:** weaners 45 x 149.00 = 6,705.00; growing pigs 40 x 287.00 =
+  11,480.00; sows 20 x 395.00 = 7,900.00. Total **26,085.00**.
+- **Herd scheme:** the opening sows are revalued from 7,600.00 to 7,900.00:
+  **300.00**, not taxable. Change in value 18,185.00; taxable profit
+  18,185.00 + sales 18,000.00 = **36,185.00**.
+- **Refused:** births into any class but weaners; an NSC election for pigs
+  (pigs' NSC has its own formulas, not built).
+- **Stock units:** the stock-unit table has no pig rows, so pigs default
+  to 0. A farm can set its own.
 
 ## Livestock: bought from an associated person (LV31; built by Claude 13 Nov 2026 from OS 25/02 paras 54-58 and s EC 4B, the details are Claude's, not yet reviewed)
 

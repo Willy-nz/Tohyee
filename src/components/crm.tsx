@@ -258,7 +258,7 @@ export function CompaniesPage({ organisationId }: { organisationId: string }) {
           </Field>
         </div>
         {companies.error ? <Notice tone="error">{companies.error}</Notice> : null}
-        {companies.data && companies.data.companies.length === 0 ? <Empty>No companies yet.</Empty> : null}
+        {companies.data && companies.data.companies.length === 0 ? <Empty picture="crm">No companies yet.</Empty> : null}
         {companies.data && companies.data.companies.length > 0 ? (
           <div className={ui.tableWrap}>
             <table className={ui.table}>
@@ -430,7 +430,7 @@ export function PeopleTable({
   const { error, run } = useBusy();
   // People fields marked "show in lists" (CRMF7).
   const columns = listColumns(customSetup, "person", ["person"]);
-  if (people.length === 0) return <Empty>No people yet.</Empty>;
+  if (people.length === 0) return <Empty picture="team">No people yet.</Empty>;
   return (
     <div className={ui.tableWrap}>
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -1126,7 +1126,7 @@ export function TaskList({ organisationId, tasks, onChanged, showAbout }: { orga
   const team = useTeam(organisationId);
   const { error, run } = useBusy();
   const today = todayInBrowser();
-  if (tasks.length === 0) return <Empty>No tasks.</Empty>;
+  if (tasks.length === 0) return <Empty picture="checklist">No tasks.</Empty>;
   return (
     <div className={ui.tableWrap}>
       {error ? <Notice tone="error">{error}</Notice> : null}

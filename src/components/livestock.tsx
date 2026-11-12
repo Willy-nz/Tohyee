@@ -411,6 +411,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
     amount: "",
     heldFor: "",
     rationsFor: "owner" as "owner" | "staff",
+    bobbyCalves: false,
     boundToHerdScheme: false,
     locationId: "",
     toLocationId: "",
@@ -424,6 +425,8 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
   if (!settings.data) return <p className={ui.muted}>Loading…</p>;
   if (!settings.data.settings.enabled) return <NotOn canSetUp={can("admin")} />;
   const classes = classesOf(form.kind);
+  // Bobby calves (LV29): a purchase of beef or dairy cattle into a rising one-year class.
+  const canBeBobbies = form.movementType === "purchase" && (form.kind === "dairy_cattle" || form.kind === "beef_cattle") && classes.find((entry) => entry.code === form.classCode)?.nsc === "rising_1";
   const activeLocations = (locations.data?.locations ?? []).filter((location) => !location.archived);
 
   async function save() {
@@ -445,6 +448,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
       if (form.movementType === "reclass") body.toClassCode = form.toClassCode;
       if (form.movementType === "transfer") body.toLocationId = form.toLocationId;
       if (form.movementType === "purchase" || form.movementType === "sale") body.amount = form.amount || null;
+      if (canBeBobbies && form.bobbyCalves) body.bobbyCalves = true;
       if (form.movementType === "purchase" && form.boundToHerdScheme) body.boundToHerdScheme = true;
       if (form.movementType === "arrival" || form.movementType === "departure") body.heldFor = form.heldFor;
       if (form.movementType === "rations") {
@@ -453,7 +457,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
       await api("/api/livestock/movements", { method: "POST", body });
       setMessage(`Recorded: ${MOVEMENT_LABELS[form.movementType].toLowerCase()}, ${form.head} ${classes.find((entry) => entry.code === form.classCode)?.name.toLowerCase()}.`);
       setKey(newIdempotencyKey("lv"));
-      setForm({ ...form, head: "", amount: "", note: "", boundToHerdScheme: false });
+      setForm({ ...form, head: "", amount: "", note: "", bobbyCalves: false, boundToHerdScheme: false });
       movements.reload();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -544,6 +548,12 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
               <Field label="Amount excl. GST" hint="Needed for the trading statement, unless the invoice or bill line is linked.">
                 <input inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
               </Field>
+            ) : null}
+            {canBeBobbies ? (
+              <label className={ui.checkbox}>
+                <input type="checkbox" checked={form.bobbyCalves} onChange={(event) => setForm({ ...form, bobbyCalves: event.target.checked })} /> Bobby calves
+                <InfoTip label="Bobby calves">Dairy-bred calves bought for rearing before they were weaned off milk, and not with their mothers. Under national standard cost they carry IRD&apos;s cost for purchased bobby calves as well as what they cost.</InfoTip>
+              </label>
             ) : null}
             {form.movementType === "purchase" ? (
               <label className={ui.checkbox}>
@@ -643,6 +653,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
                     <td data-label="Details">
                       {[
                         movement.heldFor ? `For ${movement.heldFor}` : null,
+                        movement.bobbyCalves ? "Bobby calves" : null,
                         movement.boundToHerdScheme ? "From an associated person (herd scheme)" : null,
                         movement.rationsFor ? (movement.rationsFor === "owner" ? (movement.journalId ? "Owner's rations, posted at market value (before yearly adjustments)" : "Owner's rations (homekill)") : "Staff rations") : null,
                         movement.locationName,
@@ -2031,7 +2042,7 @@ function HighPricedCard({ organisationId, canEdit }: { organisationId: string; c
   return (
     <Card
       title="High-priced livestock"
-      description={<>An animal that cost at least 500.00 and five times its class&apos;s NAMV is valued on its own.{" "}<InfoTip label="High-priced livestock">It&apos;s valued at cost in the year bought, then less IRD&apos;s depreciation rate each year, until it&apos;s at or below its class&apos;s NAMV. Record its purchase as a movement too.</InfoTip></>}
+      description={<>An animal that cost at least 500.00 and five times its class&apos;s NAMV is valued on its own.{" "}<InfoTip label="High-priced livestock">It&apos;s valued at cost in the year bought, then less IRD&apos;s depreciation rate each year, until it&apos;s at or below its class&apos;s NAMV. Record its purchase as a movement too. One bought before livestock&apos;s first year opens that year at its value then, apart from its class: keep its head in the class&apos;s opening head, and its value out of the class&apos;s opening value.</InfoTip></>}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {animals.data && animals.data.animals.length === 0 ? <Empty>None recorded.</Empty> : null}

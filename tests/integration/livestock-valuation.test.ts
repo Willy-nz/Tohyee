@@ -222,6 +222,63 @@ describeWithDatabase("livestock year-end valuation (LV4-LV12)", () => {
     expect(classes.filter((entry) => entry.classCode !== "r1_heifers").reduce((total, entry) => total + Number(entry.closingValue) * 100, 0)).toBe(48033250);
   });
 
+  it("LV29: bought bobby calves carry IRD's bobby calf NSC on top of their cost (decision 1603)", async () => {
+    const org = "livestock-kowhai-bobby";
+    await farm(
+      org,
+      5,
+      "2025-06-01",
+      [
+        ["dairy_cattle", "ma_cows", 300, "357000.00"],
+        ["dairy_cattle", "r2_heifers", 70, "83300.00"],
+        ["dairy_cattle", "r1_heifers", 75, "53220.00"],
+      ],
+      "493520.00",
+    );
+    await kowhaiYear(org);
+    const bobbies = { kind: "dairy_cattle", movementType: "purchase", movementDate: "2025-09-01", classCode: "r1_heifers", head: 20, amount: "2400.00", bobbyCalves: true };
+    // Only a purchase of beef or dairy cattle into a rising one-year class can be bobby calves.
+    await expect(move(org, { ...bobbies, classCode: "ma_cows" })).rejects.toThrow(/rising one-year class/);
+    await expect(move(org, { ...bobbies, movementType: "sale" })).rejects.toThrow(/Only a purchase/);
+    await expect(move(org, { ...bobbies, kind: "sheep", classCode: "ewe_hoggets" })).rejects.toThrow(/beef or dairy cattle/);
+    const recorded = await move(org, bobbies);
+    expect(recorded.movement).toMatchObject({ bobbyCalves: true, amount: "2400.00" });
+    await run(org, (tx) => recordElection(tx, { kind: "dairy_cattle", method: "nsc", fromIncomeYear: 2026 }));
+    const preview = await run(org, (tx) => previewValuation(tx, { yearEnd: "2026-05-31" }));
+    expect(preview.problems).toEqual([]);
+    const dairy = preview.workings.kinds[0];
+    // 80 farm-bred x 788.90 + the 20 bought at 2,400.00 + 20 x 282.50 (IRD's 2026 NSC for purchased bobby calves).
+    expect(dairy.classes.find((entry) => entry.classCode === "r1_heifers")).toMatchObject({ closingHead: 100, closingValue: "71162.00" });
+    expect(dairy.nsc?.bobbyCalves).toEqual({ head: 20, rate: "282.50" });
+    // LV6's taxable profit, plus the bobby calves' NSC (5,650.00): their cost is in purchases and in closing stock.
+    expect(preview.workings.totals).toMatchObject({ closingValue: "551494.50", valueChange: "57974.50", taxableProfit: "97574.50" });
+  });
+
+  it("LV30: pigs under the herd scheme at IRD's 2026 NAMVs, moved between classes by hand (decision 1604)", async () => {
+    const org = "livestock-pigs";
+    await farm(org, 6, "2025-07-01", [["pigs", "sows_over_1", 20, "7600.00"]], "7600.00");
+    const pigs = { kind: "pigs" };
+    // Piglets are recorded when weaned (sucklings are nil), into weaners only.
+    await expect(move(org, { ...pigs, movementType: "birth", movementDate: "2025-08-01", classCode: "growing_10_17", head: 10 })).rejects.toThrow(/youngest classes/);
+    await move(org, { ...pigs, movementType: "birth", movementDate: "2025-08-01", classCode: "weaners", head: 150 });
+    await move(org, { ...pigs, movementType: "death", movementDate: "2025-08-20", classCode: "weaners", head: 5 });
+    await move(org, { ...pigs, movementType: "reclass", movementDate: "2025-10-10", classCode: "weaners", toClassCode: "growing_10_17", head: 100 });
+    await move(org, { ...pigs, movementType: "sale", movementDate: "2026-01-15", classCode: "growing_10_17", head: 60, amount: "18000.00" });
+    // NSC for pigs isn't built.
+    await expect(run(org, (tx) => recordElection(tx, { kind: "pigs", method: "nsc", fromIncomeYear: 2026 }))).rejects.toThrow(/herd scheme in Tohyee/);
+    await run(org, (tx) => recordElection(tx, { kind: "pigs", method: "herd_scheme", fromIncomeYear: 2026 }));
+    const preview = await run(org, (tx) => previewValuation(tx, { yearEnd: "2026-06-30" }));
+    expect(preview.problems).toEqual([]);
+    // Nothing ages at balance date: the classes are what was counted.
+    expect(preview.workings.kinds[0].classes.map((entry) => [entry.classCode, entry.closingHead, entry.rate, entry.closingValue])).toEqual([
+      ["weaners", 45, "149.00", "6705.00"],
+      ["growing_10_17", 40, "287.00", "11480.00"],
+      ["sows_over_1", 20, "395.00", "7900.00"],
+    ]);
+    // Opening sows revalued to 395.00 (300.00, not taxable); the rest is taxable.
+    expect(preview.workings.totals).toMatchObject({ openingValue: "7600.00", revaluation: "300.00", closingValue: "26085.00", valueChange: "18185.00", taxableProfit: "36185.00" });
+  });
+
   it("LV31: stock bought from an associated person who used the herd scheme stays in the herd scheme (decision 1605)", async () => {
     const org = "livestock-associated";
     await farm(org, 5, "2025-06-01", [["dairy_cattle", "ma_cows", 300, "357000.00"]], "357000.00");

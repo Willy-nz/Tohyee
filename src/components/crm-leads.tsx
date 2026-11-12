@@ -219,7 +219,7 @@ export function LeadsPage({ organisationId }: { organisationId: string }) {
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, company, email or phone" />
           </Field>
         </div>
-        {leads.data && leads.data.leads.length === 0 ? <Empty>No leads here.</Empty> : null}
+        {leads.data && leads.data.leads.length === 0 ? <Empty picture="funnel">No leads here.</Empty> : null}
         {bulk.error ? <Notice tone="error">{bulk.error}</Notice> : null}
         {added ? <Notice tone="success">{added}</Notice> : null}
         {canCrm("write") && picked.length > 0 ? (

@@ -884,7 +884,7 @@ function RdFilesCard({
   return (
     <Card title={title} description={description}>
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {files.length === 0 ? <Empty>No files yet.</Empty> : <RdFileList organisationId={organisationId} files={files} onChanged={onChanged} />}
+      {files.length === 0 ? <Empty picture="documents">No files yet.</Empty> : <RdFileList organisationId={organisationId} files={files} onChanged={onChanged} />}
       {can("bookkeeper") ? (
         <div className={ui.inlineForm}>
           <Field label="What it is">
