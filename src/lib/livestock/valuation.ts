@@ -51,6 +51,8 @@ export type NscWorking = {
   matureClosingHead: number;
   matureClosingValue: string;
   matureAverage: string;
+  /** Bobby calves bought this year and IRD's NSC for them (LV29), when there were any. */
+  bobbyCalves?: { head: number; rate: string } | null;
 };
 
 /** A high-priced animal (LV25): at cost in the year bought, then less IRD's rate a year, apart from its class until it reverts. */
@@ -693,7 +695,8 @@ function nsc(
   let matureOut = 0;
   const risingTwoOut = new Map<string, number>();
   // This year's rising one-year stock by class: born, bought and what the bought cost (LV23).
-  const risingOneIn = new Map<string, { born: number; bought: number; cost: Decimal }>();
+  const risingOneIn = new Map<string, { born: number; bought: number; cost: Decimal; bobby: number }>();
+  let bobbyHead = 0;
   let purchasedHead = 0;
   let purchasedCost = ZERO_DECIMAL;
   for (const movement of facts.movements.filter((entry) => entry.kind === kind)) {
@@ -701,14 +704,19 @@ function nsc(
     const label = `${movement.head} ${className(kind, movement.classCode).toLowerCase()} on ${movement.movementDate}`;
     if (movement.movementType === "found") problems.push(`${kindName}: found stock (${label}) under national standard cost isn't supported yet.`);
     if (movement.movementType === "birth" && group === "rising_1") {
-      const entry = risingOneIn.get(movement.classCode) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL };
+      const entry = risingOneIn.get(movement.classCode) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL, bobby: 0 };
       entry.born += movement.head;
       risingOneIn.set(movement.classCode, entry);
     }
     if (movement.movementType === "purchase" && group === "rising_1") {
       // Bought young stock is at its cost, blended with the farm-bred (OS 25/02 paras 26-27, LV23).
-      const entry = risingOneIn.get(movement.classCode) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL };
+      const entry = risingOneIn.get(movement.classCode) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL, bobby: 0 };
       entry.bought += movement.head;
+      // Bobby calves also carry IRD's NSC for acquired bobby calves, for rearing them (LV29, decision 1603).
+      if (movement.bobbyCalves) {
+        entry.bobby += movement.head;
+        bobbyHead += movement.head;
+      }
       const amount = movementAmount(movement);
       if (amount !== null) entry.cost = add(entry.cost, dec(amount));
       risingOneIn.set(movement.classCode, entry);
@@ -773,6 +781,11 @@ function nsc(
   if (matureOut > matureOpeningHead) {
     problems.push(`${kindName}: more mature stock left (${matureOut}) than was on hand at the start of the year (${matureOpeningHead}), which isn't supported yet.`);
   }
+  // IRD lists the bobby calf NSC under dairy cattle; it applies to bobby calves bought by beef or dairy farms (1993 determination, clause 3).
+  const bobbyRate = bobbyHead > 0 ? (rates.get("nsc.dairy_cattle.purchased_bobby_calves") ?? null) : null;
+  if (bobbyHead > 0 && bobbyRate === null) {
+    problems.push(`${kindName}: there's no ${incomeYear} national standard cost for purchased bobby calves. Add it from IRD's determination (it's listed under dairy cattle).`);
+  }
   if (problems.length > before) return null;
   const survivorsValue = matureOpeningHead === 0 ? ZERO_DECIMAL : mulDiv(matureOpeningValue, dec(String(matureOpeningHead - matureOut)), dec(String(matureOpeningHead)), 2);
   const matureClosingValue = add(add(survivorsValue, intakeValue), purchasedCost);
@@ -792,8 +805,9 @@ function nsc(
     if (entry.nsc === "rising_1") {
       if (openingHead === 0 && closingHead === 0 && isZero(openingValue)) continue;
       // Farm-bred at this year's NSC plus bought at cost; any that left come out at the average (LV23).
-      const arrived = risingOneIn.get(entry.code) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL };
-      const base = add(mul(dec(String(arrived.born)), dec(risingOneRate)), arrived.cost);
+      const arrived = risingOneIn.get(entry.code) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL, bobby: 0 };
+      const bobbyCost = arrived.bobby > 0 && bobbyRate !== null ? mul(dec(String(arrived.bobby)), dec(bobbyRate)) : ZERO_DECIMAL;
+      const base = add(add(mul(dec(String(arrived.born)), dec(risingOneRate)), arrived.cost), bobbyCost);
       const total = arrived.born + arrived.bought;
       if (closingHead > total) {
         problems.push(`${kindName}: more ${entry.name.toLowerCase()} on hand (${closingHead}) than were born or bought this year (${total}).`);
@@ -861,6 +875,7 @@ function nsc(
       matureClosingHead,
       matureClosingValue: money(matureClosingValue),
       matureAverage: matureClosingHead === 0 ? "0.00" : money(mulDiv(matureClosingValue, dec("1"), dec(String(matureClosingHead)), 2)),
+      ...(bobbyHead > 0 && bobbyRate !== null ? { bobbyCalves: { head: bobbyHead, rate: bobbyRate } } : {}),
     },
   };
 }

@@ -411,6 +411,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
     amount: "",
     heldFor: "",
     rationsFor: "owner" as "owner" | "staff",
+    bobbyCalves: false,
     locationId: "",
     toLocationId: "",
     note: "",
@@ -423,6 +424,8 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
   if (!settings.data) return <p className={ui.muted}>Loading…</p>;
   if (!settings.data.settings.enabled) return <NotOn canSetUp={can("admin")} />;
   const classes = classesOf(form.kind);
+  // Bobby calves (LV29): a purchase of beef or dairy cattle into a rising one-year class.
+  const canBeBobbies = form.movementType === "purchase" && (form.kind === "dairy_cattle" || form.kind === "beef_cattle") && classes.find((entry) => entry.code === form.classCode)?.nsc === "rising_1";
   const activeLocations = (locations.data?.locations ?? []).filter((location) => !location.archived);
 
   async function save() {
@@ -444,6 +447,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
       if (form.movementType === "reclass") body.toClassCode = form.toClassCode;
       if (form.movementType === "transfer") body.toLocationId = form.toLocationId;
       if (form.movementType === "purchase" || form.movementType === "sale") body.amount = form.amount || null;
+      if (canBeBobbies && form.bobbyCalves) body.bobbyCalves = true;
       if (form.movementType === "arrival" || form.movementType === "departure") body.heldFor = form.heldFor;
       if (form.movementType === "rations") {
         body.rationsFor = form.rationsFor;
@@ -451,7 +455,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
       await api("/api/livestock/movements", { method: "POST", body });
       setMessage(`Recorded: ${MOVEMENT_LABELS[form.movementType].toLowerCase()}, ${form.head} ${classes.find((entry) => entry.code === form.classCode)?.name.toLowerCase()}.`);
       setKey(newIdempotencyKey("lv"));
-      setForm({ ...form, head: "", amount: "", note: "" });
+      setForm({ ...form, head: "", amount: "", note: "", bobbyCalves: false });
       movements.reload();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -543,6 +547,12 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
                 <input inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
               </Field>
             ) : null}
+            {canBeBobbies ? (
+              <label className={ui.checkbox}>
+                <input type="checkbox" checked={form.bobbyCalves} onChange={(event) => setForm({ ...form, bobbyCalves: event.target.checked })} /> Bobby calves
+                <InfoTip label="Bobby calves">Dairy-bred calves bought for rearing before they were weaned off milk, and not with their mothers. Under national standard cost they carry IRD&apos;s cost for purchased bobby calves as well as what they cost.</InfoTip>
+              </label>
+            ) : null}
             {form.movementType === "rations" ? (
               <Field label="Whose rations">
                 <select value={form.rationsFor} onChange={(event) => setForm({ ...form, rationsFor: event.target.value as "owner" | "staff" })}>
@@ -633,6 +643,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
                     <td data-label="Details">
                       {[
                         movement.heldFor ? `For ${movement.heldFor}` : null,
+                        movement.bobbyCalves ? "Bobby calves" : null,
                         movement.rationsFor ? (movement.rationsFor === "owner" ? (movement.journalId ? "Owner's rations, posted at market value (before yearly adjustments)" : "Owner's rations (homekill)") : "Staff rations") : null,
                         movement.locationName,
                         movement.toLocationName ? `to ${movement.toLocationName}` : null,
