@@ -18569,7 +18569,7 @@ were read from IRD's determinations on 11 Oct 2026).
 - Long-term bailments.
 - Pigs under NSC.
 - Dairy steers and bulls under NSC.
-- ~~Purchased bobby calves.~~ Built: LV28.
+- ~~Purchased bobby calves.~~ Built: LV29.
 
 ### Questions for Jess
 
@@ -22458,7 +22458,7 @@ balance date). The farm bought the bull Te Mana on 1 Aug 2023 for
   adding one once any year is approved, because it changes the first
   year's opening.
 
-## Livestock: purchased bobby calves under NSC (LV28; built by Claude 13 Nov 2026 from IRD's NSC determinations, the details are Claude's, not yet reviewed)
+## Livestock: purchased bobby calves under NSC (LV29; built by Claude 13 Nov 2026 from IRD's NSC determinations, the details are Claude's, not yet reviewed)
 
 Decision 1603, #243. The formula is clause 3 of the National Standard Costs
 for Livestock Determination 1993 (TIB Vol 5 No 2 appendix): rising one-year

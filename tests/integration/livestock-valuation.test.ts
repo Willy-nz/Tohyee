@@ -222,7 +222,7 @@ describeWithDatabase("livestock year-end valuation (LV4-LV12)", () => {
     expect(classes.filter((entry) => entry.classCode !== "r1_heifers").reduce((total, entry) => total + Number(entry.closingValue) * 100, 0)).toBe(48033250);
   });
 
-  it("LV28: bought bobby calves carry IRD's bobby calf NSC on top of their cost (decision 1603)", async () => {
+  it("LV29: bought bobby calves carry IRD's bobby calf NSC on top of their cost (decision 1603)", async () => {
     const org = "livestock-kowhai-bobby";
     await farm(
       org,

@@ -14124,7 +14124,7 @@ migration 0265.
       top of its cost, as clause 3 of the 1993 NSC determination says. The
       rate is the dairy cattle "purchased bobby calves" NSC for the year,
       for beef and dairy farms alike. The herd scheme isn't affected: it
-      values at NAMV. Tenant migration 0278. Worked example LV28.
+      values at NAMV. Tenant migration 0278. Worked example LV29.
 
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 

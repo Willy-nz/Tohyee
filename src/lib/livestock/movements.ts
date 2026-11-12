@@ -113,7 +113,7 @@ export type Movement = {
   toClassCode: string | null;
   head: number;
   amount: string | null;
-  /** Purchases of beef or dairy cattle: bought as bobby calves (LV28). */
+  /** Purchases of beef or dairy cattle: bought as bobby calves (LV29). */
   bobbyCalves: boolean;
   locationId: string | null;
   locationName: string | null;
@@ -620,7 +620,7 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
   if (salesInvoiceLineId && movementType !== "sale") throw new ValidationError("Only a sale can be linked to an invoice line.");
   if (billLineId && movementType !== "purchase") throw new ValidationError("Only a purchase can be linked to a bill line.");
   const note = optionalString(input.note, "note", { maxLength: 1000 });
-  // Bobby calves (LV28, decision 1603): dairy-bred calves bought unweaned for rearing, not at foot, into a rising one-year class.
+  // Bobby calves (LV29, decision 1603): dairy-bred calves bought unweaned for rearing, not at foot, into a rising one-year class.
   const bobbyCalves = input.bobbyCalves === true || input.bobbyCalves === "true";
   if (bobbyCalves) {
     if (movementType !== "purchase") throw new ValidationError("Only a purchase can be bobby calves.");
@@ -643,7 +643,7 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     billLineId,
     rationsFor,
     note,
-    // Only when set, so a replay of a movement recorded before LV28 still matches.
+    // Only when set, so a replay of a movement recorded before LV29 still matches.
     ...(bobbyCalves ? { bobbyCalves } : {}),
   });
   const earlier = await tx.query<{ id: string; request_hash: string }>(

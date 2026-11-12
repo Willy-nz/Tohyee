@@ -424,7 +424,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
   if (!settings.data) return <p className={ui.muted}>Loading…</p>;
   if (!settings.data.settings.enabled) return <NotOn canSetUp={can("admin")} />;
   const classes = classesOf(form.kind);
-  // Bobby calves (LV28): a purchase of beef or dairy cattle into a rising one-year class.
+  // Bobby calves (LV29): a purchase of beef or dairy cattle into a rising one-year class.
   const canBeBobbies = form.movementType === "purchase" && (form.kind === "dairy_cattle" || form.kind === "beef_cattle") && classes.find((entry) => entry.code === form.classCode)?.nsc === "rising_1";
   const activeLocations = (locations.data?.locations ?? []).filter((location) => !location.archived);
 

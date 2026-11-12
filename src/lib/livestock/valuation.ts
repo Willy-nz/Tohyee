@@ -51,7 +51,7 @@ export type NscWorking = {
   matureClosingHead: number;
   matureClosingValue: string;
   matureAverage: string;
-  /** Bobby calves bought this year and IRD's NSC for them (LV28), when there were any. */
+  /** Bobby calves bought this year and IRD's NSC for them (LV29), when there were any. */
   bobbyCalves?: { head: number; rate: string } | null;
 };
 
@@ -712,7 +712,7 @@ function nsc(
       // Bought young stock is at its cost, blended with the farm-bred (OS 25/02 paras 26-27, LV23).
       const entry = risingOneIn.get(movement.classCode) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL, bobby: 0 };
       entry.bought += movement.head;
-      // Bobby calves also carry IRD's NSC for acquired bobby calves, for rearing them (LV28, decision 1603).
+      // Bobby calves also carry IRD's NSC for acquired bobby calves, for rearing them (LV29, decision 1603).
       if (movement.bobbyCalves) {
         entry.bobby += movement.head;
         bobbyHead += movement.head;
