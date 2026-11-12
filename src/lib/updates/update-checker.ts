@@ -5,6 +5,7 @@ import {
   type LatestReleaseCheck,
   type ReleaseAsset,
 } from "@/lib/updates/server-updates";
+import { RELEASE_PUBLIC_KEYS, releaseSignatureValid } from "@/lib/updates/release-signature";
 
 /**
  * Checks GitHub for a new Tohyee release by itself (decision 328): a minute
@@ -100,6 +101,8 @@ export type WindowsSetup = {
   sha256: string;
   /** Where the fingerprint came from. */
   sha256From: "github-digest" | "sha256-file";
+  /** The fingerprint is signed with Tohyee's release key (decision 1601); always true for a setup that's offered. */
+  signed: true;
 };
 
 const SHA256_HEX = /^[0-9a-f]{64}$/;
@@ -133,13 +136,39 @@ export function findWindowsSetupAsset(check: LatestReleaseCheck): ReleaseAsset |
  * The Windows installer for the latest release with its SHA-256: from
  * GitHub's own digest of the file if it gives one, otherwise from the
  * TohyeeSetup-<version>.exe.sha256 file the release build uploads beside it.
- * Refuses (returns a reason) when there's no installer or no fingerprint,
- * because then the download can't be checked.
+ * Then the fingerprint must be signed with Tohyee's release key, in
+ * TohyeeSetup-<version>.exe.sig (decision 1601). Refuses (returns a reason)
+ * when there's no installer, no fingerprint or no good signature, because
+ * then the download can't be checked or its publisher can't be.
  */
 export async function windowsSetupFor(
   check: LatestReleaseCheck,
   fetcher: typeof fetch = fetch,
+  keys: readonly string[] = RELEASE_PUBLIC_KEYS,
 ): Promise<{ setup: WindowsSetup } | { problem: string }> {
+  const found = await fingerprintFor(check, fetcher);
+  if ("problem" in found) return found;
+  return signedSetup(check, found.setup, fetcher, keys);
+}
+
+async function signedSetup(check: LatestReleaseCheck, setup: Omit<WindowsSetup, "signed">, fetcher: typeof fetch, keys: readonly string[]): Promise<{ setup: WindowsSetup } | { problem: string }> {
+  const unsigned = `${setup.name} isn't signed with Tohyee's release key, so it won't be installed from here. Download it from the release page and run it yourself only if you trust where it came from.`;
+  const sig = check.release.assets.find((other) => other.name.toLowerCase() === `${setup.name.toLowerCase()}.sig`);
+  if (!sig) return { problem: unsigned };
+  try {
+    const response = await fetcher(sig.downloadUrl, { headers: { "user-agent": "tohyee-update-check" }, cache: "no-store", signal: AbortSignal.timeout(UPDATE_FETCH_TIMEOUT_MS) });
+    if (!response.ok) return { problem: `GitHub didn't send the signature for ${setup.name} (status ${response.status}), so it can't be checked. Try again later.` };
+    if (!releaseSignatureValid(setup.name, setup.sha256, await response.text(), keys)) {
+      return { problem: `The signature on ${setup.name} doesn't match Tohyee's release key, so it won't be installed. Don't run this file; tell whoever looks after Tohyee.` };
+    }
+    return { setup: { ...setup, signed: true } };
+  } catch (error) {
+    if (isTimeout(error)) return { problem: `GitHub didn't send the signature for ${setup.name} within ${UPDATE_FETCH_TIMEOUT_MS / 1000} seconds, so it can't be checked. Try again later.` };
+    return { problem: `Couldn't get the signature for ${setup.name} from GitHub, so it can't be checked. Try again later.` };
+  }
+}
+
+async function fingerprintFor(check: LatestReleaseCheck, fetcher: typeof fetch): Promise<{ setup: Omit<WindowsSetup, "signed"> } | { problem: string }> {
   const asset = findWindowsSetupAsset(check);
   if (!asset) {
     return { problem: `Release v${check.latestVersion} has no TohyeeSetup-${check.latestVersion}.exe, so it can't be installed from here.` };
