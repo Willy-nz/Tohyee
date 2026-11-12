@@ -22489,10 +22489,7 @@ calves" on the purchase.
 - **Refused:** "Bobby calves" on a sale, on anything but beef or dairy
   cattle, or into a class that isn't rising one-year; and the valuation, if
   the year has no bobby calf NSC.
-- **Not changed:** how rising one-year stock that die are taken out. Tohyee
-  takes them out at the average (LV23). Clause 3 leaves deaths out of
-  a + b, which differs only when bought stock and deaths are both in the
-  class. That needs a separate look.
+- **Deaths:** since 13 Nov 2026 Tohyee follows clause 3 exactly (LV32).
 
 ## Livestock: pigs under the herd scheme (LV30; built by Claude 13 Nov 2026 from IRD's NAMV 2026 and OS 25/02, the details are Claude's, not yet reviewed)
 
@@ -22538,3 +22535,26 @@ father valued them under the herd scheme, and no exception applies.
   under the herd scheme. Long-term bailments aren't built either: a bailor
   must use the herd scheme (para 100), but OS 25/02 doesn't say how the
   bailee accounts.
+
+## Livestock: rising one-year stock under NSC by IRD's formula (LV32; changed by Claude 13 Nov 2026 at Jess's word "follow the IRD", the details are Claude's, not yet reviewed)
+
+Decision 1606. Until now Tohyee valued rising one-year stock under NSC as
+farm-bred at NSC plus bought at cost, and took any that left out at the
+average (LV23). Clause 3 of the 1993 NSC determination instead averages
+((a + b - c) x d) + e + (f x g) over a + b, where a is on hand, b sold, c
+bought, d the NSC, e what the bought cost, and f x g the bobby calf NSC.
+If a + b - c is negative, the average is (e + f x g) / c. So those that die
+carry no NSC. The two ways agree unless a class has both bought stock and
+deaths. Dairy calves sold as bobby calves are left out of b, and the sale
+can be marked "Bobby calves".
+
+Made-up farm: Kōwhai, as LV6. In the year it also buys 20 rising one-year
+heifers for 2,400.00; 5 die and 10 are sold. 30 bull calves are born and
+all 30 sold as bobby calves.
+
+- **Heifers:** a 85, b 10, c 20. (85 + 10 - 20) x 788.90 + 2,400.00 =
+  61,567.50, over 95, for 85 head: **55,086.71**. (LV23's way gave
+  65,512.00 x 85 / 100 = 55,685.20.)
+- **Bull calves:** none left, and the bobby calf sale isn't in b: nothing.
+- LV6, LV11, LV23 and LV29 come out the same as before: none has bought
+  stock and deaths together.
