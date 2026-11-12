@@ -709,7 +709,7 @@ function nsc(
   let matureOut = 0;
   const risingTwoOut = new Map<string, number>();
   // This year's rising one-year stock by class: born, bought and what the bought cost (LV23).
-  const risingOneIn = new Map<string, { born: number; bought: number; cost: Decimal; bobby: number }>();
+  const risingOneIn = new Map<string, { born: number; bought: number; cost: Decimal; bobby: number; sold: number }>();
   let bobbyHead = 0;
   let purchasedHead = 0;
   let purchasedCost = ZERO_DECIMAL;
@@ -717,14 +717,20 @@ function nsc(
     const group = groupOf(movement.classCode);
     const label = `${movement.head} ${className(kind, movement.classCode).toLowerCase()} on ${movement.movementDate}`;
     if (movement.movementType === "found") problems.push(`${kindName}: found stock (${label}) under national standard cost isn't supported yet.`);
+    if (movement.movementType === "sale" && group === "rising_1" && !movement.bobbyCalves) {
+      // Item b of clause 3: sold this year, apart from dairy calves sold as bobby calves (decision 1606).
+      const entry = risingOneIn.get(movement.classCode) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL, bobby: 0, sold: 0 };
+      entry.sold += movement.head;
+      risingOneIn.set(movement.classCode, entry);
+    }
     if (movement.movementType === "birth" && group === "rising_1") {
-      const entry = risingOneIn.get(movement.classCode) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL, bobby: 0 };
+      const entry = risingOneIn.get(movement.classCode) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL, bobby: 0, sold: 0 };
       entry.born += movement.head;
       risingOneIn.set(movement.classCode, entry);
     }
     if (movement.movementType === "purchase" && group === "rising_1") {
       // Bought young stock is at its cost, blended with the farm-bred (OS 25/02 paras 26-27, LV23).
-      const entry = risingOneIn.get(movement.classCode) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL, bobby: 0 };
+      const entry = risingOneIn.get(movement.classCode) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL, bobby: 0, sold: 0 };
       entry.bought += movement.head;
       // Bobby calves also carry IRD's NSC for acquired bobby calves, for rearing them (LV29, decision 1603).
       if (movement.bobbyCalves) {
@@ -818,16 +824,27 @@ function nsc(
     const openingValue = dec(openingOf(entry.code));
     if (entry.nsc === "rising_1") {
       if (openingHead === 0 && closingHead === 0 && isZero(openingValue)) continue;
-      // Farm-bred at this year's NSC plus bought at cost; any that left come out at the average (LV23).
-      const arrived = risingOneIn.get(entry.code) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL, bobby: 0 };
+      // Clause 3 of IRD's 1993 NSC determination (decision 1606, Jess 13 Nov 2026: "follow the IRD"): the average is
+      // ((a + b - c) x d + e + f x g) / (a + b), with a on hand, b sold, c bought, d this year's NSC, e what the bought
+      // cost, f bobby calves bought and g their NSC; if a + b - c is negative, (e + f x g) / c. Those that died carry
+      // no NSC: the farm-bred count is the ones still here or sold, a + b - c.
+      const arrived = risingOneIn.get(entry.code) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL, bobby: 0, sold: 0 };
       const bobbyCost = arrived.bobby > 0 && bobbyRate !== null ? mul(dec(String(arrived.bobby)), dec(bobbyRate)) : ZERO_DECIMAL;
-      const base = add(add(mul(dec(String(arrived.born)), dec(risingOneRate)), arrived.cost), bobbyCost);
       const total = arrived.born + arrived.bought;
       if (closingHead > total) {
         problems.push(`${kindName}: more ${entry.name.toLowerCase()} on hand (${closingHead}) than were born or bought this year (${total}).`);
         return null;
       }
-      const closingValue = closingHead === 0 ? ZERO_DECIMAL : closingHead === total ? base : mulDiv(base, dec(String(closingHead)), dec(String(total)), 2);
+      const a = closingHead;
+      const b = arrived.sold;
+      const c = arrived.bought;
+      const bought = add(arrived.cost, bobbyCost);
+      const closingValue =
+        a === 0
+          ? ZERO_DECIMAL
+          : a + b - c >= 0
+            ? mulDiv(add(mul(dec(String(a + b - c)), dec(risingOneRate)), bought), dec(String(a)), dec(String(a + b)), 2)
+            : mulDiv(bought, dec(String(a)), dec(String(c)), 2);
       working.push({
         classCode: entry.code,
         className: entry.name,

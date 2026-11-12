@@ -14151,6 +14151,16 @@ migration 0265.
       increase above the base number by another method, and how a long-term
       bailee accounts. Worked example LV31.
 
+### Rising one-year NSC by IRD's formula (13 Nov 2026; decision 1606)
+
+1606. **Rising one-year stock under NSC is valued by clause 3 of IRD's 1993
+      NSC determination (Jess, 13 Nov 2026: "follow the IRD").** The average
+      is ((a + b - c) x d + e + f x g) / (a + b), or (e + f x g) / c when
+      a + b - c is negative, times the head on hand. Those that die carry no
+      NSC, where LV23 took them out at the average. Dairy calves sold as
+      bobby calves can be marked so, and are left out of b (tenant migration
+      0281). Worked example LV32.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

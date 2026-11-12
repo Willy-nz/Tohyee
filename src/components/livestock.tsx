@@ -426,7 +426,10 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
   if (!settings.data.settings.enabled) return <NotOn canSetUp={can("admin")} />;
   const classes = classesOf(form.kind);
   // Bobby calves (LV29): a purchase of beef or dairy cattle into a rising one-year class.
-  const canBeBobbies = form.movementType === "purchase" && (form.kind === "dairy_cattle" || form.kind === "beef_cattle") && classes.find((entry) => entry.code === form.classCode)?.nsc === "rising_1";
+  // Or a sale of dairy calves as bobby calves, which IRD's NSC formula leaves out (LV32).
+  const canBeBobbies =
+    ((form.movementType === "purchase" && (form.kind === "dairy_cattle" || form.kind === "beef_cattle")) || (form.movementType === "sale" && form.kind === "dairy_cattle")) &&
+    classes.find((entry) => entry.code === form.classCode)?.nsc === "rising_1";
   const activeLocations = (locations.data?.locations ?? []).filter((location) => !location.archived);
 
   async function save() {
@@ -552,7 +555,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
             {canBeBobbies ? (
               <label className={ui.checkbox}>
                 <input type="checkbox" checked={form.bobbyCalves} onChange={(event) => setForm({ ...form, bobbyCalves: event.target.checked })} /> Bobby calves
-                <InfoTip label="Bobby calves">Dairy-bred calves bought for rearing before they were weaned off milk, and not with their mothers. Under national standard cost they carry IRD&apos;s cost for purchased bobby calves as well as what they cost.</InfoTip>
+                <InfoTip label="Bobby calves">Bought: dairy-bred calves bought for rearing before they were weaned off milk, and not with their mothers. Under national standard cost they carry IRD&apos;s cost for purchased bobby calves as well as what they cost. Sold: dairy calves sold young as bobby calves, which IRD&apos;s cost formula leaves out.</InfoTip>
               </label>
             ) : null}
             {form.movementType === "purchase" ? (

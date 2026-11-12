@@ -627,7 +627,9 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
   // Bobby calves (LV29, decision 1603): dairy-bred calves bought unweaned for rearing, not at foot, into a rising one-year class.
   const bobbyCalves = input.bobbyCalves === true || input.bobbyCalves === "true";
   if (bobbyCalves) {
-    if (movementType !== "purchase") throw new ValidationError("Only a purchase can be bobby calves.");
+    // Sold: dairy calves sold as bobby calves are left out of NSC's item b (clause 3; decision 1606).
+    if (movementType !== "purchase" && movementType !== "sale") throw new ValidationError("Only a purchase or a sale can be bobby calves.");
+    if (movementType === "sale" && kind !== "dairy_cattle") throw new ValidationError("Bobby calves sold are dairy cattle.");
     if (kind !== "dairy_cattle" && kind !== "beef_cattle") throw new ValidationError("Bobby calves are beef or dairy cattle.");
     if (definition.nsc !== "rising_1") throw new ValidationError(`Bobby calves go into a rising one-year class. ${definition.name} isn't one.`);
   }
