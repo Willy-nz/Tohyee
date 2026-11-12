@@ -60,7 +60,7 @@ export type PostingRules = {
 };
 
 /** A variant linked to an item. */
-export type LinkedItem = { id: string; code: string; itemType: string; incomeAccountCode: string | null };
+export type LinkedItem = { id: string; code: string; itemType: string; incomeAccountCode: string | null; giftCard?: boolean };
 
 /** The order line or shipping line a planned line came from (sales when sent, SWS1). */
 export type LineSource = { kind: "line" | "shipping"; externalId: string; requiresShipping: boolean };
@@ -245,12 +245,14 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
     return refuse(`${name} was paid in ${order.presentmentCurrency}; Tohyee only brings in orders in ${rules.baseCurrency}.`);
   }
   if (order.incomplete) return refuse(`${name} ${order.incomplete}`);
-  if (order.lines.some((line) => line.isGiftCard) && !rules.giftCardAccountCode) {
+  // GC6: a product chosen as a gift card (a voucher app's, say) is one, as Shopify's own gift cards are.
+  const isCard = (line: PlatformOrderLine) => line.isGiftCard || (line.variantId !== null && line.variantId !== undefined && items.get(line.variantId)?.giftCard === true);
+  if (order.lines.some(isCard) && !rules.giftCardAccountCode) {
     return refuse(`${name} sells a gift card; choose where gift cards are held in the Shopify settings to bring it in.`);
   }
   const amountsMode: AmountsMode = !rules.gstRegistered ? "no_tax" : order.taxesIncluded ? "inclusive" : "exclusive";
   const cardGst = giftCardGst(rules, amountsMode);
-  if (order.lines.some((line) => line.isGiftCard) && !cardGst.ok) return refuse(`${name} sells a gift card, but ${cardGst.message}`);
+  if (order.lines.some(isCard) && !cardGst.ok) return refuse(`${name} sells a gift card, but ${cardGst.message}`);
   const notes: string[] = [];
   const drafts: Draft[] = [];
 
@@ -275,18 +277,20 @@ export function planOrder(order: PlatformOrder, givenRules: PostingRules, items:
 
   for (const line of order.lines) {
     if (!isPositive(dec(line.quantity))) continue;
-    if (line.isGiftCard) {
+    if (isCard(line)) {
       // GC1: a gift card sold is money held for whoever spends it, not a sale. GST is counted now, when it's sold, as Inland Revenue's
       // general rule for face value vouchers says (GST Act s 5(11G)); spending it takes that GST back off the order (GC2).
       const gross = sub(dec(line.originalTotal), dec(line.discount));
       if (isNegative(gross)) return refuse(`${name} line "${line.name}" comes to less than nothing (${money(gross)}).`);
-      if (isPositive(taxOf(line.taxLines))) return refuse(`${name} charged tax on gift card "${line.name}"; gift cards with tax aren't supported.`);
+      // GC6: a voucher product Shopify charged GST on keeps Shopify's tax; one with none gets the store's GST code, as GC1.
+      const charged = isPositive(taxOf(line.taxLines)) ? taxCodeFor(line.taxLines, rules, overseas, `${name} gift card "${line.name}"`) : null;
+      if (charged && !charged.ok) return charged;
       drafts.push({
         what: `${name} gift card "${line.name}"`,
-        amount: gross,
+        amount: amountsMode === "no_tax" && !order.taxesIncluded ? add(gross, taxOf(line.taxLines)) : gross,
         quantity: line.quantity,
-        shopifyTax: ZERO_DECIMAL,
-        tax: cardGst.ok ? cardGst.tax : { code: null, rate: null },
+        shopifyTax: taxOf(line.taxLines),
+        tax: charged ? { code: charged.code, rate: charged.rate } : cardGst.ok ? cardGst.tax : { code: null, rate: null },
         giftCard: true,
         accountCode: rules.giftCardAccountCode!,
         itemId: null,
@@ -457,13 +461,18 @@ export function planRefund(
     if (!isPositive(dec(entry.quantity)) && isZero(dec(entry.subtotal))) continue;
     const line = byId.get(entry.lineItemId);
     if (!line) return refuse(`${what} refunds a line that isn't on the order.`);
-    if (line.isGiftCard) {
-      // GC4: a gift card refunded comes back out of what's held for it, with no GST, as it went in.
+    const lineItem = line.variantId ? items.get(line.variantId) ?? null : null;
+    if (line.isGiftCard || lineItem?.giftCard === true) {
+      // GC4: a gift card refunded comes back out of what's held for it, with its GST, as it went in.
       const gst = giftCardGst(rules, amountsMode);
       if (!rules.giftCardAccountCode || !gst.ok) return refuse(`${what} refunds a gift card, and gift cards aren't set up.`);
-      for (const part of splitAmount(money(dec(entry.subtotal)), isPositive(dec(entry.quantity)) ? entry.quantity : "1")) {
-        lines.push({ description: line.name, quantity: part.quantity, unitPrice: part.unitPrice, accountCode: rules.giftCardAccountCode, taxCode: gst.tax.code, itemId: null });
-        rates.push(gst.tax.rate);
+      const charged = isPositive(taxOf(line.taxLines)) ? taxCodeFor(line.taxLines, rules, overseas, `${what} gift card "${line.name}"`) : null;
+      if (charged && !charged.ok) return charged;
+      const cardTax = charged ? { code: charged.code, rate: charged.rate } : gst.tax;
+      const refunded = amountsMode === "no_tax" && !order.taxesIncluded ? add(dec(entry.subtotal), dec(entry.tax)) : dec(entry.subtotal);
+      for (const part of splitAmount(money(refunded), isPositive(dec(entry.quantity)) ? entry.quantity : "1")) {
+        lines.push({ description: line.name, quantity: part.quantity, unitPrice: part.unitPrice, accountCode: rules.giftCardAccountCode, taxCode: cardTax.code, itemId: null });
+        rates.push(cardTax.rate);
       }
       continue;
     }

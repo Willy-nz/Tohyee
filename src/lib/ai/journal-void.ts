@@ -7,15 +7,20 @@ import { getPeriodControls } from "@/lib/ledger/period-controls";
 import { requireId } from "@/lib/validation";
 
 /**
- * The AI voiding its own manual journals (AJV1-AJV6, decision 1581, Jess
- * 11 Nov 2026). Only a manual journal posted from a draft by the same AI key
- * or app (the draft records which), never one a person posted or anything an
+ * The AI voiding manual journals an AI posted (AJV1-AJV6, decisions 1581,
+ * 1595, Jess 11 and 12 Nov 2026). Only a manual journal posted from a draft
+ * through an AI key or app (any of them; the draft records which), never one a person posted or anything an
  * invoice, bill, payment or other record made. A preview first; then, with
  * its hash, an exact reversal dated the original's day, so the original is
  * kept and shows as voided by the AI. Refused in a locked period, when a
  * line is reconciled with a bank statement line, when it's already been
  * reversed, and (if the organisation set one) after the time limit.
  */
+
+/** Whether a "via" is an AI key or app (decision 1595): any AI connection, not a person or a signing link. */
+export function isAiVia(via: string | null | undefined): boolean {
+  return typeof via === "string" && /^AI (key|app) "/.test(via);
+}
 
 export type AiJournalVoidSettings = { maxDays: number | null };
 
@@ -57,10 +62,9 @@ async function refusal(tx: OrgTx, journal: JournalWithLines, now: Date): Promise
   if (journal.origin !== "manual" || journal.correctionKind !== null) {
     return `Journal #${journal.id} isn't a manual journal, so the AI can't void it. ${person}`;
   }
-  const via = tx.actor.via;
   const draft = await tx.query<{ posted_via: string | null }>("select posted_via from ledger_journal_drafts where posted_journal_id = $1", [journal.id]);
-  if (!via || !draft.rows[0] || draft.rows[0].posted_via !== via) {
-    return `Journal #${journal.id} wasn't posted by this AI, so it can't void it. ${person}`;
+  if (!isAiVia(tx.actor.via) || !draft.rows[0] || !isAiVia(draft.rows[0].posted_via)) {
+    return `Journal #${journal.id} wasn't posted through an AI connection, so the AI can't void it. ${person}`;
   }
   const reversed = await tx.query("select 1 from ledger_journals where related_journal_id = $1 and correction_kind = 'reversal'", [journal.id]);
   if (reversed.rowCount !== 0) return `Journal #${journal.id} has already been voided or corrected.`;
@@ -146,4 +150,29 @@ export async function aiVoidJournal(
     details: { reversalJournalId: reversal.journal.id, postingDate: journal.postingDate },
   });
   return { created: reversal.created, journalId, reversalJournalId: reversal.journal.id };
+}
+
+/**
+ * AJV7 (decision 1595): the AI discards a draft journal an AI made, which
+ * posts nothing. Refused once it's posted, or if a person has edited it since
+ * (their work isn't thrown away by the AI). Kept in the audit log.
+ */
+export async function aiDiscardDraftJournal(tx: OrgTx, draftIdInput: unknown): Promise<{ discarded: true; draftId: string; reference: string; postingDate: string }> {
+  const draftId = requireId(draftIdInput, "draftId");
+  const found = await tx.query<{ id: string; status: string; reference: string; posting_date: string; created_via: string | null; updated_by_email: string | null; updated_via: string | null; posted_journal_id: string | null }>(
+    `select id::text, status, reference, posting_date::text, created_via, updated_by_email, updated_via, posted_journal_id::text
+       from ledger_journal_drafts where id = $1 for update`,
+    [draftId],
+  );
+  const row = found.rows[0];
+  if (!row) throw new ValidationError(`There's no draft journal #${draftId}.`);
+  if (!isAiVia(tx.actor.via)) throw new ConflictError("Only an AI connection discards drafts this way.");
+  if (row.status !== "draft") throw new ConflictError(`Draft #${draftId} has been posted as journal #${row.posted_journal_id}; void_own_journal voids it instead.`);
+  if (!isAiVia(row.created_via)) throw new ConflictError(`Draft #${draftId} was made by a person, so the AI can't discard it. A person can delete it in Tohyee.`);
+  if (row.updated_by_email !== null && !isAiVia(row.updated_via)) {
+    throw new ConflictError(`Draft #${draftId} has been edited by a person since, so the AI can't discard it. A person can delete it in Tohyee.`);
+  }
+  await tx.query("delete from ledger_journal_drafts where id = $1", [draftId]);
+  await writeAuditEvent(tx, { eventType: "journal_draft.discarded_by_ai", entityType: "journal_draft", entityId: draftId, details: { reference: row.reference, postingDate: row.posting_date } });
+  return { discarded: true, draftId, reference: row.reference, postingDate: row.posting_date };
 }

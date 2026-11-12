@@ -14026,6 +14026,25 @@ migration 0265.
       IS 26/02 treats settlement services to merchants as exempt financial
       services. Not yet reviewed.
 
+### Voucher products as gift cards (12 Nov 2026; decision 1594)
+
+1594. **Chosen products are gift cards (GC6).** Jess: Glimmers' vouchers are
+      ordinary products to Shopify, and their code pays at checkout. A store
+      can tick its products that are gift cards; their sales go to the gift
+      card account with GST counted when sold (Shopify's GST if it charged
+      some, else the store's GST code), and refunds come back out of it.
+      Products whose names say gift card or voucher are offered. Sales
+      posted before don't move (tenant migration 0275). Not yet reviewed.
+
+### The AI voiding any AI's journals, and discarding AI drafts (12 Nov 2026; decision 1595)
+
+1595. **Any AI connection, and drafts (AJV1, AJV7).** Jess chose two of the
+      issue 2 extras: an AI may void a manual journal any AI key or app
+      posted, not only its own, and may discard a draft journal an AI made
+      that no person has edited. Both Full access. Batches and a 30-day
+      default limit weren't chosen. This narrows decision 347 (AI keys never
+      delete) for AI-made drafts only. Not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
