@@ -315,7 +315,7 @@ function Agenda({ from, to, items, selectedId, onSelect, onAdd }: { from: string
   for (let day = from; day <= to; day = addDays(day, 1)) days.push(day);
   if (items.length === 0) {
     return (
-      <Empty>
+      <Empty picture="calendar">
         <p>Nothing on the calendar for these days.</p>
         {onAdd ? (
           <Button size="small" variant="secondary" onClick={onAdd}>

@@ -14094,6 +14094,17 @@ migration 0265.
       who used to get no "+ New" at all (decision 904), now see only these.
       Viewers still see none, because they can't record. Worked example LS5.
 
+### Pictures on empty lists (13 Nov 2026; decision 1600)
+
+1600. **A page's main list, when empty, shows a small illustration (#509
+      Deliverable 3).** `Empty` takes an optional `picture`, one of the
+      illustrated icons, drawn at 48 px and hidden from screen readers; the
+      sentence and any action stay as they were. It's used on the farm
+      calendar and tasks, Analytics reports, CRM companies, people, tasks,
+      leads and campaigns, expense claims, IRD documents, R&D files and
+      tractor jobs. Empty sections inside a record or a form get no picture,
+      so busy screens stay quiet.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
