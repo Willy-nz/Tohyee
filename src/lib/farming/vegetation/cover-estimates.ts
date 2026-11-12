@@ -24,6 +24,8 @@ export type ModelRow = {
   id: string;
   intercept: string;
   slope: string;
+  rain_coefficient: string | null;
+  temperature_coefficient: string | null;
   ndvi_min: string;
   ndvi_max: string;
   likely_within: number;
@@ -37,7 +39,12 @@ export type ModelRow = {
 
 export const toModel = (row: ModelRow): CoverModel => ({
   id: row.id,
-  line: { intercept: row.intercept, slope: row.slope },
+  line: {
+    intercept: row.intercept,
+    slope: row.slope,
+    ...(row.rain_coefficient !== null ? { rain: row.rain_coefficient } : {}),
+    ...(row.temperature_coefficient !== null ? { temperature: row.temperature_coefficient } : {}),
+  },
   ndviMin: row.ndvi_min,
   ndviMax: row.ndvi_max,
   likelyWithin: row.likely_within,
@@ -52,7 +59,7 @@ export const toModel = (row: ModelRow): CoverModel => ({
 /** The farm's line in use, or null when estimates are off. */
 export async function activeCoverModel(tx: OrgTx, farmId: string): Promise<CoverModel | null> {
   const row = await tx.query<ModelRow>(
-    `select id::text, intercept::text, slope::text, ndvi_min::text, ndvi_max::text, likely_within, mean_error, acceptable_error, pairs, dates,
+    `select id::text, intercept::text, slope::text, rain_coefficient::text, temperature_coefficient::text, ndvi_min::text, ndvi_max::text, likely_within, mean_error, acceptable_error, pairs, dates,
             turned_on_by_email, to_char(turned_on_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as turned_on_at
        from vegetation_cover_models where farm_id = $1 and turned_off_at is null`,
     [farmId],
@@ -60,9 +67,16 @@ export async function activeCoverModel(tx: OrgTx, farmId: string): Promise<Cover
   return row.rows[0] ? toModel(row.rows[0]) : null;
 }
 
-/** MCV6: the estimate for a clear view's greenness with the farm's line, or null (estimates off, or no clear view). */
-export function estimateFor(model: CoverModel | null, observation: { quality: string; meanNdvi: string | null }): ModelledCover | null {
+/** MCV6, MCV9: the estimate for a clear view's greenness with the farm's line, or null (estimates off, no clear view, or weather the line needs unknown). */
+export function estimateFor(
+  model: CoverModel | null,
+  observation: { quality: string; meanNdvi: string | null },
+  weather: { rain14?: string | null; temperature14?: string | null } = {},
+): ModelledCover | null {
   if (!model || observation.quality !== "good" || observation.meanNdvi === null) return null;
-  return modelledCover({ line: model.line, likelyWithin: model.likelyWithin, ndviMin: model.ndviMin, ndviMax: model.ndviMax }, observation.meanNdvi);
+  return modelledCover({ line: model.line, likelyWithin: model.likelyWithin, ndviMin: model.ndviMin, ndviMax: model.ndviMax }, observation.meanNdvi, weather);
 }
+
+/** Whether the line uses the weather before the picture (MCV9). */
+export const usesWeather = (model: CoverModel | null) => model !== null && (model.line.rain !== undefined || model.line.temperature !== undefined);
 

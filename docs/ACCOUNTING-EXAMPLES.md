@@ -2624,6 +2624,49 @@ greenness 0.40, 0.55, 0.70 and 0.85 on every date. Plate-meter readings are
   not turn it on.
 - **MCV8 Off.** Turning it off removes the estimates; the line stays on
   record with who turned it on and off.
+- **MCV9 With the weather** (Jess, 12 Nov 2026: "rainfall is important").
+  Six clear dates from 20 Jul to 31 Oct, each with known rain in the 14 days
+  before (0 to 100.8 mm); cover = 500 + 3000 × greenness + 20 × that rain.
+  The card compares greenness alone with greenness and rain (and with
+  temperature too) on the same 24 readings and left-out dates; rain is
+  closer, so it's used: the line is 500 + 3000 × greenness + 20 × rain. On
+  31 Oct (50.4 mm in the 14 days before) paddock 3 (0.70) is **3,610**. When
+  rain makes no difference, greenness alone stays. Under 12 readings with
+  their weather known on 4 dates: not compared.
+
+### Each farm's daily rain and temperature from MetService (FW1-FW8; Jess, 12 Nov 2026: "use MetService and their history"; the details are Claude's, not yet reviewed)
+
+Tested in `tests/unit/weather-history-rules.test.ts` and
+`tests/integration/farm-weather-history.test.ts`. Made-up farm, forecasts
+and readings. Not tried against MetService's live service.
+
+- **FW1 Only with the records switches.** Daily weather is worked out only
+  while MetService forecasts are on, records are kept and combining them
+  with farm data is allowed (Settings › Weather, decision 1556). Otherwise
+  Farm › Rainfall says which is off, and nothing is fetched or worked out.
+- **FW2 From the forecasts kept.** For each hour of a finished New Zealand
+  day (midnight to midnight), the forecast fetched latest at or before it,
+  else the earliest after it. 1 Nov 2026: a forecast fetched 30 Oct says
+  1.0 mm/h, one fetched 31 Oct 17:00Z says 0.5 mm/h: 6 hours from the first
+  and 18 from the second, **15.0 mm**. Rain is the hours' total;
+  temperature their average. Hours with no value aren't counted, and the
+  day says how many it had ("10 of 24 hours"). Today isn't worked out.
+- **FW3 MetService's own history.** Once a day, each pinned farm's last 5
+  days are fetched (MetService includes 5 days of recent history; it uses
+  API units) and kept like any forecast, so a day the server missed is
+  still filled. A second run the same day doesn't fetch again.
+- **FW4 Your gauge first.** A day with a gauge reading uses the farm's
+  gauges' average (9.5 mm), with MetService's beside it (12.0 mm); else
+  MetService's. Farm › Rainfall shows the last 30 days: rain, where it came
+  from, and the average temperature, with "This data was provided by
+  MetService Limited."
+- **FW5 For modelling** (MCV9), a MetService day counts only with at least
+  20 of 24 hours; "rain in the 14 days before" a date is unknown if any of
+  those days is.
+- **FW6** Worked out a month at a time, each day replaced as newer
+  forecasts or history arrive (the last week is worked out again each run).
+- **FW7** Nothing is posted to the books.
+- **FW8** `TOHYEE_FARM_WEATHER_SCHEDULER=off` stops the worker.
 
 ### Bulk coding ("cash coding") (examples not yet approved by Jess)
 

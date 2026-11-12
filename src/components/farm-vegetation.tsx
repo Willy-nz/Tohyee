@@ -27,7 +27,7 @@ import {
   THRESHOLD_LIMITS,
   type VegetationState,
 } from "@/lib/farming/vegetation/rules";
-import { type ModelledCover, SEASON_WORDS, type Validation } from "@/lib/farming/vegetation/cover-fit";
+import { type ModelledCover, SEASON_WORDS, TERMS_WORDS, type Validation } from "@/lib/farming/vegetation/cover-fit";
 import type { CoverCheck } from "@/lib/farming/vegetation/cover-model";
 import type { FarmVegetation, OverviewRow, PaddockObservation, PaddockTrend, PilotResult, SetupFarm, VegetationSettings } from "@/lib/farming/vegetation/service";
 import { canGoOn, nextStep, previousStep, resumeStep, SETUP_STEPS, type SetupProgress, type SetupStep, stepNumber } from "@/lib/farming/vegetation/setup-steps";
@@ -1270,6 +1270,55 @@ function ErrorRows({ validation }: { validation: Validation }) {
   );
 }
 
+/** MCV9: greenness alone against greenness with the weather before each picture, on the same readings and left-out dates. */
+function WeatherRows({ validation }: { validation: Validation }) {
+  const weather = validation.weather;
+  if (!weather) {
+    return (
+      <p className={ui.muted} style={{ margin: 0 }}>
+        Rain and temperature aren&apos;t compared yet: {validation.pairs - validation.weatherMissing} of {validation.pairs} readings have the 14 days of weather before their picture
+        known (from your gauge or MetService). It needs at least 12 on 4 dates.
+      </p>
+    );
+  }
+  return (
+    <>
+      <table className={ui.table}>
+        <caption style={{ textAlign: "left" }}>
+          With the weather in the 14 days before each picture ({weather.pairs} readings on {weather.dates} dates whose weather is known)
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Uses</th>
+            <th scope="col" className={ui.num}>
+              Off by, on average
+            </th>
+            <th scope="col" className={ui.num}>
+              9 in 10 within
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {[{ terms: "greenness" as const, withheldDates: weather.greennessOnly }, ...weather.options].map((option) => (
+            <tr key={option.terms}>
+              <td>
+                {TERMS_WORDS[option.terms]} {weather.best === option.terms ? <Badge tone="green">Best</Badge> : null}
+              </td>
+              <td className={ui.num}>{option.withheldDates.meanError.toLocaleString("en-NZ")}</td>
+              <td className={ui.num}>{option.withheldDates.likelyWithin.toLocaleString("en-NZ")}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className={ui.muted} style={{ margin: 0 }}>
+        {weather.best === "greenness"
+          ? "The weather didn't make the estimates closer on dates they weren't fitted on, so it isn't used."
+          : `${TERMS_WORDS[weather.best]} did best, so turning estimates on uses it. A date whose weather isn't known gets no estimate.`}
+      </p>
+    </>
+  );
+}
+
 /**
  * MCV3-MCV7: the farm's line from its own plate-meter readings, how far off
  * it's been on dates and farms it wasn't fitted on, and Turn on once the
@@ -1305,8 +1354,9 @@ function CoverEstimates({ organisationId, farmId }: { organisationId: string; fa
       {model ? (
         <Notice tone="success">
           <strong>On</strong> since {nzDateTime(model.turnedOnAt)} ({model.turnedOnBy}): off by {model.meanError.toLocaleString("en-NZ")} kg DM/ha on average when
-          checked, within your {model.acceptableError.toLocaleString("en-NZ")}. Estimates show on the map&apos;s paddock cards with a band of ±
-          {model.likelyWithin.toLocaleString("en-NZ")}.{" "}
+          checked, within your {model.acceptableError.toLocaleString("en-NZ")}.{" "}
+          {model.line.rain !== undefined ? `It uses the rain${model.line.temperature !== undefined ? " and temperature" : ""} in the 14 days before each picture. ` : ""}
+          Estimates show on the map&apos;s paddock cards with a band of ±{model.likelyWithin.toLocaleString("en-NZ")}.{" "}
           <Button size="small" variant="secondary" disabled={busy} onClick={() => void act({ action: "off" })}>
             Turn off
           </Button>
@@ -1323,6 +1373,7 @@ function CoverEstimates({ organisationId, farmId }: { organisationId: string; fa
             {validation.pairs} readings on {validation.dates} satellite dates, greenness {validation.ndviRange?.min} to {validation.ndviRange?.max}. All figures in kg DM/ha.
           </p>
           <ErrorRows validation={validation} />
+          <WeatherRows validation={validation} />
           {!model ? (
             <div className={ui.actions} style={{ alignItems: "end", justifyContent: "flex-start" }}>
               <Field label="The average error you'll accept (kg DM/ha)" hint="Decide this with whoever uses the covers. Estimates stay off unless the line did at least this well.">
@@ -1336,7 +1387,7 @@ function CoverEstimates({ organisationId, farmId }: { organisationId: string; fa
         </>
       )}
       <p className={ui.muted} style={{ margin: 0 }}>
-        Only this organisation&apos;s readings are used, for this farm&apos;s line. Weather and grazing models aren&apos;t used.
+        Only this organisation&apos;s readings are used, for this farm&apos;s line. Rain is your gauge&apos;s where read, else MetService&apos;s (Farm › Rainfall).
       </p>
     </Card>
   );
