@@ -3,6 +3,12 @@
   "items": [
     {
       "date": "2026-11-12",
+      "title": "Tohyee 0.34.0: pasture cover from satellite, and daily farm rain",
+      "body": "Satellite greenness can now estimate pasture cover, from a line fitted to your own plate-meter readings and checked before you turn it on. Each farm gets daily rain and temperature from MetService, and rain can make the estimates closer. Voiding journals works on servers with a separate database login.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.34.0"
+    },
+    {
+      "date": "2026-11-12",
       "title": "Tohyee 0.33.0: gift cards, Afterpay deposits and recoding in place",
       "body": "Shopify gift cards and voucher products are held until they're spent, with GST when sold. Afterpay deposits are matched to their orders, with the fee. Made-to-order shops can turn off stock items. Bank transactions can be recoded in place, manual journals voided, and accounts given reporting names.",
       "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.33.0"

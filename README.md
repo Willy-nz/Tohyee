@@ -48,8 +48,8 @@ before connecting an assistant.
 > organisation and review accounting outputs. Tohyee is provided as is, without
 > warranty; see the [licence](LICENSE).
 
-Latest release: [v0.33.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.33.0)
-([notes](docs/releases/0.33.0.md)). Get the installer and what each download
+Latest release: [v0.34.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.34.0)
+([notes](docs/releases/0.34.0.md)). Get the installer and what each download
 includes from the [latest release](https://github.com/Willy-nz/Tohyee/releases/latest).
 The [feature register](docs/FEATURES.md) records implemented features and limits;
 [release notes](docs/releases) describe packaged versions.
@@ -130,6 +130,7 @@ real phone or in a paddock yet.
 | Release | What's new |
 | --- | --- |
 | **Next** (on `main`) | Effluent management; aerial photos on farm maps with your own LINZ key. |
+| [**0.34.0**](docs/releases/0.34.0.md) | Modelled pasture cover from satellite greenness and your plate-meter readings, daily farm rain and temperature from MetService, and a fix for voiding journals on servers with a separate database login. |
 | [**0.33.0**](docs/releases/0.33.0.md) | Shopify gift cards held until spent, Afterpay deposits matched to their orders with the fee, a stock question for made-to-order shops, recode in place, Void for manual journals, and reporting names. |
 | [**0.32.0**](docs/releases/0.32.0.md) | Annual financial statements as one paged, editable document (cover, contents, compilation report, depreciation schedule), a layout editor with Add column, Remove & redo on bank lines, and revenue recognition in Settings. |
 | [**0.31.0**](docs/releases/0.31.0.md) | Shopify sales when sent (held in Income in advance until Shopify marks them sent), Mark as sent, and Sales › To send. |
