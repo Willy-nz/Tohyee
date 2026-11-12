@@ -211,8 +211,47 @@ page.
 The client secret is restored with the database and re-keyed like the other
 connections (Server settings › Backups › restore).
 
+## Modelled pasture cover (optional, phase 3)
+
+Greenness isn't feed. Once a farm has enough of its own measured readings,
+Tohyee can fit a line from greenness to cover (kg DM/ha) for that farm, and
+show how far off it's been. An owner or admin decides whether that's good
+enough, and turns estimates on.
+
+- **What it learns from:** the farm's plate-meter readings and other
+  measured readings (Pasture and feed), never eye estimates or any other
+  estimate. Each reading is paired with the clear satellite view of the
+  same paddock closest in time, at most 3 days apart, unless stock grazed
+  it in between.
+- **When it's offered:** at least 12 such readings on at least 4 satellite
+  dates.
+- **How it's checked:** each satellite date is left out in turn and
+  predicted with a line fitted to the others. The card shows the average
+  error, whether it reads high or low, and the error 9 in 10 were within:
+  overall, for each season, and against your other farms' readings (a line
+  fitted on them, checked on this farm).
+- **Turning it on:** Farm › Map › Satellite vegetation › Modelled pasture
+  cover. Type the average error you'll accept (decide it with whoever uses
+  the covers), then Turn on estimates. It stays off unless the line did at
+  least that well on dates it wasn't fitted on. The line is kept as it was
+  checked; turn it on again to refit with newer readings.
+- **What you see:** on a paddock's card and in its trend table, "Modelled
+  cover (an estimate, not a reading)" with a band, e.g. 2,600 kg DM/ha
+  (2,550-2,650). Greenness outside what the line was checked on is flagged.
+- **What it never does:** save an estimate as a reading, change a
+  measurement, or feed grazing plans, feed budgets or fertiliser. It isn't
+  in Analytics or the offline pack's covers.
+- **Privacy:** only your organisation's readings are used, only for your
+  farms' lines. Nothing is shared with other Tohyee servers.
+- **Not used:** weather, soil moisture or growth models (they'd need
+  licensed data sources), and paid imagery.
+
+Not tried against a farm's real plate-meter readings yet.
+
 ## Turning it off
 
+- Modelled cover on one farm: its card › Turn off. The line is kept with who
+  turned it on and off.
 - One farm: Farm › Map › Satellite vegetation › that farm › Turn off.
 - Everything: Disconnect. The secret is deleted and fetching stops; the
   numbers already worked out stay.

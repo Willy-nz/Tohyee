@@ -27,6 +27,8 @@ import {
   THRESHOLD_LIMITS,
   type VegetationState,
 } from "@/lib/farming/vegetation/rules";
+import { type ModelledCover, SEASON_WORDS, type Validation } from "@/lib/farming/vegetation/cover-fit";
+import type { CoverCheck } from "@/lib/farming/vegetation/cover-model";
 import type { FarmVegetation, OverviewRow, PaddockObservation, PaddockTrend, PilotResult, SetupFarm, VegetationSettings } from "@/lib/farming/vegetation/service";
 import { canGoOn, nextStep, previousStep, resumeStep, SETUP_STEPS, type SetupProgress, type SetupStep, stepNumber } from "@/lib/farming/vegetation/setup-steps";
 import styles from "./farm-vegetation.module.css";
@@ -264,7 +266,16 @@ function ObservationFacts({ observation }: { observation: PaddockObservation }) 
           <span>Since the clear date before</span>
           <strong>{changeText(observation.changeNdvi)}</strong>
         </div>
+        {observation.modelledCover ? (
+          <div className={styles.fact}>
+            <span>Modelled cover (an estimate, not a reading)</span>
+            <strong>{coverText(observation.modelledCover)}</strong>
+          </div>
+        ) : null}
       </div>
+      {observation.modelledCover?.outsideRange ? (
+        <Notice tone="warning">This greenness is outside what the farm&apos;s line was checked on, so the estimate is less certain.</Notice>
+      ) : null}
       <p>
         <Badge tone={observation.quality === "good" ? "green" : observation.quality === "no_data" ? "neutral" : "amber"}>{QUALITY_WORDS[observation.quality]}</Badge>{" "}
         <span className={ui.muted}>
@@ -368,6 +379,7 @@ export function TrendChart({ trend }: { trend: PaddockTrend }) {
               <th scope="col">Greenness</th>
               <th scope="col">Clear</th>
               <th scope="col">View</th>
+              {shown.some((observation) => observation.modelledCover) ? <th scope="col">Modelled cover</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -380,6 +392,7 @@ export function TrendChart({ trend }: { trend: PaddockTrend }) {
                   {QUALITY_WORDS[observation.quality]}
                   {observation.currentBoundary ? "" : " (earlier boundary)"}
                 </td>
+                {shown.some((entry) => entry.modelledCover) ? <td>{observation.modelledCover ? coverText(observation.modelledCover) : "–"}</td> : null}
               </tr>
             ))}
           </tbody>
@@ -474,6 +487,11 @@ export function SatelliteVegetationPage({ organisationId }: { organisationId: st
         <>
           <Overview rows={overview.data?.farms ?? null} error={overview.error} />
           <Manage organisationId={organisationId} answer={settings.data} onChanged={reload} onSetUp={() => go("connect")} />
+          {settings.data.farms
+            .filter((farm) => farm.enabled)
+            .map((farm) => (
+              <CoverEstimates key={farm.farmId} organisationId={organisationId} farmId={farm.farmId} />
+            ))}
           <p>
             <Button
               variant="secondary"
@@ -1199,6 +1217,126 @@ export function SatelliteVegetationLink({ state }: { state: VegetationState | nu
         <Link href={VEGETATION_PAGE} className={`${ui.button} ${ui.secondary}`}>
           {state === null || state === "not_set_up" ? "Set up satellite vegetation" : "Satellite vegetation"}
         </Link>
+      </p>
+    </Card>
+  );
+}
+
+// Modelled pasture cover (#612 phase 3) ------------------------------------------------------------
+
+/** "2,300 kg DM/ha (2,050-2,550)": an estimate always with its band. */
+export function coverText(cover: ModelledCover): string {
+  const n = (value: number) => value.toLocaleString("en-NZ");
+  return `${n(cover.cover)} kg DM/ha (${n(cover.low)}-${n(cover.high)})`;
+}
+
+function ErrorRows({ validation }: { validation: Validation }) {
+  const rows = [
+    ...(validation.withheldDates ? [{ label: "Dates it wasn't fitted on", summary: validation.withheldDates }] : []),
+    ...validation.bySeason.map((season) => ({ label: `  ${SEASON_WORDS[season.season]}`, summary: season })),
+    ...(validation.otherFarms ? [{ label: "Fitted on your other farms, checked on this one", summary: validation.otherFarms }] : []),
+  ];
+  return (
+    <table className={ui.table}>
+      <thead>
+        <tr>
+          <th scope="col">Checked on</th>
+          <th scope="col" className={ui.num}>
+            Readings
+          </th>
+          <th scope="col" className={ui.num}>
+            Off by, on average
+          </th>
+          <th scope="col" className={ui.num}>
+            Reads high (+) or low (-)
+          </th>
+          <th scope="col" className={ui.num}>
+            9 in 10 within
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.label}>
+            <td style={{ whiteSpace: "pre" }}>{row.label}</td>
+            <td className={ui.num}>{row.summary.pairs}</td>
+            <td className={ui.num}>{row.summary.meanError.toLocaleString("en-NZ")}</td>
+            <td className={ui.num}>{(row.summary.bias > 0 ? "+" : "") + row.summary.bias.toLocaleString("en-NZ")}</td>
+            <td className={ui.num}>{row.summary.likelyWithin.toLocaleString("en-NZ")}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/**
+ * MCV3-MCV7: the farm's line from its own plate-meter readings, how far off
+ * it's been on dates and farms it wasn't fitted on, and Turn on once the
+ * admin has chosen the error they'll accept. All in kg DM/ha.
+ */
+function CoverEstimates({ organisationId, farmId }: { organisationId: string; farmId: string }) {
+  const answer = useApiData<{ check: CoverCheck }>(`/api/farming/farms/${farmId}/vegetation/cover`, { organisationId });
+  const [acceptable, setAcceptable] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const check = answer.data?.check;
+  const act = async (body: Record<string, unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/farming/farms/${farmId}/vegetation/cover`, { method: "POST", body: { organisationId, ...body } });
+      answer.reload();
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (answer.error) return <Notice tone="error">{answer.error}</Notice>;
+  if (!check) return null;
+  const { validation, model } = check;
+  return (
+    <Card
+      title={`Modelled pasture cover: ${check.farmName}`}
+      description="Optional. A line fitted to this farm's own plate-meter (or other measured) readings and the same paddocks' greenness, checked on dates it wasn't fitted on. It's an estimate: it never replaces or changes a reading, and nothing plans grazing or fertiliser from it."
+    >
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {model ? (
+        <Notice tone="success">
+          <strong>On</strong> since {nzDateTime(model.turnedOnAt)} ({model.turnedOnBy}): off by {model.meanError.toLocaleString("en-NZ")} kg DM/ha on average when
+          checked, within your {model.acceptableError.toLocaleString("en-NZ")}. Estimates show on the map&apos;s paddock cards with a band of ±
+          {model.likelyWithin.toLocaleString("en-NZ")}.{" "}
+          <Button size="small" variant="secondary" disabled={busy} onClick={() => void act({ action: "off" })}>
+            Turn off
+          </Button>
+        </Notice>
+      ) : null}
+      {validation.notReady ? (
+        <p className={ui.muted}>
+          {validation.notReady} Readings taken the same day or within {check.pairDays} days of a clear satellite date count, unless stock grazed the paddock in between. Eye
+          estimates aren&apos;t used.
+        </p>
+      ) : (
+        <>
+          <p className={ui.muted}>
+            {validation.pairs} readings on {validation.dates} satellite dates, greenness {validation.ndviRange?.min} to {validation.ndviRange?.max}. All figures in kg DM/ha.
+          </p>
+          <ErrorRows validation={validation} />
+          {!model ? (
+            <div className={ui.actions} style={{ alignItems: "end", justifyContent: "flex-start" }}>
+              <Field label="The average error you'll accept (kg DM/ha)" hint="Decide this with whoever uses the covers. Estimates stay off unless the line did at least this well.">
+                <input inputMode="numeric" value={acceptable} onChange={(event) => setAcceptable(event.target.value.replace(/[^0-9]/g, ""))} />
+              </Field>
+              <Button disabled={busy || acceptable === ""} onClick={() => void act({ action: "on", acceptableError: Number(acceptable) })}>
+                Turn on estimates
+              </Button>
+            </div>
+          ) : null}
+        </>
+      )}
+      <p className={ui.muted} style={{ margin: 0 }}>
+        Only this organisation&apos;s readings are used, for this farm&apos;s line. Weather and grazing models aren&apos;t used.
       </p>
     </Card>
   );

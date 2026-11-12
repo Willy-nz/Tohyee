@@ -9,6 +9,8 @@ import type { ProviderId, SceneCandidate } from "@/lib/farming/vegetation/provid
 import type { Grid } from "@/lib/farming/vegetation/raster";
 import { attributionText, farmState, PROCESSOR_VERSION, type Quality, type QualityFlag, THRESHOLD_LIMITS, type VegetationState } from "@/lib/farming/vegetation/rules";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
+import type { ModelledCover } from "@/lib/farming/vegetation/cover-fit";
+import { activeCoverModel, type CoverModel, estimateFor } from "@/lib/farming/vegetation/cover-estimates";
 import { requireId } from "@/lib/validation";
 
 /*
@@ -622,6 +624,11 @@ export type PaddockObservation = {
   changeNdvi: string | null;
   changeFromSceneId: string | null;
   processorVersion: string;
+  /**
+   * Modelled pasture cover from the farm's checked line (#612 phase 3, MCV6), only when an admin has turned
+   * estimates on and the view was clear. An estimate, kept apart from measured cover; null otherwise.
+   */
+  modelledCover: ModelledCover | null;
 };
 
 type ObservationRow = {
@@ -672,7 +679,13 @@ function toObservation(row: ObservationRow): PaddockObservation {
     changeNdvi: row.change_ndvi,
     changeFromSceneId: row.change_from_scene_id,
     processorVersion: row.processor_version,
+    modelledCover: null,
   };
+}
+
+/** MCV6: each observation with its modelled cover from the farm's line in use, if any. */
+function withEstimates(observations: PaddockObservation[], model: CoverModel | null): PaddockObservation[] {
+  return model ? observations.map((observation) => ({ ...observation, modelledCover: estimateFor(model, observation) })) : observations;
 }
 
 export type FarmVegetation = {
@@ -691,6 +704,8 @@ export type FarmVegetation = {
   scene: SceneSummary | null;
   observations: PaddockObservation[];
   attribution: string;
+  /** Modelled cover in use on this farm (MCV6, MCV7), or null when estimates are off. */
+  coverEstimates: { meanError: number; likelyWithin: number; acceptableError: number; turnedOnAt: string; turnedOnBy: string } | null;
 };
 
 async function jobsWaiting(tx: OrgTx, farmId: string): Promise<number> {
@@ -737,6 +752,7 @@ export async function getFarmVegetation(tx: OrgTx, farmIdInput: unknown, options
     scene = scenes.find((candidate) => candidate.usable) ?? scenes[0] ?? null;
   }
   const provider = scene?.provider ?? settings.provider;
+  const model = await activeCoverModel(tx, farm.id);
   return {
     farmId: farm.id,
     farmName: farm.name,
@@ -749,8 +765,11 @@ export async function getFarmVegetation(tx: OrgTx, farmIdInput: unknown, options
     thresholds: { minCoveragePct: settings.min_coverage_pct, minValidPixels: settings.min_valid_pixels },
     scenes,
     scene,
-    observations: scene ? await sceneObservations(tx, scene.id) : [],
+    observations: scene ? withEstimates(await sceneObservations(tx, scene.id), model) : [],
     attribution: provider ? attributionText(provider, scene ? [Number(scene.acquiredAt.slice(0, 4))] : []) : "",
+    coverEstimates: model
+      ? { meanError: model.meanError, likelyWithin: model.likelyWithin, acceptableError: model.acceptableError, turnedOnAt: model.turnedOnAt, turnedOnBy: model.turnedOnBy }
+      : null,
   };
 }
 
@@ -775,7 +794,7 @@ export async function getPaddockTrend(tx: OrgTx, paddockIdInput: unknown, option
     paddockId,
     paddockName: paddock.name,
     farmId: paddock.farm_id,
-    observations: rows.rows.map(toObservation),
+    observations: withEstimates(rows.rows.map(toObservation), await activeCoverModel(tx, paddock.farm_id)),
     provider,
     attribution: provider ? attributionText(provider, rows.rows.map((row) => Number(row.acquired_at.slice(0, 4)))) : "",
   };

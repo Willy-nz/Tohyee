@@ -2587,6 +2587,44 @@ Jun 2026: Dr 6010 **100.00** / Cr 3000 **100.00**.
   since, and one already posted (void it instead). The audit log keeps
   "journal_draft.discarded_by_ai".
 
+### Modelled pasture cover from satellite greenness (MCV1-MCV8; Jess, 12 Nov 2026, #612 phase 3; the details are Claude's, not yet reviewed)
+
+Tested in `tests/unit/vegetation-cover-fit.test.ts` and
+`tests/integration/vegetation-cover.test.ts`. Made-up farm "Home farm",
+paddocks 1-4, clear satellite dates 10 Jan, 12 Apr, 15 Jul and 20 Oct 2026,
+greenness 0.40, 0.55, 0.70 and 0.85 on every date. Plate-meter readings are
+500 + 3000 × greenness, give or take 20 or 40 kg DM/ha.
+
+- **MCV1 The line.** Least squares, exact decimals: cover = intercept +
+  slope × greenness. Readings of 2,000 at 0.50 and 2,600 at 0.70 give
+  500 + 3000 × greenness. An estimate is rounded to the nearest 10 and never
+  below 0.
+- **MCV2 Pairs.** A plate-meter (or other measured) reading and the clear
+  view of the same paddock closest in time, at most 3 days apart: paddock
+  1's reading on 12 Jan pairs with the 10 Jan picture. Left out: an eye
+  estimate, a reading 5 days from any picture, and a reading after a
+  grazing between it and the picture. 16 pairs.
+- **MCV3 Checked on dates it wasn't fitted on.** Each date is left out and
+  predicted from the other three: off by **34** kg DM/ha on average, bias
+  **0**, 9 in 10 within **50**. Also by season, and, with another farm's
+  readings, fitted on them and checked on this farm (a farm reading 300
+  higher shows bias +300).
+- **MCV4 Not offered too soon.** Under 12 pairs or 4 dates: "So far: 12 on
+  3", no line.
+- **MCV5 Seasons** as New Zealand counts them: Dec-Feb summer, Mar-May
+  autumn, Jun-Aug winter, Sep-Nov spring.
+- **MCV6 Estimates.** With the line on, paddock 3 (greenness 0.70) shows
+  **2,600 kg DM/ha (2,550-2,650)**, the band being the 9-in-10 error.
+  Greenness outside 0.40-0.85 is flagged as outside what it was checked on.
+  Only clear views get one. No pasture reading is added or changed.
+- **MCV7 Turned on by a person.** Owners and admins choose the average
+  error they'll accept (10 to 3,000 kg DM/ha): 30 is refused ("off by 34 kg
+  DM/ha on average, more than the 30 you chose"), 300 turns it on. The line
+  is saved as checked, with who and when. Farm staff can see the check but
+  not turn it on.
+- **MCV8 Off.** Turning it off removes the estimates; the line stays on
+  record with who turned it on and off.
+
 ### Bulk coding ("cash coding") (examples not yet approved by Jess)
 
 Like Xero's cash coding. On one bank or credit card account, tick several

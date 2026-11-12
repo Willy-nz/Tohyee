@@ -14045,6 +14045,22 @@ migration 0265.
       default limit weren't chosen. This narrows decision 347 (AI keys never
       delete) for AI-made drafts only. Not yet reviewed.
 
+### Modelled pasture cover from satellite greenness (12 Nov 2026; decision 1596)
+
+1596. **A farm's own line, checked, turned on by a person (MCV1-MCV8).**
+      Jess asked for #612 phase 3. Each farm's measured readings (plate
+      meter or other measurements, never estimates) are paired with clear
+      views of the same paddock within 3 days, unless grazed between, and
+      a straight line is fitted in exact decimals. It's offered from 12
+      pairs on 4 dates, checked by leaving each date out, by season and on
+      the organisation's other farms. An owner or admin sets the average
+      error they'll accept and turns it on only if the line met it; the
+      line is saved as checked. Estimates are a separate "modelled cover"
+      with a 9-in-10 band, worked out when read, never saved as readings
+      and never used for planning. No other organisation's data, no
+      weather or growth models, no paid imagery (tenant migration 0276).
+      Not tried on real readings; not yet reviewed.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
