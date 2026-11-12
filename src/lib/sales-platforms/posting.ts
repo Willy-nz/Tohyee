@@ -362,15 +362,18 @@ async function linkedItems(tx: OrgTx, posting: Posting, variantIds: string[]): P
     }
     return items;
   }
-  const result = await tx.query<{ external_id: string; id: string; code: string; item_type: string; income_code: string | null }>(
-    `select m.external_id, i.id, i.code, i.item_type, a.code as income_code
+  const result = await tx.query<{ external_id: string; id: string; code: string; item_type: string; income_code: string | null; gift_card: boolean }>(
+    `select m.external_id, i.id, i.code, i.item_type, a.code as income_code,
+            exists (select 1 from sales_platform_gift_card_items g where g.connection_id = m.connection_id and g.item_id = i.id) as gift_card
        from sales_platform_mappings m
        join items i on i.id = m.item_id
        left join accounts a on a.id = i.income_account_id
       where m.connection_id = $1 and m.record_kind = 'product_variant' and m.external_id = any($2::text[])`,
     [posting.connectionId, variantIds],
   );
-  return new Map(result.rows.map((row) => [row.external_id, { id: row.id, code: row.code, itemType: row.item_type, incomeAccountCode: row.income_code }]));
+  return new Map(
+    result.rows.map((row) => [row.external_id, { id: row.id, code: row.code, itemType: row.item_type, incomeAccountCode: row.income_code, giftCard: row.gift_card }]),
+  );
 }
 
 async function contactIsOverseas(tx: OrgTx, contactId: string): Promise<boolean> {

@@ -26,7 +26,7 @@ import { dec, toFixedString } from "@/lib/money/decimal";
 import { getOrganisation } from "@/lib/organisations/registry";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { getSalesOrder } from "@/lib/sales-orders/service";
-import { connectStore, listSyncLog, syncConnection, updateConnectionSettings } from "@/lib/sales-platforms/service";
+import { connectStore, listConnections, listSyncLog, syncConnection, updateConnectionSettings } from "@/lib/sales-platforms/service";
 import { stockStuck } from "@/lib/sales-platforms/stock-stuck";
 import { SHOP_NOT_PERMITTED, setSalesPlatformFetchForTests } from "@/lib/sales-platforms/shopify";
 import { createTaxCode } from "@/lib/tax/codes";
@@ -36,6 +36,7 @@ import {
   type OrderFixture,
   type StoreState,
   fakeShopifyStore,
+  PRODUCTS,
   order1001,
   order1002,
   order1003,
@@ -683,6 +684,40 @@ describeWithDatabase("Shopify orders into the accounts (stage 2)", () => {
     expect(back.state).toBe("done");
     expect(await journal(w, await journalIdOf(w, "sales_credit_notes", "approval_journal_id", back.credit_note_id))).toEqual({ "1100": "-50.00", "2100": "6.52", "2360": "43.48" });
     expect(await balance(w, "2360")).toBe("46.09");
+  });
+
+  it("GC6: products sold as gift cards that Shopify doesn't mark as gift cards (a voucher app's)", async () => {
+    const voucher = { id: 2009, title: "Gift voucher - $50", updatedAt: "2026-09-30T01:00:00Z", variants: [{ id: 3009, title: "Default Title", sku: null, price: "50.00" }] };
+    const w = await setup({ store: { products: [...PRODUCTS, voucher] } });
+    await w.sync("2026-10-01T01:00:00Z");
+    await w.as((tx) => updateConnectionSettings(tx, w.connectionId, { newGiftCardAccount: { code: "2360" } }));
+    const code = (await w.as((tx) => tx.query<{ code: string }>("select i.code from items i join sales_platform_mappings m on m.item_id = i.id where m.external_id = '3009'"))).rows[0].code;
+    const listed = (await w.as((tx) => listConnections(tx))).find((connection) => connection.id === w.connectionId)!;
+    expect(listed.giftCardItemSuggestions.map((item) => item.code)).toEqual([code]);
+    await expect(w.as((tx) => updateConnectionSettings(tx, w.connectionId, { giftCardItemCodes: ["NOPE"] }))).rejects.toThrow("NOPE isn't an item from this store.");
+    const chosen = await w.as((tx) => updateConnectionSettings(tx, w.connectionId, { giftCardItemCodes: [code] }));
+    expect(chosen.giftCardItems.map((item) => item.code)).toEqual([code]);
+    expect(chosen.giftCardItemSuggestions).toEqual([]);
+
+    // Shopify charged GST on it (an ordinary product to Shopify): that GST, and the rest held in 2360.
+    const line = { id: 4401, name: "Gift voucher - $50", sku: null, quantity: 1, variantId: 3009, originalTotal: "50.00", tax: [{ title: "GST", rate: 0.15, amount: "6.52" }] };
+    w.state.orders.push(order1001({ id: 5401, name: "#1401", total: "50.00", lines: [line], transactions: [{ id: 9401, kind: "SALE", amount: "50.00", processedAt: "2026-10-02T01:30:00Z" }] }));
+    // No tax from Shopify: the store's GST code, as a Shopify gift card (GC1).
+    w.state.orders.push(
+      order1001({ id: 5402, name: "#1402", total: "50.00", lines: [{ ...line, id: 4402, tax: [] }], transactions: [{ id: 9402, kind: "SALE", amount: "50.00", processedAt: "2026-10-02T01:40:00Z" }] }),
+    );
+    await w.sync("2026-10-02T02:00:00Z");
+    for (const id of ["5401", "5402"]) {
+      const sold = (await doc(w, "order", id))!;
+      expect(await journal(w, await journalIdOf(w, "sales_invoices", "approval_journal_id", sold.invoice_id))).toEqual({ "1100": "50.00", "2100": "-6.52", "2360": "-43.48" });
+    }
+    expect(await balance(w, "4000")).toBe("0.00");
+
+    // Unticked: from the next order, an ordinary sale again.
+    await w.as((tx) => updateConnectionSettings(tx, w.connectionId, { giftCardItemCodes: [] }));
+    w.state.orders.push(order1001({ id: 5403, name: "#1403", total: "50.00", lines: [{ ...line, id: 4403 }], transactions: [{ id: 9403, kind: "SALE", amount: "50.00", processedAt: "2026-10-03T01:30:00Z" }] }));
+    await w.sync("2026-10-03T02:00:00Z");
+    expect(await balance(w, "4000")).toBe("-43.48");
   });
 
   it("SPC19: a client-credentials token is renewed near expiry, stored encrypted, and never shown", async () => {

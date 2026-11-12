@@ -149,6 +149,8 @@ type ConnectionRow = {
   payment_methods: Array<{ method: string; title: string | null; accountCode: string | null; leftOwing: boolean }>;
   guest_contact_id: string | null;
   guest_contact_name: string | null;
+  gift_card_items: Array<{ id: string; code: string; name: string }>;
+  gift_card_item_suggestions: Array<{ id: string; code: string; name: string }>;
 };
 
 const accountCode = (column: string) => `(select a.code from accounts a where a.id = ${column}) as ${column.replace(/_id$/, "_code")}`;
@@ -168,6 +170,15 @@ const COLUMNS =
     .join(", ") +
   ", (select t.code from tax_codes t where t.id = untaxed_tax_code_id) as untaxed_tax_code" +
   ", guest_contact_id::text, (select g.name from contacts g where g.id = guest_contact_id) as guest_contact_name" +
+  ", (select coalesce(json_agg(json_build_object('id', i.id::text, 'code', i.code, 'name', i.name) order by i.code), '[]'::json)" +
+  "     from sales_platform_gift_card_items g join items i on i.id = g.item_id where g.connection_id = sales_platform_connections.id) as gift_card_items" +
+  // GC6: the store's products whose names say gift card or voucher, not yet chosen.
+  ", (select coalesce(json_agg(json_build_object('id', s.id, 'code', s.code, 'name', s.name) order by s.code), '[]'::json) from (" +
+  "     select distinct i.id::text as id, i.code, i.name from sales_platform_mappings m join items i on i.id = m.item_id" +
+  "      where m.connection_id = sales_platform_connections.id and m.record_kind = 'product_variant' and i.is_active" +
+  "        and (i.name ~* 'gift ?(card|voucher|certificate)' or i.name ~* 'voucher')" +
+  "        and not exists (select 1 from sales_platform_gift_card_items g where g.connection_id = m.connection_id and g.item_id = i.id)" +
+  "      limit 50) s) as gift_card_item_suggestions" +
   ", (select coalesce(json_agg(json_build_object('rate', m.rate::text, 'taxCode', t.code) order by m.rate), '[]'::json)" +
   "     from sales_platform_tax_codes m join tax_codes t on t.id = m.tax_code_id where m.connection_id = sales_platform_connections.id) as tax_codes" +
   ", (select coalesce(json_agg(json_build_object('method', p.method, 'title', p.title, 'accountCode', a.code, 'leftOwing', p.left_owing) order by p.method), '[]'::json)" +
@@ -216,6 +227,8 @@ function toConnection(row: ConnectionRow): SalesPlatformConnection {
     untaxedTaxCode: row.untaxed_tax_code,
     guestContactId: row.guest_contact_id,
     guestContactName: row.guest_contact_name,
+    giftCardItems: row.gift_card_items,
+    giftCardItemSuggestions: row.gift_card_item_suggestions,
     taxCodes: row.tax_codes.map((entry) => ({ rate: toPlainString(mul(dec(entry.rate), dec("100"))), taxCode: entry.taxCode })),
     grantedScopes: [...row.granted_scopes].sort(),
   };
@@ -848,6 +861,21 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
     );
   }
   if (giftCards && row.platform !== "shopify") throw new ValidationError(`Gift cards are for Shopify only for now.`);
+  // GC6: the store's products sold as gift cards that Shopify doesn't mark as gift cards (a voucher app's, say).
+  let giftCardItemIds: string[] | undefined;
+  if (body.giftCardItemCodes !== undefined) {
+    if (row.platform !== "shopify") throw new ValidationError("Gift cards are for Shopify only for now.");
+    const typed = [...new Set(requireArray(body.giftCardItemCodes, "giftCardItemCodes", 200).map((code, index) => requireString(code, `giftCardItemCodes[${index}]`).trim()))];
+    const codes = typed.map((code) => code.toLowerCase());
+    const found = await tx.query<{ id: string; code: string }>(
+      `select distinct i.id::text, i.code from sales_platform_mappings m join items i on i.id = m.item_id
+        where m.connection_id = $1 and m.record_kind = 'product_variant' and lower(i.code) = any($2::text[])`,
+      [row.id, codes],
+    );
+    const missing = typed.filter((code) => !found.rows.some((item) => item.code.toLowerCase() === code.toLowerCase()));
+    if (missing.length > 0) throw new ValidationError(`${missing.join(", ")} ${missing.length === 1 ? "isn't an item" : "aren't items"} from this store.`);
+    giftCardItemIds = found.rows.map((item) => item.id);
+  }
 
   let untaxed: TaxCodeChoice | null | undefined;
   if (body.untaxedTaxCode !== undefined) {
@@ -1006,6 +1034,20 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
   named(reserve, row.reserve_account_id, "reserve account");
   if (whenSent !== undefined && (whenSent?.id ?? null) !== row.sales_when_sent_account_id) {
     changes.push(whenSent ? `sales when sent: on, held in ${whenSent.code} ${whenSent.name} (orders brought in from now)` : "sales when sent: off (orders already held count when sent)");
+  }
+  if (giftCardItemIds !== undefined) {
+    const before = row.gift_card_items.map((item) => item.id).sort();
+    const after = [...giftCardItemIds].sort();
+    if (before.join(",") !== after.join(",")) {
+      await tx.query("delete from sales_platform_gift_card_items where connection_id = $1 and not (item_id = any($2::bigint[]))", [row.id, after]);
+      for (const id of after) {
+        await tx.query(
+          "insert into sales_platform_gift_card_items (connection_id, item_id, created_by_email) values ($1, $2, $3) on conflict do nothing",
+          [row.id, id, tx.actor.email],
+        );
+      }
+      changes.push(`products sold as gift cards: ${after.length === 0 ? "none" : after.length}`);
+    }
   }
   if (giftCards !== undefined && (giftCards?.id ?? null) !== row.gift_card_account_id) {
     changes.push(giftCards ? `gift cards: sold into ${giftCards.code} ${giftCards.name}, redeemed out of it` : "gift cards: refused");

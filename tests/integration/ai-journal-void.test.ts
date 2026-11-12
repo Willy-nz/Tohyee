@@ -112,9 +112,9 @@ describeWithDatabase("the AI voiding its own journals", () => {
     await expect(call(tokens.Claude, "void_own_journal", { journalId })).rejects.toThrow("already been voided");
   });
 
-  it("AJV1: not another AI's journal, not a person's, not anything but a manual journal; Full access only", async () => {
+  it("AJV1: another AI connection's journal (decision 1595), not a person's, not anything but a manual journal; Full access only", async () => {
     const others = await aiPosts(tokens.Other, "2026-06-11");
-    await expect(call(tokens.Claude, "void_own_journal", { journalId: others })).rejects.toThrow("wasn't posted by this AI");
+    expect(await voidIt(tokens.Claude, others)).toMatchObject({ created: true, journalId: others });
     const persons = (
       await asOwner((tx) =>
         postJournal(tx, {
@@ -128,7 +128,7 @@ describeWithDatabase("the AI voiding its own journals", () => {
         }),
       )
     ).journal.id;
-    await expect(call(tokens.Claude, "void_own_journal", { journalId: persons })).rejects.toThrow("wasn't posted by this AI");
+    await expect(call(tokens.Claude, "void_own_journal", { journalId: persons })).rejects.toThrow("wasn't posted through an AI connection");
     const mine = await aiPosts(tokens.Claude, "2026-06-13");
     const reversal = (await voidIt(tokens.Claude, mine)).reversalJournalId as string;
     await expect(call(tokens.Claude, "void_own_journal", { journalId: reversal })).rejects.toThrow("isn't a manual journal");
@@ -163,5 +163,36 @@ describeWithDatabase("the AI voiding its own journals", () => {
     await expect(asOwner((tx) => saveAiJournalVoidSettings(tx, { maxDays: 0 }))).rejects.toThrow("1 to 3650");
     await asOwner((tx) => saveAiJournalVoidSettings(tx, { maxDays: null }));
     await expect(call(tokens.Claude, "void_own_journal", { journalId: recent, previewHash: "not-the-hash", idempotencyKey: key("v") })).rejects.toThrow("Preview it again");
+  });
+
+  it("AJV7: discards a draft an AI made, not a person's, not one a person edited, not one posted", async () => {
+    const draftOf = async (token: string) =>
+      ((
+        await call(token, "create_draft_journal", {
+          idempotencyKey: key("d"),
+          postingDate: "2026-06-20",
+          reference: "AI-D",
+          lines: [
+            { accountCode: "6010", debitAmount: "7.00", creditAmount: "0" },
+            { accountCode: "3000", debitAmount: "0", creditAmount: "7.00" },
+          ],
+        })
+      ).draft as Json).id as string;
+    const journals = await asOwner((tx) => tx.query<{ n: number }>("select count(*)::int as n from ledger_journals"));
+    const mine = await draftOf(tokens.Other);
+    expect(await call(tokens.Claude, "discard_own_draft_journal", { draftId: mine })).toMatchObject({ discarded: true, draftId: mine, reference: "AI-D" });
+    expect((await asOwner((tx) => tx.query("select 1 from ledger_journal_drafts where id = $1", [mine]))).rowCount).toBe(0);
+    expect((await asOwner((tx) => tx.query("select 1 from audit_events where event_type = 'journal_draft.discarded_by_ai' and entity_id = $1", [mine]))).rowCount).toBe(1);
+    expect((await asOwner((tx) => tx.query<{ n: number }>("select count(*)::int as n from ledger_journals"))).rows[0].n).toBe(journals.rows[0].n);
+
+    const edited = await draftOf(tokens.Claude);
+    await asOwner((tx) => tx.query("update ledger_journal_drafts set updated_by_email = 'owner@example.com', updated_via = null where id = $1", [edited]));
+    await expect(call(tokens.Claude, "discard_own_draft_journal", { draftId: edited })).rejects.toThrow("edited by a person");
+    const persons = await asOwner((tx) => tx.query<{ id: string }>("update ledger_journal_drafts set created_via = null where id = $1 returning id::text", [edited]));
+    await expect(call(tokens.Claude, "discard_own_draft_journal", { draftId: persons.rows[0].id })).rejects.toThrow("made by a person");
+    const posted = await draftOf(tokens.Claude);
+    await call(tokens.Claude, "post_draft_journal", { draftId: posted });
+    await expect(call(tokens.Claude, "discard_own_draft_journal", { draftId: posted })).rejects.toThrow("has been posted");
+    await expect(call(tokens.Poster, "discard_own_draft_journal", { draftId: posted })).rejects.toThrow(/discard_own_draft_journal/);
   });
 });

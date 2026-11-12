@@ -2555,16 +2555,17 @@ Tested in `tests/integration/void-journals.test.ts`. In October 2026: A
   don't change. Balances are the same either way. The API, the accountant
   pack and exports from other places keep everything unless asked.
 
-### The AI voiding journals it posted (AJV1-AJV6; Jess, 11 Nov 2026; the details are Claude's, not yet reviewed)
+### The AI voiding journals it posted (AJV1-AJV7; Jess, 11 and 12 Nov 2026; the details are Claude's, not yet reviewed)
 
 Tested in `tests/integration/ai-journal-void.test.ts`. 31 March year end.
 A Full access AI key "Claude" makes and posts a draft manual journal on 10
 Jun 2026: Dr 6010 **100.00** / Cr 3000 **100.00**.
 
-- **AJV1** Only a manual journal posted from a draft by the **same** AI key
-  or app (the draft records which). Refused: one a person posted, one
-  another AI key posted, and anything not a manual journal (an invoice's,
-  a payment's, a correction). Full access only (`void_own_journal`).
+- **AJV1** Only a manual journal posted from a draft through an AI key or
+  app: any AI connection (Jess, 12 Nov 2026), so "Claude" can void one AI
+  key "Other" posted. Refused: one a person posted, and anything not a
+  manual journal (an invoice's, a payment's, a correction). Full access
+  only (`void_own_journal`).
 - **AJV2** First a preview: the journal's date, reference and lines, and a
   hash. Nothing changes.
 - **AJV3** Called again with the hash, it posts an exact reversal dated the
@@ -2580,6 +2581,11 @@ Jun 2026: Dr 6010 **100.00** / Cr 3000 **100.00**.
   limit). Past it, refused.
 - **AJV6** A changed journal (the hash no longer matches) is refused: preview
   again.
+- **AJV7** `discard_own_draft_journal` (Full access) discards a draft journal
+  an AI made, any AI connection, in one call: drafts post nothing, so no
+  journal is added. Refused: a draft a person made, one a person has edited
+  since, and one already posted (void it instead). The audit log keeps
+  "journal_draft.discarded_by_ai".
 
 ### Bulk coding ("cash coding") (examples not yet approved by Jess)
 
@@ -6989,6 +6995,16 @@ stores are refused. The redemption option in s 5(11G) isn't offered.
   Choosing it tries again, at the next sync, every order whose last try was
   refused for a gift card (#1301 above). Stop puts back the refusal for new
   orders; what's posted stays.
+- **GC6** Products sold as gift cards that Shopify doesn't mark as gift
+  cards (Jess, 12 Nov 2026: Glimmers' vouchers come in as ordinary products,
+  and the code they give pays at checkout). Under Gift cards, the store's
+  products whose names say gift card or voucher are offered; ticked ones
+  are treated as gift cards from the next order. "Gift voucher - $50"
+  (variant 3009, no SKU), 50.00: with Shopify's GST of 6.52 on it, that GST
+  is kept, **Dr 1100 50.00 / Cr 2360 43.48 / Cr 2100 6.52**; with no tax
+  from Shopify, the store's GST code gives the same. Unticked, the next
+  order is an ordinary sale (Cr 4000 43.48). Voucher sales posted before
+  it's ticked stay in sales.
 
 ### WooCommerce orders into the accounts (item 7 part 2, approved by Jess, 5 Oct 2026)
 

@@ -1,4 +1,4 @@
-import { aiVoidJournal, previewAiJournalVoid } from "@/lib/ai/journal-void";
+import { aiDiscardDraftJournal, aiVoidJournal, previewAiJournalVoid } from "@/lib/ai/journal-void";
 import { addForecastCommentary, addGroupCommentary } from "@/lib/commentary/service";
 import { approvalNeededForAi } from "@/lib/approvals/requests";
 import { submitForApproval } from "@/lib/approvals/service";
@@ -440,7 +440,7 @@ export const WRITE_TOOLS: readonly AiTool[] = [
     title: "Void a journal this AI posted",
     level: "full",
     description:
-      "Voids a manual journal that this same AI key or app posted from a draft (Jess, 11 Nov 2026), never an invoice, bill, payment or anything a person posted: an exact reversal is posted on the journal's own date and the original is kept, marked as voided by the AI. Refused in a locked period, when a line is matched to a bank statement line, when it's already been voided or corrected, and past the organisation's time limit if it set one. First call it without previewHash to see what it will reverse and check it's what was asked; then call it again with the previewHash it gave and a new idempotencyKey.",
+      "Voids a manual journal an AI key or app posted from a draft (any AI connection; Jess, 11 and 12 Nov 2026), never an invoice, bill, payment or anything a person posted: an exact reversal is posted on the journal's own date and the original is kept, marked as voided by the AI. Refused in a locked period, when a line is matched to a bank statement line, when it's already been voided or corrected, and past the organisation's time limit if it set one. First call it without previewHash to see what it will reverse and check it's what was asked; then call it again with the previewHash it gave and a new idempotencyKey.",
     inputSchema: schema(
       {
         journalId: ID("journal"),
@@ -458,6 +458,17 @@ export const WRITE_TOOLS: readonly AiTool[] = [
         };
       }
       return aiVoidJournal(tx, { journalId: args.journalId, previewHash: args.previewHash, idempotencyKey: idempotencyKey(args.idempotencyKey), source: context.source });
+    },
+  },
+  {
+    name: "discard_own_draft_journal",
+    title: "Discard a draft journal an AI made",
+    level: "full",
+    description:
+      "Discards a draft manual journal that an AI key or app made (Jess, 12 Nov 2026). Drafts post nothing, so there's nothing to reverse. Refused once it's posted (use void_own_journal), if a person made it, or if a person has edited it since. Kept in the audit log.",
+    inputSchema: schema({ draftId: ID("draft journal") }, ["draftId"]),
+    async run(tx, args) {
+      return aiDiscardDraftJournal(tx, args.draftId);
     },
   },
   {

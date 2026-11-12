@@ -133,7 +133,8 @@ describeWithDatabase("AI keys that make drafts and post (decisions 346-348)", ()
     for (const tool of AI_TOOLS) {
       // Remove & redo voids what a line created, after a preview, at Full access only: Jess asked for it (decision 1574).
       // void_own_journal voids only a manual journal the same AI posted, after a preview, at Full access: Jess asked for it (decision 1581).
-      if (tool.name === "remove_and_redo_bank_lines" || tool.name === "void_own_journal") {
+      // discard_own_draft_journal discards a draft an AI made that no person edited, at Full access (decision 1595).
+      if (tool.name === "remove_and_redo_bank_lines" || tool.name === "void_own_journal" || tool.name === "discard_own_draft_journal") {
         expect(tool.level).toBe("full");
         continue;
       }
