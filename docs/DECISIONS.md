@@ -14138,6 +14138,19 @@ migration 0265.
       bulls stay refused under NSC: IRD publishes no rising two-year male
       dairy NSC for clause 5 of the 1993 determination. Worked example LV30.
 
+### Livestock bought from an associated person (13 Nov 2026; decision 1605)
+
+1605. **A purchase can be marked as from an associated person who used the
+      herd scheme, and then the kind must be in the herd scheme (#243).** As
+      s EC 4B and OS 25/02 paras 54-58. It's the buyer's call whether an
+      exception applies (ordinary course of business, some intergenerational
+      transfers, deceased estates). Under NSC the valuation is refused,
+      naming the purchase (male breeding stock already in the herd scheme
+      with the NSC election is fine). Tenant migration 0280. Two things stay
+      unbuilt because IRD's statement doesn't settle them: valuing an
+      increase above the base number by another method, and how a long-term
+      bailee accounts. Worked example LV31.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet

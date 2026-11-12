@@ -115,6 +115,8 @@ export type Movement = {
   amount: string | null;
   /** Purchases of beef or dairy cattle: bought as bobby calves (LV29). */
   bobbyCalves: boolean;
+  /** Purchases: from an associated person who used the herd scheme, so it stays in the herd scheme (LV31). */
+  boundToHerdScheme: boolean;
   locationId: string | null;
   locationName: string | null;
   toLocationId: string | null;
@@ -456,7 +458,7 @@ export async function archiveLocation(tx: OrgTx, idInput: unknown, archived = tr
 // Movements -----------------------------------------------------------------
 
 const MOVEMENT_COLUMNS = `m.id::text, m.movement_date::text, m.movement_type, m.ownership, m.held_for, m.kind, m.class_code, m.to_class_code, m.head,
-  m.amount::text, m.bobby_calves, m.location_id::text, l.name as location_name, m.to_location_id::text, tl.name as to_location_name,
+  m.amount::text, m.bobby_calves, m.bound_to_herd_scheme, m.location_id::text, l.name as location_name, m.to_location_id::text, tl.name as to_location_name,
   m.sales_invoice_line_id::text, i.invoice_number, m.bill_line_id::text, b.supplier_invoice_number as bill_reference, m.rations_for, m.journal_id::text, m.note,
   m.created_by_email, m.created_at::text, m.voided_at is not null as voided, m.void_reason`;
 const MOVEMENT_JOINS = `from livestock_movements m
@@ -481,6 +483,7 @@ type MovementRow = {
   location_id: string | null;
   location_name: string | null;
   bobby_calves: boolean;
+  bound_to_herd_scheme: boolean;
   to_location_id: string | null;
   to_location_name: string | null;
   sales_invoice_line_id: string | null;
@@ -510,6 +513,7 @@ function toMovement(row: MovementRow): Movement {
     head: row.head,
     amount: row.amount,
     bobbyCalves: row.bobby_calves,
+    boundToHerdScheme: row.bound_to_herd_scheme,
     locationId: row.location_id,
     locationName: row.location_name,
     toLocationId: row.to_location_id,
@@ -627,6 +631,9 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     if (kind !== "dairy_cattle" && kind !== "beef_cattle") throw new ValidationError("Bobby calves are beef or dairy cattle.");
     if (definition.nsc !== "rising_1") throw new ValidationError(`Bobby calves go into a rising one-year class. ${definition.name} isn't one.`);
   }
+  // From an associated person who used the herd scheme (LV31, decision 1605; s EC 4B): it stays in the herd scheme.
+  const boundToHerdScheme = input.boundToHerdScheme === true || input.boundToHerdScheme === "true";
+  if (boundToHerdScheme && movementType !== "purchase") throw new ValidationError("Only a purchase can be from an associated person.");
 
   const hash = requestHash("livestock_movement", {
     movementType,
@@ -645,6 +652,8 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     note,
     // Only when set, so a replay of a movement recorded before LV29 still matches.
     ...(bobbyCalves ? { bobbyCalves } : {}),
+    // Likewise for LV31.
+    ...(boundToHerdScheme ? { boundToHerdScheme } : {}),
   });
   const earlier = await tx.query<{ id: string; request_hash: string }>(
     "select id::text, request_hash from livestock_movements where command_source = $1 and idempotency_key = $2",
@@ -664,8 +673,8 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     const row = await tx.query<{ id: string }>(
       `insert into livestock_movements (command_source, idempotency_key, request_hash, movement_date, movement_type, ownership, held_for, kind,
          class_code, to_class_code, head, amount, location_id, to_location_id, sales_invoice_line_id, bill_line_id, note,
-         created_by_user_id, created_by_email, rations_for, bobby_calves)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::numeric, $13, $14, $15, $16, $17, $18, $19, $20, $21) returning id::text`,
+         created_by_user_id, created_by_email, rations_for, bobby_calves, bound_to_herd_scheme)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::numeric, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22) returning id::text`,
       [
         source,
         idempotencyKey,
@@ -688,6 +697,7 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
         tx.actor.email,
         rationsFor,
         bobbyCalves,
+        boundToHerdScheme,
       ],
     );
     id = row.rows[0].id;
@@ -704,7 +714,7 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     eventType: "livestock.movement_recorded",
     entityType: "livestock_movement",
     entityId: id,
-    details: { movementType, movementDate, kind, classCode, toClassCode, head, heldFor, amount, rationsFor, ...(bobbyCalves ? { bobbyCalves } : {}) },
+    details: { movementType, movementDate, kind, classCode, toClassCode, head, heldFor, amount, rationsFor, ...(bobbyCalves ? { bobbyCalves } : {}), ...(boundToHerdScheme ? { boundToHerdScheme } : {}) },
   });
   return { created: true, movement: await getMovement(tx, id) };
 }

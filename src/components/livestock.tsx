@@ -412,6 +412,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
     heldFor: "",
     rationsFor: "owner" as "owner" | "staff",
     bobbyCalves: false,
+    boundToHerdScheme: false,
     locationId: "",
     toLocationId: "",
     note: "",
@@ -448,6 +449,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
       if (form.movementType === "transfer") body.toLocationId = form.toLocationId;
       if (form.movementType === "purchase" || form.movementType === "sale") body.amount = form.amount || null;
       if (canBeBobbies && form.bobbyCalves) body.bobbyCalves = true;
+      if (form.movementType === "purchase" && form.boundToHerdScheme) body.boundToHerdScheme = true;
       if (form.movementType === "arrival" || form.movementType === "departure") body.heldFor = form.heldFor;
       if (form.movementType === "rations") {
         body.rationsFor = form.rationsFor;
@@ -455,7 +457,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
       await api("/api/livestock/movements", { method: "POST", body });
       setMessage(`Recorded: ${MOVEMENT_LABELS[form.movementType].toLowerCase()}, ${form.head} ${classes.find((entry) => entry.code === form.classCode)?.name.toLowerCase()}.`);
       setKey(newIdempotencyKey("lv"));
-      setForm({ ...form, head: "", amount: "", note: "", bobbyCalves: false });
+      setForm({ ...form, head: "", amount: "", note: "", bobbyCalves: false, boundToHerdScheme: false });
       movements.reload();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -553,6 +555,14 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
                 <InfoTip label="Bobby calves">Dairy-bred calves bought for rearing before they were weaned off milk, and not with their mothers. Under national standard cost they carry IRD&apos;s cost for purchased bobby calves as well as what they cost.</InfoTip>
               </label>
             ) : null}
+            {form.movementType === "purchase" ? (
+              <label className={ui.checkbox}>
+                <input type="checkbox" checked={form.boundToHerdScheme} onChange={(event) => setForm({ ...form, boundToHerdScheme: event.target.checked })} /> From an associated person who used the herd scheme
+                <InfoTip label="Associated person">
+                  Bought from someone associated with the farm (family, a related company or trust) who valued them under the herd scheme, not in the ordinary course of business. The farm must keep them in the herd scheme. IRD has exceptions, such as some transfers between generations and from a deceased estate (OS 25/02 paras 54-58): leave this off if one applies.
+                </InfoTip>
+              </label>
+            ) : null}
             {form.movementType === "rations" ? (
               <Field label="Whose rations">
                 <select value={form.rationsFor} onChange={(event) => setForm({ ...form, rationsFor: event.target.value as "owner" | "staff" })}>
@@ -644,6 +654,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
                       {[
                         movement.heldFor ? `For ${movement.heldFor}` : null,
                         movement.bobbyCalves ? "Bobby calves" : null,
+                        movement.boundToHerdScheme ? "From an associated person (herd scheme)" : null,
                         movement.rationsFor ? (movement.rationsFor === "owner" ? (movement.journalId ? "Owner's rations, posted at market value (before yearly adjustments)" : "Owner's rations (homekill)") : "Staff rations") : null,
                         movement.locationName,
                         movement.toLocationName ? `to ${movement.toLocationName}` : null,

@@ -460,6 +460,19 @@ export async function workOut(tx: OrgTx, yearEnd: string): Promise<{ workings: W
     }
     // Male breeding stock: in the herd scheme with the rest, or alongside NSC when elected (OS 25/02 para 40, LV26).
     const maleInHerd = method === "nsc" && election.maleBreedingHerdScheme;
+    // Stock bought from an associated person who used the herd scheme stays in it (s EC 4B; LV31, decision 1605).
+    if (method !== "herd_scheme") {
+      const bound = await tx.query<{ class_code: string; movement_date: string; head: number }>(
+        `select class_code, movement_date::text, head from livestock_movements
+          where kind = $1 and bound_to_herd_scheme and voided_at is null and movement_date <= $2 order by movement_date, id`,
+        [kind, facts.yearEnd],
+      );
+      for (const row of bound.rows.filter((entry) => !(maleInHerd && findClass(kind, entry.class_code)?.maleBreeding))) {
+        problems.push(
+          `${kindName}: ${row.head} ${className(kind, row.class_code).toLowerCase()} bought on ${row.movement_date} came from an associated person who used the herd scheme, so they must stay in the herd scheme (s EC 4B). Elect the herd scheme for ${kindName.toLowerCase()}, or correct the purchase if an exception applies.`,
+        );
+      }
+    }
     if (method === "nsc" && !maleInHerd) {
       for (const entry of classes) {
         if (entry.maleBreeding && (headOf(facts.opening, entry.code) > 0 || headOf(facts.closing, entry.code) > 0)) {
