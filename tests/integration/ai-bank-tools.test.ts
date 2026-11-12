@@ -470,7 +470,8 @@ describeWithDatabase("AI keys reconciling bank lines (decision 488, AIB1-AIB8)",
         expect(tool.level, tool.name).toBe("full");
         continue;
       }
-      if (tool.level !== "read" && !tool.readOnly) {
+      const confirms = /"(previewHash|confirmHash)"/.test(JSON.stringify(tool.inputSchema));
+      if (tool.level !== "read" && !tool.readOnly && !confirms) {
         expect(JSON.stringify(tool.inputSchema), tool.name).not.toMatch(/isActive|archiv|"voidDate"|delete|"excluded"/i);
       }
     }

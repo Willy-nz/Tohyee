@@ -14669,4 +14669,14 @@ show, 100 a page, and clicking one should let her edit it.
       sales orders and purchase orders on (accept, decline, copy, invoice,
       bill, close, cancel) are "post" tools. All at the screens' role,
       bookkeepers and up. Claude's details, not yet reviewed.
+1602. **Part 3: journals and settings.** post_journal (a manual journal
+      straight away), set_lock_date (owners and admins, confirmed first),
+      GST codes, payment terms and salespeople (owners and admins;
+      switching one off is confirmed first), expense claims (submit,
+      decline; void, payment void and draft delete confirmed first), fixed
+      asset disposal (confirmed with the screen's own preview), undo and
+      archive, rolling back a depreciation run, running and pausing
+      repeating invoices and bills, stock movements and transfers, item
+      units, and renaming and archiving budgets. Same services and roles as
+      the screens. Claude's details, not yet reviewed.
 

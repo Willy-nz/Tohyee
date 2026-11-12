@@ -93,4 +93,27 @@ describeWithDatabase("AI tools for document actions", () => {
     await call("approve_sales_order", { salesOrderId: otherId, idempotencyKey: key("aso2") });
     expect(JSON.stringify(await call("cancel_sales_order", { salesOrderId: otherId, idempotencyKey: key("cso2") }))).toContain("cancelled");
   });
+
+  it("part 3: a manual journal, payment terms, and the lock date confirmed first, for owners and admins", async () => {
+    const posted = await call("post_journal", {
+      postingDate: "2026-06-10",
+      reference: "Made-up accrual",
+      lines: [
+        { accountCode: "6010", debitAmount: "40.00" },
+        { accountCode: "3000", creditAmount: "40.00" },
+      ],
+      idempotencyKey: key("pj"),
+    });
+    expect(JSON.stringify(posted)).toContain("Made-up accrual");
+    await expect(call("create_payment_term", { name: "20th", kind: "day_of_next_month", days: 20 }, "bookkeeper")).rejects.toThrow("owners and admins");
+    expect(JSON.stringify(await call("create_payment_term", { name: "20th", kind: "day_of_next_month", days: 20, idempotencyKey: key("pt") }))).toContain("20th");
+    const lock = await call("set_lock_date", { lockDate: "2026-05-31", reason: "May GST filed" });
+    expect(lock).toMatchObject({ preview: true, actsOn: { lockDate: null } });
+    expect(await call("set_lock_date", { lockDate: "2026-05-31", reason: "May GST filed", confirmHash: lock.confirmHash, idempotencyKey: key("ld") })).toMatchObject({ lockDate: "2026-05-31" });
+    await expect(
+      call("post_journal", { postingDate: "2026-05-20", reference: "Too late", lines: [{ accountCode: "6010", debitAmount: "1.00" }, { accountCode: "3000", creditAmount: "1.00" }], idempotencyKey: key("pj2") }),
+    ).rejects.toThrow(/lock/i);
+    const unlock = await call("set_lock_date", { lockDate: null, reason: "Test done" });
+    await call("set_lock_date", { lockDate: null, reason: "Test done", confirmHash: unlock.confirmHash, idempotencyKey: key("ul") });
+  });
 });

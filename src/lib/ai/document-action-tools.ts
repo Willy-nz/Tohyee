@@ -39,8 +39,10 @@ import { deleteSupplierCreditNote, getSupplierCreditNote, voidSupplierCreditNote
  */
 
 type Args = Record<string, unknown>;
-type Action = {
+export type Action = {
   name: string;
+  /** The screen's role; bookkeepers and up unless it says otherwise. */
+  role?: "bookkeeper" | "admin";
   title: string;
   description: string;
   /** "post" moves documents on; "full" voids, removes, deletes or excludes, after a confirmation. */
@@ -63,18 +65,19 @@ function summary(record: unknown): Record<string, unknown> {
   return Object.fromEntries(Object.entries(record as Record<string, unknown>).filter(([key, value]) => keep.test(key) && (typeof value !== "object" || value === null)));
 }
 
-function needsBookkeeper(context: ToolContext, title: string) {
-  if (!roleAtLeast(context.role, "bookkeeper")) throw new ForbiddenError(`${title} is for bookkeepers and up, as in Tohyee.`);
+function needsRole(context: ToolContext, title: string, role: "bookkeeper" | "admin") {
+  if (!roleAtLeast(context.role, role)) throw new ForbiddenError(`${title} is for ${role === "admin" ? "owners and admins" : "bookkeepers and up"}, as in Tohyee.`);
 }
 
-function tool(action: Action): AiTool {
+export function tool(action: Action): AiTool {
+  const role = action.role ?? "bookkeeper";
   const confirms = action.level === "full";
   const input: Record<string, JsonSchema> = { ...action.input, idempotencyKey: IDEMPOTENCY, ...(confirms ? { confirmHash: CONFIRM } : {}) };
   const steps = confirms
     ? " First call it without confirmHash: it shows what it acts on and changes nothing. Then call it again with the same arguments, the confirmHash and a new idempotencyKey."
     : "";
   const run = async (tx: OrgTx, args: Args, context: ToolContext) => {
-    needsBookkeeper(context, action.title);
+    needsRole(context, action.title, role);
     if (confirms) {
       const { confirmHash, ...withKey } = args;
       const rest = Object.fromEntries(Object.entries(withKey).filter(([name]) => name !== "idempotencyKey"));
@@ -90,7 +93,8 @@ function tool(action: Action): AiTool {
   return {
     name: action.name,
     title: action.title,
-    description: `${action.description} Bookkeepers and up, as in Tohyee.${steps}`,
+    description: `${action.description} ${role === "admin" ? "Owners and admins" : "Bookkeepers and up"}, as in Tohyee.${steps}`,
+    ...(role === "admin" ? { minRole: "admin" as const } : {}),
     level: action.level,
     inputSchema: schema(input, action.required),
     run,
