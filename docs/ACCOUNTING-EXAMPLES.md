@@ -18569,7 +18569,7 @@ were read from IRD's determinations on 11 Oct 2026).
 - Long-term bailments.
 - Pigs under NSC.
 - Dairy steers and bulls under NSC.
-- Purchased bobby calves.
+- ~~Purchased bobby calves.~~ Built: LV28.
 
 ### Questions for Jess
 
@@ -22409,3 +22409,33 @@ Records only: nothing posts (decisions 1487-1494). Tested in
   photo of cow 5 with both references, and its suggestion names them.
   Another organisation has **no references, no photos to score**, and can't
   suggest on this one.
+
+## Livestock: purchased bobby calves under NSC (LV28; built by Claude 13 Nov 2026 from IRD's NSC determinations, the details are Claude's, not yet reviewed)
+
+Decision 1603, #243. The formula is clause 3 of the National Standard Costs
+for Livestock Determination 1993 (TIB Vol 5 No 2 appendix): rising one-year
+stock is valued at ((a + b - c) x d) + e + (f x g), shared over a + b, where
+f is the bobby calves bought in the year and g is IRD's NSC for acquired
+bobby calves. Clause 2: bobby calves are bred from a dairy dam, bought for
+rearing, not weaned off milk when bought, and not bought at foot with the
+dam. The NSC 2026 determination sets g at **282.50** (listed under dairy
+cattle; clause 3 applies it to beef or dairy cattle).
+
+Made-up farm: Kōwhai, as LV6 (dairy, NSC, 31 May balance date), and on 1
+Sep 2025 it buys **20 bobby heifer calves for 2,400.00**, marked "Bobby
+calves" on the purchase.
+
+- **Rising one-year heifers:** 80 farm-bred x 788.90 = 63,112.00, plus the
+  bought calves' cost 2,400.00, plus 20 x 282.50 = 5,650.00: **71,162.00**
+  for 100 head.
+- **Totals:** closing value **551,494.50** (LV6's 543,444.50 + 8,050.00);
+  change in value 57,974.50; taxable profit **97,574.50**, LV6's plus the
+  bobby calves' NSC of 5,650.00 (their cost is both a purchase and in
+  closing stock).
+- **Refused:** "Bobby calves" on a sale, on anything but beef or dairy
+  cattle, or into a class that isn't rising one-year; and the valuation, if
+  the year has no bobby calf NSC.
+- **Not changed:** how rising one-year stock that die are taken out. Tohyee
+  takes them out at the average (LV23). Clause 3 leaves deaths out of
+  a + b, which differs only when bought stock and deaths are both in the
+  class. That needs a separate look.

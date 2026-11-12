@@ -222,6 +222,38 @@ describeWithDatabase("livestock year-end valuation (LV4-LV12)", () => {
     expect(classes.filter((entry) => entry.classCode !== "r1_heifers").reduce((total, entry) => total + Number(entry.closingValue) * 100, 0)).toBe(48033250);
   });
 
+  it("LV28: bought bobby calves carry IRD's bobby calf NSC on top of their cost (decision 1603)", async () => {
+    const org = "livestock-kowhai-bobby";
+    await farm(
+      org,
+      5,
+      "2025-06-01",
+      [
+        ["dairy_cattle", "ma_cows", 300, "357000.00"],
+        ["dairy_cattle", "r2_heifers", 70, "83300.00"],
+        ["dairy_cattle", "r1_heifers", 75, "53220.00"],
+      ],
+      "493520.00",
+    );
+    await kowhaiYear(org);
+    const bobbies = { kind: "dairy_cattle", movementType: "purchase", movementDate: "2025-09-01", classCode: "r1_heifers", head: 20, amount: "2400.00", bobbyCalves: true };
+    // Only a purchase of beef or dairy cattle into a rising one-year class can be bobby calves.
+    await expect(move(org, { ...bobbies, classCode: "ma_cows" })).rejects.toThrow(/rising one-year class/);
+    await expect(move(org, { ...bobbies, movementType: "sale" })).rejects.toThrow(/Only a purchase/);
+    await expect(move(org, { ...bobbies, kind: "sheep", classCode: "ewe_hoggets" })).rejects.toThrow(/beef or dairy cattle/);
+    const recorded = await move(org, bobbies);
+    expect(recorded.movement).toMatchObject({ bobbyCalves: true, amount: "2400.00" });
+    await run(org, (tx) => recordElection(tx, { kind: "dairy_cattle", method: "nsc", fromIncomeYear: 2026 }));
+    const preview = await run(org, (tx) => previewValuation(tx, { yearEnd: "2026-05-31" }));
+    expect(preview.problems).toEqual([]);
+    const dairy = preview.workings.kinds[0];
+    // 80 farm-bred x 788.90 + the 20 bought at 2,400.00 + 20 x 282.50 (IRD's 2026 NSC for purchased bobby calves).
+    expect(dairy.classes.find((entry) => entry.classCode === "r1_heifers")).toMatchObject({ closingHead: 100, closingValue: "71162.00" });
+    expect(dairy.nsc?.bobbyCalves).toEqual({ head: 20, rate: "282.50" });
+    // LV6's taxable profit, plus the bobby calves' NSC (5,650.00): their cost is in purchases and in closing stock.
+    expect(preview.workings.totals).toMatchObject({ closingValue: "551494.50", valueChange: "57974.50", taxableProfit: "97574.50" });
+  });
+
   it("LV10, LV11: Tussock's beef herd scheme and sheep NSC in one journal", async () => {
     const org = "livestock-tussock";
     await farm(

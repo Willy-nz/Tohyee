@@ -14076,6 +14076,16 @@ migration 0265.
       it was closer. Tenant migration 0277. Not tried against the live
       service; not yet reviewed.
 
+### Purchased bobby calves under NSC (13 Nov 2026; decision 1603)
+
+1603. **A purchase of beef or dairy cattle into a rising one-year class can
+      be marked "Bobby calves" (#243).** Under national standard cost, each
+      one adds IRD's NSC for acquired bobby calves to the class's value, on
+      top of its cost, as clause 3 of the 1993 NSC determination says. The
+      rate is the dairy cattle "purchased bobby calves" NSC for the year,
+      for beef and dairy farms alike. The herd scheme isn't affected: it
+      values at NAMV. Tenant migration 0278. Worked example LV28.
+
 ### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
 
 Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
