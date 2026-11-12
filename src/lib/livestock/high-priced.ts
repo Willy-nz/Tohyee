@@ -15,6 +15,12 @@ import { requireLivestock } from "./movements";
  * the year bought, then less IRD's depreciation rate (typed by the
  * accountant with its source) of cost each year after, until it's at or
  * below its class's NAMV, when it reverts to its class.
+ *
+ * One bought before livestock's first year (#243, decision 1602) was already
+ * high-priced on an earlier return, so the test isn't run again: it opens the
+ * first year at its value then (cost less the rate for each year since the
+ * year bought), apart from its class. Its head stays in the class's opening
+ * head; its value stays out of the class's opening value.
  */
 
 export type HighPricedAnimal = {
@@ -93,7 +99,9 @@ async function assertNotApproved(tx: OrgTx, from: string): Promise<void> {
 /**
  * Records a high-priced animal (LV25). It must cost at least 500.00 and at
  * least five times its class's NAMV in the income year bought and the year
- * before; the year before's NAMV is typed when Tohyee doesn't have it.
+ * before; the year before's NAMV is typed when Tohyee doesn't have it. One
+ * bought before livestock's first year is carried in from earlier returns
+ * (LV25B), without the test.
  */
 export async function recordHighPriced(
   tx: OrgTx,
@@ -105,14 +113,21 @@ export async function recordHighPriced(
   if (!findClass(kind, classCode)) throw new ValidationError(`${KIND_NAMES[kind]} has no class "${classCode}".`);
   const description = requireString(input.description, "A description (tag or name)", { maxLength: 200 });
   const boughtOn = parseIsoDate(input.boughtOn, "The date bought");
-  if (boughtOn < settings.firstYearStart) {
-    throw new ValidationError(`Livestock starts on ${settings.firstYearStart}. A high-priced animal bought before then isn't supported yet: include it in its class's opening value.`);
-  }
+  const carried = boughtOn < settings.firstYearStart;
   const cost = parseDecimalInput(input.cost, "Cost", { maxScale: 2 });
   const ratePercent = parseDecimalInput(input.ratePercent, "IRD's depreciation rate (%)", { maxScale: 2 });
   if (cmp(dec(ratePercent), dec("100")) > 0) throw new ValidationError("The depreciation rate can't be more than 100%.");
   const rateSource = requireString(input.rateSource, "Where the rate came from", { maxLength: 500 });
   const priorTyped = input.priorYearNamv === undefined || input.priorYearNamv === null || input.priorYearNamv === "" ? null : parseDecimalInput(input.priorYearNamv, "Last year's NAMV", { maxScale: 2, allowZero: true });
+  if (carried) {
+    if (priorTyped !== null) throw new ValidationError("Last year's NAMV is only for an animal bought since livestock started: one bought earlier was tested on an earlier return.");
+    // It changes the first year's opening, so no year can be approved yet.
+    await assertNotApproved(tx, settings.firstYearStart);
+    if (cmp(highPricedValueAt({ boughtOn, cost, ratePercent }, dayBefore(settings.firstYearStart), settings.financialYearEndMonth), ZERO_DECIMAL) <= 0) {
+      throw new ValidationError(`At ${ratePercent}% a year it's worth nothing by ${dayBefore(settings.firstYearStart)}, so it's already back in its class.`);
+    }
+    return insertAnimal(tx, { kind, classCode, description, boughtOn, cost, ratePercent, rateSource, priorTyped: null, carried: true });
+  }
   await assertNotApproved(tx, boughtOn);
 
   // The income year bought, from the balance date (as the valuation does).
@@ -130,6 +145,22 @@ export async function recordHighPriced(
   if (cmp(dec(cost), dec("500")) < 0 || cmp(dec(cost), threshold) < 0) {
     throw new ValidationError(`It isn't high-priced: it has to cost at least 500.00 and at least five times the NAMV (5 x ${higher} = ${toFixedString(threshold, 2)}).`);
   }
+  return insertAnimal(tx, { kind, classCode, description, boughtOn, cost, ratePercent, rateSource, priorTyped, carried: false });
+}
+
+function dayBefore(day: string): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+}
+
+/** Its value at the end of the year before livestock's first year, for one carried in (LV25B); null for one bought since. */
+export function carriedOpeningValue(animal: Pick<HighPricedAnimal, "boughtOn" | "cost" | "ratePercent">, firstYearStart: string, yearEndMonth: number): Decimal | null {
+  return animal.boughtOn < firstYearStart ? highPricedValueAt(animal, dayBefore(firstYearStart), yearEndMonth) : null;
+}
+
+async function insertAnimal(
+  tx: OrgTx,
+  { kind, classCode, description, boughtOn, cost, ratePercent, rateSource, priorTyped, carried }: { kind: LivestockKind; classCode: string; description: string; boughtOn: string; cost: string; ratePercent: string; rateSource: string; priorTyped: string | null; carried: boolean },
+): Promise<HighPricedAnimal> {
   const row = await tx.query<{ id: string }>(
     `insert into livestock_high_priced (kind, class_code, description, bought_on, cost, rate_percent, rate_source, prior_year_namv, created_by_email)
      values ($1, $2, $3, $4, $5::numeric, $6::numeric, $7, $8::numeric, $9) returning id::text`,
@@ -139,7 +170,7 @@ export async function recordHighPriced(
     eventType: "livestock.high_priced_recorded",
     entityType: "livestock_high_priced",
     entityId: row.rows[0].id,
-    details: { kind, classCode, description, boughtOn, cost, ratePercent, rateSource },
+    details: { kind, classCode, description, boughtOn, cost, ratePercent, rateSource, carriedFromEarlierReturns: carried },
   });
   return (await listHighPriced(tx)).find((animal) => animal.id === row.rows[0].id)!;
 }

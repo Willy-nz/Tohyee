@@ -250,7 +250,7 @@ export function FarmTasks({ organisationId, farm, startNew = false }: FarmContex
         </div>
         {tasks.error ? <Notice tone="error">{tasks.error}</Notice> : null}
         {!tasks.data && !tasks.error ? <p className={ui.muted}>Loading…</p> : null}
-        {tasks.data && !shown.length ? <Empty>{view === "open" ? "Nothing to do." : view === "done" ? "No finished one-off tasks." : "No cancelled tasks."}</Empty> : null}
+        {tasks.data && !shown.length ? <Empty picture="checklist">{view === "open" ? "Nothing to do." : view === "done" ? "No finished one-off tasks." : "No cancelled tasks."}</Empty> : null}
         {groups.map((group) => (
           <section key={group.state} aria-label={TASK_STATE_LABELS[group.state]}>
             <h3 style={{ margin: "12px 0 0" }}>{TASK_STATE_LABELS[group.state]}</h3>

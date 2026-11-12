@@ -18572,7 +18572,7 @@ were read from IRD's determinations on 11 Oct 2026).
   determination (clause 5) needs an NSC for rising two-year male
   non-breeding dairy cattle, and IRD's yearly NSC determinations don't
   publish one (checked NSC 2023-2026, 13 Nov 2026).
-- Purchased bobby calves.
+- ~~Purchased bobby calves.~~ Built: LV29.
 
 ### Questions for Jess
 
@@ -18665,8 +18665,8 @@ refusal test in `livestock-valuation.test.ts`. Decision 509.
     (it reverts to its class at NAMV).
   - **Reverting:** an animal at or below its class's NAMV (with any
     ratio) at a year end reverts.
-  - **Not supported:** high-priced animals bought before livestock's first
-    year, and those in classes not in the herd scheme.
+  - **Not supported:** high-priced animals in classes not in the herd
+    scheme. (Those bought before livestock's first year: LV25B.)
 - **LV26** comes out as drafted. With the NSC election's "male breeding
   stock in the herd scheme", the rams are revalued from 4,000.00 to
   4,310.00 (310.00 non-taxable). Without it, they're refused.
@@ -22437,6 +22437,59 @@ Decisions 1598-1599, #447 items 8 and 10. Made-up farm: Home farm, mob "R2 heife
   Purchases and **Farm** (Farm walk … Add a photo or note). "Move a mob"
   opens the Log at LS1's first question. Sam, farm staff, sees **only
   Farm**. A viewer sees no "+ New". With Farming off, there's no Farm group.
+
+## Livestock: a high-priced animal bought before the first year (LV25B; built by Claude 13 Nov 2026 from IRD OS 25/02 paras 68-71, the details are Claude's, not yet reviewed)
+
+Decision 1602, #243. Made-up farm: livestock starts 1 July 2025 (30 June
+balance date). The farm bought the bull Te Mana on 1 Aug 2023 for
+**30,000.00**; the accountant's IRD rate is 25% straight line.
+
+- **Openings:** mature cows 100 head, 200,000.00; breeding bulls **1 head,
+  0.00** (the bull's head is counted in its class; his value isn't). The
+  opening journal is 200,000.00 + 22,500.00 = **222,500.00**.
+- **Recording:** Te Mana is recorded with his cost, rate and its source.
+  The high-priced test isn't run again, because he was tested on an
+  earlier return, and last year's NAMV isn't asked for.
+- **Opening value:** cost in 2023-24 (30,000.00 at 30 June 2024), less 25%
+  of cost for 2024-25: **22,500.00** at 30 June 2025.
+- **2025-26:** closing **15,000.00**, apart from his class. The cows'
+  revaluation to NAMV (2,376.00 a head) is **37,600.00**, not taxable;
+  the taxable change is the bull's **-7,500.00**. Closing value
+  237,600.00 + 15,000.00 = **252,600.00**.
+- **Refused:** a bull bought in 2020-21 (worth nothing by 30 June 2025 at
+  25%, so already back in his class); a typed NAMV for one carried in; and
+  adding one once any year is approved, because it changes the first
+  year's opening.
+
+## Livestock: purchased bobby calves under NSC (LV29; built by Claude 13 Nov 2026 from IRD's NSC determinations, the details are Claude's, not yet reviewed)
+
+Decision 1603, #243. The formula is clause 3 of the National Standard Costs
+for Livestock Determination 1993 (TIB Vol 5 No 2 appendix): rising one-year
+stock is valued at ((a + b - c) x d) + e + (f x g), shared over a + b, where
+f is the bobby calves bought in the year and g is IRD's NSC for acquired
+bobby calves. Clause 2: bobby calves are bred from a dairy dam, bought for
+rearing, not weaned off milk when bought, and not bought at foot with the
+dam. The NSC 2026 determination sets g at **282.50** (listed under dairy
+cattle; clause 3 applies it to beef or dairy cattle).
+
+Made-up farm: Kōwhai, as LV6 (dairy, NSC, 31 May balance date), and on 1
+Sep 2025 it buys **20 bobby heifer calves for 2,400.00**, marked "Bobby
+calves" on the purchase.
+
+- **Rising one-year heifers:** 80 farm-bred x 788.90 = 63,112.00, plus the
+  bought calves' cost 2,400.00, plus 20 x 282.50 = 5,650.00: **71,162.00**
+  for 100 head.
+- **Totals:** closing value **551,494.50** (LV6's 543,444.50 + 8,050.00);
+  change in value 57,974.50; taxable profit **97,574.50**, LV6's plus the
+  bobby calves' NSC of 5,650.00 (their cost is both a purchase and in
+  closing stock).
+- **Refused:** "Bobby calves" on a sale, on anything but beef or dairy
+  cattle, or into a class that isn't rising one-year; and the valuation, if
+  the year has no bobby calf NSC.
+- **Not changed:** how rising one-year stock that die are taken out. Tohyee
+  takes them out at the average (LV23). Clause 3 leaves deaths out of
+  a + b, which differs only when bought stock and deaths are both in the
+  class. That needs a separate look.
 
 ## Livestock: pigs under the herd scheme (LV30; built by Claude 13 Nov 2026 from IRD's NAMV 2026 and OS 25/02, the details are Claude's, not yet reviewed)
 

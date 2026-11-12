@@ -14094,6 +14094,38 @@ migration 0265.
       who used to get no "+ New" at all (decision 904), now see only these.
       Viewers still see none, because they can't record. Worked example LS5.
 
+### Pictures on empty lists (13 Nov 2026; decision 1600)
+
+1600. **A page's main list, when empty, shows a small illustration (#509
+      Deliverable 3).** `Empty` takes an optional `picture`, one of the
+      illustrated icons, drawn at 48 px and hidden from screen readers; the
+      sentence and any action stay as they were. It's used on the farm
+      calendar and tasks, Analytics reports, CRM companies, people, tasks,
+      leads and campaigns, expense claims, IRD documents, R&D files and
+      tractor jobs. Empty sections inside a record or a form get no picture,
+      so busy screens stay quiet.
+
+### High-priced animals bought before livestock starts (13 Nov 2026; decision 1602)
+
+1602. **A high-priced animal bought before livestock's first year is carried
+      in, instead of refused (#243).** It was tested on an earlier return, so
+      the cost and five-times-NAMV test isn't run again. It opens the first
+      year at cost less IRD's rate for each year since the year bought, apart
+      from its class, and carries on as LV25. Its head stays in its class's
+      opening head; its value stays out of the class's opening value. It's
+      refused once any year is approved, and when it would already be worth
+      nothing. Worked example LV25B.
+
+### Purchased bobby calves under NSC (13 Nov 2026; decision 1603)
+
+1603. **A purchase of beef or dairy cattle into a rising one-year class can
+      be marked "Bobby calves" (#243).** Under national standard cost, each
+      one adds IRD's NSC for acquired bobby calves to the class's value, on
+      top of its cost, as clause 3 of the 1993 NSC determination says. The
+      rate is the dairy cattle "purchased bobby calves" NSC for the year,
+      for beef and dairy farms alike. The herd scheme isn't affected: it
+      values at NAMV. Tenant migration 0278. Worked example LV29.
+
 ### Pigs under the herd scheme (13 Nov 2026; decision 1604)
 
 1604. **Pigs are a kind of livestock, valued under the herd scheme only

@@ -1542,7 +1542,7 @@ function IrdDocuments({ organisationId, incomeYear, years, endMonth, onChanged }
       {!data ? (
         <p className={ui.muted}>Loading…</p>
       ) : data.documents.length === 0 ? (
-        <Empty>No IRD documents yet.</Empty>
+        <Empty picture="documents">No IRD documents yet.</Empty>
       ) : (
         <ul>
           {data.documents.map((document) => (

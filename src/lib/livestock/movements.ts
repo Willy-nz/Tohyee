@@ -113,6 +113,8 @@ export type Movement = {
   toClassCode: string | null;
   head: number;
   amount: string | null;
+  /** Purchases of beef or dairy cattle: bought as bobby calves (LV29). */
+  bobbyCalves: boolean;
   locationId: string | null;
   locationName: string | null;
   toLocationId: string | null;
@@ -454,7 +456,7 @@ export async function archiveLocation(tx: OrgTx, idInput: unknown, archived = tr
 // Movements -----------------------------------------------------------------
 
 const MOVEMENT_COLUMNS = `m.id::text, m.movement_date::text, m.movement_type, m.ownership, m.held_for, m.kind, m.class_code, m.to_class_code, m.head,
-  m.amount::text, m.location_id::text, l.name as location_name, m.to_location_id::text, tl.name as to_location_name,
+  m.amount::text, m.bobby_calves, m.location_id::text, l.name as location_name, m.to_location_id::text, tl.name as to_location_name,
   m.sales_invoice_line_id::text, i.invoice_number, m.bill_line_id::text, b.supplier_invoice_number as bill_reference, m.rations_for, m.journal_id::text, m.note,
   m.created_by_email, m.created_at::text, m.voided_at is not null as voided, m.void_reason`;
 const MOVEMENT_JOINS = `from livestock_movements m
@@ -478,6 +480,7 @@ type MovementRow = {
   amount: string | null;
   location_id: string | null;
   location_name: string | null;
+  bobby_calves: boolean;
   to_location_id: string | null;
   to_location_name: string | null;
   sales_invoice_line_id: string | null;
@@ -506,6 +509,7 @@ function toMovement(row: MovementRow): Movement {
     toClassCode: row.to_class_code,
     head: row.head,
     amount: row.amount,
+    bobbyCalves: row.bobby_calves,
     locationId: row.location_id,
     locationName: row.location_name,
     toLocationId: row.to_location_id,
@@ -616,6 +620,13 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
   if (salesInvoiceLineId && movementType !== "sale") throw new ValidationError("Only a sale can be linked to an invoice line.");
   if (billLineId && movementType !== "purchase") throw new ValidationError("Only a purchase can be linked to a bill line.");
   const note = optionalString(input.note, "note", { maxLength: 1000 });
+  // Bobby calves (LV29, decision 1603): dairy-bred calves bought unweaned for rearing, not at foot, into a rising one-year class.
+  const bobbyCalves = input.bobbyCalves === true || input.bobbyCalves === "true";
+  if (bobbyCalves) {
+    if (movementType !== "purchase") throw new ValidationError("Only a purchase can be bobby calves.");
+    if (kind !== "dairy_cattle" && kind !== "beef_cattle") throw new ValidationError("Bobby calves are beef or dairy cattle.");
+    if (definition.nsc !== "rising_1") throw new ValidationError(`Bobby calves go into a rising one-year class. ${definition.name} isn't one.`);
+  }
 
   const hash = requestHash("livestock_movement", {
     movementType,
@@ -632,6 +643,8 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     billLineId,
     rationsFor,
     note,
+    // Only when set, so a replay of a movement recorded before LV29 still matches.
+    ...(bobbyCalves ? { bobbyCalves } : {}),
   });
   const earlier = await tx.query<{ id: string; request_hash: string }>(
     "select id::text, request_hash from livestock_movements where command_source = $1 and idempotency_key = $2",
@@ -651,8 +664,8 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     const row = await tx.query<{ id: string }>(
       `insert into livestock_movements (command_source, idempotency_key, request_hash, movement_date, movement_type, ownership, held_for, kind,
          class_code, to_class_code, head, amount, location_id, to_location_id, sales_invoice_line_id, bill_line_id, note,
-         created_by_user_id, created_by_email, rations_for)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::numeric, $13, $14, $15, $16, $17, $18, $19, $20) returning id::text`,
+         created_by_user_id, created_by_email, rations_for, bobby_calves)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::numeric, $13, $14, $15, $16, $17, $18, $19, $20, $21) returning id::text`,
       [
         source,
         idempotencyKey,
@@ -674,6 +687,7 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
         tx.actor.userId,
         tx.actor.email,
         rationsFor,
+        bobbyCalves,
       ],
     );
     id = row.rows[0].id;
@@ -690,7 +704,7 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     eventType: "livestock.movement_recorded",
     entityType: "livestock_movement",
     entityId: id,
-    details: { movementType, movementDate, kind, classCode, toClassCode, head, heldFor, amount, rationsFor },
+    details: { movementType, movementDate, kind, classCode, toClassCode, head, heldFor, amount, rationsFor, ...(bobbyCalves ? { bobbyCalves } : {}) },
   });
   return { created: true, movement: await getMovement(tx, id) };
 }
@@ -1187,7 +1201,7 @@ export async function recordCounts(tx: OrgTx, input: { countDate: unknown; lines
 
 // For the valuation -------------------------------------------------------------
 
-export type YearMovement = HerdMovement & { id: string; amount: string | null; linkedNetAmount: string | null };
+export type YearMovement = HerdMovement & { id: string; amount: string | null; linkedNetAmount: string | null; bobbyCalves: boolean };
 
 export type YearFacts = {
   yearStart: string;
@@ -1218,8 +1232,9 @@ export async function yearFacts(tx: OrgTx, yearEnd: string): Promise<YearFacts> 
     head: number;
     amount: string | null;
     linked: string | null;
+    bobby_calves: boolean;
   }>(
-    `select m.id::text, m.movement_date::text, m.movement_type, m.kind, m.class_code, m.to_class_code, m.head, m.amount::text,
+    `select m.id::text, m.movement_date::text, m.movement_type, m.kind, m.class_code, m.to_class_code, m.head, m.amount::text, m.bobby_calves,
             coalesce(il.net_amount, bl.net_amount)::text as linked
        from livestock_movements m
        left join sales_invoice_lines il on il.id = m.sales_invoice_line_id
@@ -1244,6 +1259,7 @@ export async function yearFacts(tx: OrgTx, yearEnd: string): Promise<YearFacts> 
       head: row.head,
       amount: row.amount,
       linkedNetAmount: row.linked,
+      bobbyCalves: row.bobby_calves,
     })),
     closing,
     unexplained: counted.unexplained,

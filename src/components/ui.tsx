@@ -1,5 +1,6 @@
 "use client";
 
+import { IllustratedIcon, type IllustratedIconName } from "@/components/illustrated-icon";
 import { type ButtonHTMLAttributes, Children, cloneElement, isValidElement, type ReactElement, type ReactNode, useId } from "react";
 import Link from "next/link";
 import styles from "./ui.module.css";
@@ -182,8 +183,18 @@ export function WarningNote({ text }: { text: string }) {
   );
 }
 
-export function Empty({ children }: { children: ReactNode }) {
-  return <div className={styles.empty}>{children}</div>;
+/**
+ * An empty list or page. `picture` adds a small illustration (#509, decision
+ * 1600) for a page's main list: one sentence and one action beside it, never
+ * on a busy form or a section inside a record.
+ */
+export function Empty({ children, picture }: { children: ReactNode; picture?: IllustratedIconName }) {
+  return (
+    <div className={styles.empty}>
+      {picture ? <IllustratedIcon name={picture} size={48} /> : null}
+      {children}
+    </div>
+  );
 }
 
 export function Stat({ label, value }: { label: string; value: ReactNode }) {
