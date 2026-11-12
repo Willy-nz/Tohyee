@@ -4,7 +4,7 @@
     {
       "date": "2026-11-12",
       "title": "Tohyee 0.33.0: gift cards, Afterpay deposits and recoding in place",
-      "body": "Shopify gift cards are held until they're spent, with GST when sold. Afterpay deposits are matched to their orders, with the fee. Made-to-order shops can turn off stock items. Bank transactions can be recoded in place, manual journals voided, and accounts given reporting names.",
+      "body": "Shopify gift cards and voucher products are held until they're spent, with GST when sold. Afterpay deposits are matched to their orders, with the fee. Made-to-order shops can turn off stock items. Bank transactions can be recoded in place, manual journals voided, and accounts given reporting names.",
       "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.33.0"
     },
     {
