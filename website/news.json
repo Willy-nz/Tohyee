@@ -2,6 +2,12 @@
   "about": "Announcements shown on the Home page of the Tohyee server app (Windows), next to the GitHub releases. Edit this file on main and GitHub Pages publishes it to https://willy-nz.github.io/Tohyee/news.json. Each item: date (YYYY-MM-DD), title, body, and optionally link (https) and kind (\"conference\" shows it in the conference card).",
   "items": [
     {
+      "date": "2026-11-13",
+      "title": "Tohyee 0.35.0: stock in the farm Log, and pigs",
+      "body": "Move a mob, record births, deaths and treatments from the farm Log on your phone. Livestock adds pigs, bought bobby calves, high-priced animals from before your first year, and stock bought from family who used the herd scheme. Young stock under national standard cost now follows IRD's own formula.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.35.0"
+    },
+    {
       "date": "2026-11-12",
       "title": "Tohyee 0.34.0: pasture cover from satellite, and daily farm rain",
       "body": "Satellite greenness can now estimate pasture cover, from a line fitted to your own plate-meter readings and checked before you turn it on. Each farm gets daily rain and temperature from MetService, and rain can make the estimates closer. Voiding journals works on servers with a separate database login.",
