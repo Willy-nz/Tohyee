@@ -239,7 +239,8 @@ describeWithDatabase("livestock year-end valuation (LV4-LV12)", () => {
     const bobbies = { kind: "dairy_cattle", movementType: "purchase", movementDate: "2025-09-01", classCode: "r1_heifers", head: 20, amount: "2400.00", bobbyCalves: true };
     // Only a purchase of beef or dairy cattle into a rising one-year class can be bobby calves.
     await expect(move(org, { ...bobbies, classCode: "ma_cows" })).rejects.toThrow(/rising one-year class/);
-    await expect(move(org, { ...bobbies, movementType: "sale" })).rejects.toThrow(/Only a purchase/);
+    await expect(move(org, { ...bobbies, movementType: "death", amount: undefined })).rejects.toThrow(/Only a purchase or a sale/);
+    await expect(move(org, { ...bobbies, kind: "beef_cattle", movementType: "sale" })).rejects.toThrow(/sold are dairy cattle/);
     await expect(move(org, { ...bobbies, kind: "sheep", classCode: "ewe_hoggets" })).rejects.toThrow(/beef or dairy cattle/);
     const recorded = await move(org, bobbies);
     expect(recorded.movement).toMatchObject({ bobbyCalves: true, amount: "2400.00" });
@@ -299,6 +300,37 @@ describeWithDatabase("livestock year-end valuation (LV4-LV12)", () => {
     const herd = await run(other, (tx) => previewValuation(tx, { yearEnd: "2026-05-31" }));
     expect(herd.problems).toEqual([]);
     expect(herd.workings.totals).toMatchObject({ closingValue: "1016640.00" });
+  });
+
+  it("LV32: rising one-year stock under NSC follows IRD's clause 3, so those that die carry no NSC (decision 1606)", async () => {
+    const org = "livestock-kowhai-clause-3";
+    await farm(
+      org,
+      5,
+      "2025-06-01",
+      [
+        ["dairy_cattle", "ma_cows", 300, "357000.00"],
+        ["dairy_cattle", "r2_heifers", 70, "83300.00"],
+        ["dairy_cattle", "r1_heifers", 75, "53220.00"],
+      ],
+      "493520.00",
+    );
+    await kowhaiYear(org);
+    const dairy = { kind: "dairy_cattle" };
+    await move(org, { ...dairy, movementType: "purchase", movementDate: "2025-09-01", classCode: "r1_heifers", head: 20, amount: "2400.00" });
+    await move(org, { ...dairy, movementType: "death", movementDate: "2025-10-01", classCode: "r1_heifers", head: 5 });
+    await move(org, { ...dairy, movementType: "sale", movementDate: "2026-02-01", classCode: "r1_heifers", head: 10, amount: "9000.00" });
+    // Bull calves sold as bobby calves: left out of item b.
+    await move(org, { ...dairy, movementType: "birth", movementDate: "2025-08-15", classCode: "r1_steers_bulls", head: 30 });
+    await move(org, { ...dairy, movementType: "sale", movementDate: "2025-08-25", classCode: "r1_steers_bulls", head: 30, amount: "600.00", bobbyCalves: true });
+    await run(org, (tx) => recordElection(tx, { kind: "dairy_cattle", method: "nsc", fromIncomeYear: 2026 }));
+    const preview = await run(org, (tx) => previewValuation(tx, { yearEnd: "2026-05-31" }));
+    expect(preview.problems).toEqual([]);
+    const classes = preview.workings.kinds[0].classes;
+    // a 85, b 10, c 20: ((85 + 10 - 20) x 788.90 + 2,400.00) / 95 x 85 = 61,567.50 x 85 / 95.
+    expect(classes.find((entry) => entry.classCode === "r1_heifers")).toMatchObject({ closingHead: 85, closingValue: "55086.71" });
+    // None left of the bull calves, so no line for them.
+    expect(classes.find((entry) => entry.classCode === "r1_steers_bulls")).toBeUndefined();
   });
 
   it("LV10, LV11: Tussock's beef herd scheme and sheep NSC in one journal", async () => {
