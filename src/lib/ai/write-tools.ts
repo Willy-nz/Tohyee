@@ -1,3 +1,4 @@
+import { aiCorrectJournal, previewAiJournalCorrection } from "@/lib/ai/journal-correct";
 import { aiDiscardDraftJournal, aiVoidJournal, previewAiJournalVoid } from "@/lib/ai/journal-void";
 import { addForecastCommentary, addGroupCommentary } from "@/lib/commentary/service";
 import { approvalNeededForAi } from "@/lib/approvals/requests";
@@ -458,6 +459,36 @@ export const WRITE_TOOLS: readonly AiTool[] = [
         };
       }
       return aiVoidJournal(tx, { journalId: args.journalId, previewHash: args.previewHash, idempotencyKey: idempotencyKey(args.idempotencyKey), source: context.source });
+    },
+  },
+  {
+    name: "correct_journal",
+    title: "Correct a manual journal",
+    level: "full",
+    description:
+      "Corrects a posted manual journal (or a correction's replacement), whoever posted it, as Edit this journal does on the Journals page (Will, 12 Nov 2026): the original is kept, and a reversal and the new version are posted, both on the original's date unless postingDate is given. Never an invoice's, bill's, payment's, bank transaction's or any other record's journal: those are corrected at their source (use recode_bank_transactions for bank lines). Refused in a locked period, when a line is matched to a bank statement line, and when it's already been voided or corrected (correct its replacement instead). Give the whole new version in lines; reference and description are kept unless given. First call it without previewHash to see the original, the new version and the effect by account, and check it's what was asked; then call it again with the same arguments, the previewHash and a new idempotencyKey.",
+    inputSchema: schema(
+      {
+        journalId: ID("journal"),
+        lines: JOURNAL_LINES,
+        postingDate: { ...DATE, description: "Left out, the original's date." },
+        reference: { type: "string", description: "Left out, the original's reference." },
+        description: { type: ["string", "null"], description: "Left out, the original's description." },
+        previewHash: { type: "string", description: "From the preview. Left out, nothing changes and the preview is the answer." },
+        idempotencyKey: IDEMPOTENCY,
+      },
+      ["journalId", "lines"],
+    ),
+    async run(tx, args, context) {
+      const input = { journalId: args.journalId, postingDate: args.postingDate, reference: args.reference, description: args.description, lines: args.lines };
+      if (args.previewHash == null || args.previewHash === "") {
+        return {
+          preview: true,
+          ...(await previewAiJournalCorrection(tx, input)),
+          next: "Check this is the change the person asked for. To go ahead, call correct_journal again with the same arguments, this previewHash and a new idempotencyKey.",
+        };
+      }
+      return aiCorrectJournal(tx, { ...input, previewHash: args.previewHash, idempotencyKey: idempotencyKey(args.idempotencyKey), source: context.source });
     },
   },
   {

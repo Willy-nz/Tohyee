@@ -2587,6 +2587,32 @@ Jun 2026: Dr 6010 **100.00** / Cr 3000 **100.00**.
   since, and one already posted (void it instead). The audit log keeps
   "journal_draft.discarded_by_ai".
 
+### The AI correcting manual journals (AJC1-AJC5; Will, 12 Nov 2026; the details are Claude's, not yet reviewed)
+
+Tested in `tests/integration/ai-journal-correct.test.ts`. 31 March year end.
+A person posts a manual journal "Shopify sales" on 30 Jun 2026: Dr 6010
+**100.00** / Cr 3000 **100.00**. The credit should have gone to 4000 Sales.
+
+- **AJC1** `correct_journal` (Full access only) corrects a manual journal or
+  a correction's replacement, whoever posted it, a person or an AI. It does
+  what **Edit this journal** does on the Journals page. Refused: a reversal,
+  and any journal an invoice, bill, payment, bank transaction or other
+  record made (those are corrected at their source).
+- **AJC2** First a preview: the original lines, the new version, and the
+  effect by account (here 3000 **+100.00**, 4000 **-100.00**). Nothing
+  changes.
+- **AJC3** Called again with the same arguments and the hash, it posts a
+  reversal (Dr 3000 / Cr 6010 **100.00**) and the new version (Dr 6010 /
+  Cr 4000 **100.00**), both on 30 Jun 2026. The reference and description
+  are kept unless new ones are given, and another date can be given. The
+  original is kept. A retry with the same key posts nothing more. Correcting
+  the original again is refused, but its replacement can be corrected.
+- **AJC4** Refused when the journal's date, or the date given, is in a
+  locked period, and when one of its lines is matched to a bank statement
+  line.
+- **AJC5** An unbalanced new version is refused. A new version that differs
+  from the preview (the hash no longer matches) is refused: preview again.
+
 ### Modelled pasture cover from satellite greenness (MCV1-MCV8; Jess, 12 Nov 2026, #612 phase 3; the details are Claude's, not yet reviewed)
 
 Tested in `tests/unit/vegetation-cover-fit.test.ts` and
