@@ -316,7 +316,7 @@ export function TractorHome({ organisationId, farm }: FarmContext) {
       <Card title="Jobs on the server">
         {server.error ? <Notice tone="error">{server.error}</Notice> : null}
         {!server.data && !server.error ? <p className={ui.muted}>Loading…</p> : null}
-        {server.data && server.data.jobs.length === 0 ? <Empty>No tractor jobs yet.</Empty> : null}
+        {server.data && server.data.jobs.length === 0 ? <Empty picture="vehicle">No tractor jobs yet.</Empty> : null}
         {server.data?.jobs.length ? (
           <ul className={styles.list}>
             {server.data.jobs.map((job) => (

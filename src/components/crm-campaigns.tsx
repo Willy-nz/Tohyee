@@ -154,7 +154,7 @@ export function CampaignsPage({ organisationId }: { organisationId: string }) {
             }}
           />
         ) : null}
-        {data.data && campaigns.length === 0 && !adding ? <Empty>No campaigns yet.</Empty> : null}
+        {data.data && campaigns.length === 0 && !adding ? <Empty picture="mail">No campaigns yet.</Empty> : null}
         {campaigns.length > 0 ? (
           <div className={ui.tableWrap}>
             <table className={ui.table}>
