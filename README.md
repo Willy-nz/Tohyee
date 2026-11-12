@@ -130,7 +130,7 @@ real phone or in a paddock yet.
 | Release | What's new |
 | --- | --- |
 | **Next** (on `main`) | Effluent management; aerial photos on farm maps with your own LINZ key. |
-| [**0.35.0**](docs/releases/0.35.0.md) | Stock moves, births, deaths and treatments in the farm Log, farm items in + New, pigs, bobby calves and associated-person purchases in livestock, and IRD's own formula for young stock under NSC. |
+| [**0.35.0**](docs/releases/0.35.0.md) | Stock moves, births, deaths and treatments in the farm Log, farm items in + New, Server › Logs, pigs, bobby calves and associated-person purchases in livestock, and IRD's own formula for young stock under NSC. |
 | [**0.34.0**](docs/releases/0.34.0.md) | Modelled pasture cover from satellite greenness and your plate-meter readings, daily farm rain and temperature from MetService, and a fix for voiding journals on servers with a separate database login. |
 | [**0.33.0**](docs/releases/0.33.0.md) | Shopify gift cards held until spent, Afterpay deposits matched to their orders with the fee, a stock question for made-to-order shops, recode in place, Void for manual journals, and reporting names. |
 | [**0.32.0**](docs/releases/0.32.0.md) | Annual financial statements as one paged, editable document (cover, contents, compilation report, depreciation schedule), a layout editor with Add column, Remove & redo on bank lines, and revenue recognition in Settings. |
