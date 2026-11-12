@@ -23,7 +23,7 @@ describeWithDatabase("income tax: IRD payments from the books", () => {
   const accountId = async (code: string) => (await as((tx) => tx.query<{ id: string }>("select id::text from accounts where code = $1", [code]))).rows[0].id;
 
   beforeAll(async () => {
-    server = await startTestServer();
+    server = await startTestServer({ separateRuntimeLogin: true });
     owner = await createTestUser("taxbooks-owner@example.com", { serverAdmin: true });
     bookkeeper = await createTestUser("taxbooks-bookkeeper@example.com");
     await createTestOrganisation(owner, org);

@@ -87,7 +87,8 @@ export async function voidJournals(
   );
   if (earlier.rows.length > 0) return { created: false, voided: earlier.rows.map((row) => ({ journalId: row.related_journal_id, reversalJournalId: row.id })) };
   const ids = requireArray(input.journalIds, "journalIds", MAX_VOID_JOURNALS).map((id, index) => requireId(id, `journalIds[${index}]`));
-  for (const id of ids) await tx.query("select id from ledger_journals where id = $1 for update", [id]);
+  // Advisory locks, not FOR UPDATE: the runtime login has no UPDATE on posted journals.
+  for (const id of [...ids].sort((a, b) => Number(a) - Number(b))) await tx.query("select pg_advisory_xact_lock(hashtext('ledger_journal_void:' || $1))", [id]);
   const plan = await planVoidJournals(tx, { journalIds: ids, voidDate: input.voidDate });
   if (input.previewHash !== plan.hash) throw new ConflictError("Something has changed since the preview. Preview it again.");
   const stuck = plan.items.filter((item) => item.blocked);

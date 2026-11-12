@@ -38,7 +38,7 @@ describeWithDatabase("voiding manual journals", () => {
     ).journal.id;
 
   beforeAll(async () => {
-    server = await startTestServer();
+    server = await startTestServer({ separateRuntimeLogin: true });
     owner = await createTestUser("owner@example.com", { serverAdmin: true });
     viewer = await createTestUser("viewer@example.com");
     await createTestOrganisation(owner, ORG);

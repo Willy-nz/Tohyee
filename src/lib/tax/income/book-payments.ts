@@ -133,7 +133,8 @@ export async function bookPayments(tx: OrgTx): Promise<BookPayments> {
 export async function countBookPayment(tx: OrgTx, input: { journalLineId: unknown; incomeYear: unknown }): Promise<{ paymentId: string; linkedTyped: boolean }> {
   const lineId = requireId(input.journalLineId, "journalLineId");
   const incomeYear = requireIncomeYear(input.incomeYear);
-  await tx.query("select 1 from ledger_journal_lines where id = $1 for update", [lineId]);
+  // An advisory lock, not FOR UPDATE: the runtime login has no UPDATE on posted journal lines.
+  await tx.query("select pg_advisory_xact_lock(hashtext('income_tax_book_payment:' || $1))", [lineId]);
   const counted = await tx.query<{ id: string }>("select id::text from income_tax_payments where journal_line_id = $1", [lineId]);
   if (counted.rows[0]) throw new ConflictError("That payment is already counted.");
   const accounts = (await listPaymentAccounts(tx)).map((account) => account.accountId);

@@ -63,7 +63,7 @@ describeWithDatabase("the AI voiding its own journals", () => {
   };
 
   beforeAll(async () => {
-    server = await startTestServer();
+    server = await startTestServer({ separateRuntimeLogin: true });
     owner = await createTestUser("owner@example.com", { serverAdmin: true });
     await createTestOrganisation(owner, ORG);
     for (const [name, level] of [
