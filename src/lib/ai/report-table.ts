@@ -112,7 +112,7 @@ function profitAndLossRows(groups: Record<(typeof PROFIT_AND_LOSS_GROUPS)[number
     for (const section of group.sections) {
       if (group.sections.length > 1) rows.push({ key: `s${section.key}`, kind: "subheading", label: section.label, values: {} });
       for (const line of [...section.lines].sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))) {
-        rows.push({ key: `a${line.accountId}`, kind: "account", label: `${line.code} · ${line.name}`, accountId: line.accountId, code: line.code, values: line.values });
+        rows.push({ key: `a${line.accountId}`, kind: "account", label: line.name, accountId: line.accountId, code: line.code, values: line.values });
       }
     }
     rows.push({ key: `t${entry.key}`, kind: "total", label: entry.totalLabel, values: group.total });
@@ -216,7 +216,7 @@ export function customTable(report: { id: string; title: string; kind: string; p
     for (const row of block.rows) {
       if (row.kind === "group" && row.showAccounts) {
         for (const line of row.lines) {
-          rows.push({ key: `${row.id}:${line.accountId ?? line.code}`, kind: "account", label: `${line.code} · ${line.name}`, ...(line.accountId ? { accountId: line.accountId } : {}), code: line.code, values: line.values });
+          rows.push({ key: `${row.id}:${line.accountId ?? line.code}`, kind: "account", label: line.name, ...(line.accountId ? { accountId: line.accountId } : {}), code: line.code, values: line.values });
         }
       }
       const kind: ReportTableRowKind = ROW_KINDS.has(row.kind as ReportTableRowKind) ? (row.kind as ReportTableRowKind) : "group";

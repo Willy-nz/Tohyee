@@ -45,7 +45,7 @@ function Lines({ rows }: { rows: StatementRow[] }) {
   return (
     <>
       {rows.map((row) => (
-        <Row key={`${row.accountId ?? row.label}`} label={row.code ? `${row.code} · ${row.label}` : row.label} amount={row.amount} indent />
+        <Row key={`${row.accountId ?? row.label}`} label={row.label} amount={row.amount} indent />
       ))}
     </>
   );

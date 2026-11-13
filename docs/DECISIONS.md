@@ -14730,3 +14730,15 @@ show, 100 a page, and clicking one should let her edit it.
       with no account to choose (GL1). It has the same tracking filter,
       export, print and Save as custom report. Account transactions keeps
       its account picker.
+
+### Financial reports show account names, not codes (13 Nov 2026; decision 1604)
+
+1604. **"Sales", not "4000 · Sales".** Jess asked for the financial reports
+      to show "Sales instead of 1234 Sales", as Xero does. The profit and
+      loss, balance sheet (one column, split by tracking or compared), custom
+      layouts and the annual statements now show each account's reporting
+      name, or its name, without the code. The code is still on each row (a
+      tooltip on screen, and a separate field for the AI). The trial balance,
+      ledger, bank reconciliation and transaction lists keep their codes, so
+      it's clear which account is which. Claude's details, not yet reviewed.
+
