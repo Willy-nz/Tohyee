@@ -259,6 +259,11 @@ function parseRowBody(base: FinancialReportBase, raw: Record<string, unknown>, i
       const except = list(raw.exceptCodes, `The accounts left out of ${label}`, LIMITS.accountCodesPerGroup).map((code) =>
         text(code, `An account code left out of ${label}`, 20, { required: true }),
       );
+      const also = list(raw.alsoCodes, `The accounts moved into ${label}`, LIMITS.accountCodesPerGroup).map((code) =>
+        text(code, `An account code moved into ${label}`, 20, { required: true }),
+      );
+      const both = also.filter((code) => except.includes(code));
+      if (both.length > 0) throw new ValidationError(`${label} both leaves out and takes ${both.join(", ")}. It can only do one.`);
       return {
         id,
         kind: "group",
@@ -266,6 +271,7 @@ function parseRowBody(base: FinancialReportBase, raw: Record<string, unknown>, i
         accountTypes: [...new Set(types as AccountType[])],
         accountCodes: [...new Set(codes)],
         ...(except.length > 0 && codes.length === 0 ? { exceptCodes: [...new Set(except)] } : {}),
+        ...(also.length > 0 && codes.length === 0 ? { alsoCodes: [...new Set(also)] } : {}),
         showAccounts: bool(raw.showAccounts, "showAccounts"),
       };
     }
@@ -361,7 +367,7 @@ export async function parseLayout(tx: OrgTx, base: FinancialReportBase, input: u
     return { id, kind: "table", title: text(block.title, "A table's title", LIMITS.labelLength, { required: false }), rows, ...extras };
   });
   const codes = new Set(
-    blocks.flatMap((block) => (block.kind === "table" ? block.rows.flatMap((row) => (row.kind === "group" ? [...row.accountCodes, ...(row.exceptCodes ?? [])] : [])) : [])),
+    blocks.flatMap((block) => (block.kind === "table" ? block.rows.flatMap((row) => (row.kind === "group" ? [...row.accountCodes, ...(row.exceptCodes ?? []), ...(row.alsoCodes ?? [])] : [])) : [])),
   );
   if (codes.size > 0) {
     const found = await tx.query<{ code: string }>("select code from accounts where code = any($1::text[])", [[...codes]]);
@@ -408,6 +414,7 @@ const SCOPE: Record<FinancialReportBase, AccountClass[]> = {
 
 function groupIncludes(row: Extract<ReportRow, { kind: "group" }>, account: Account): boolean {
   if (row.accountCodes.length > 0) return row.accountCodes.includes(account.code);
+  if ((row.alsoCodes ?? []).includes(account.code)) return true;
   return row.accountTypes.includes(account.accountType) && !(row.exceptCodes ?? []).includes(account.code);
 }
 

@@ -4689,6 +4689,32 @@ expenses **80.00** / Cr 1000, so June's net profit is **590.00**.
   list them first in the report picker; another person's stars aren't
   shown. Starring something that isn't a report is refused.
 
+- **CR21** Moving an account to another group (as Xero does, not yet
+  reviewed; decision 1614). The CR16 setup, in the standard June layout
+  (Cost of sales **300.00**, Gross profit **900.00**, Operating expenses
+  **330.00**, Net profit **590.00**). Dragging 6120 Motor vehicle expenses
+  from Operating expenses onto Cost of sales (or ticking it and choosing
+  **Move to** Cost of sales) gives Cost of sales **380.00** (5000 and
+  6120), Gross profit **820.00**, Operating expenses **250.00** and Net
+  profit still **590.00**: no formula changes, the two groups' totals move
+  by the account's amount. Cost of sales still takes every direct costs
+  account, and 6120 as well; Operating expenses still takes every new
+  expense account, and leaves 6120 out. Nothing is counted twice or left
+  out. Moving it back puts every figure back. A group of chosen accounts
+  can't be emptied this way (move or delete the group instead). A layout
+  where one group both leaves an account out and takes it is refused.
+  Amounts keep the direction the standard reports show them in, as for any
+  group: a cost moved into an income group adds to it, so keep income and
+  costs in separate groups.
+- **CR22** Edit layout's first save (as Xero does, not yet reviewed;
+  decision 1615; screen behaviour, checked by hand). **Edit layout** on a
+  report with no layout of its own starts a draft; its first **Update
+  layout** also makes it that report's default layout, so Reports shows the
+  change straight away, and says so with how to go back. This narrows CR18's
+  difference from Xero: versions are still kept and "Save as" still makes a
+  named copy that isn't the default. A draft started any other way (Custom,
+  Save as) only becomes the default with "Set as default layout".
+
 ### The layout editor (LE1-LE3; Jess, 11 Nov 2026, from a screenshot of the editor she's used to; Claude's details, not yet reviewed)
 
 Tested in `tests/integration/custom-reports.test.ts` (LE3); LE1 and LE2 are

@@ -15,7 +15,7 @@ import {
   setCustomReportArchived,
   updateCustomReport,
 } from "@/lib/reports/custom";
-import { type ComputedBlock, type CustomReportFigures, type CustomReportLayout, groupAccounts, type ReportRow } from "@/lib/reports/custom-layout";
+import { type ComputedBlock, type CustomReportFigures, type CustomReportLayout, groupAccounts, moveAccounts, type ReportRow } from "@/lib/reports/custom-layout";
 import { profitAndLoss } from "@/lib/reports/financial";
 import { listFavourites, listLayoutDefaults, runDefaultLayout, setFavourite, setLayoutDefault } from "@/lib/reports/report-layouts";
 import { createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, key, startTestServer, type TestServer } from "../helpers/test-server";
@@ -98,6 +98,45 @@ describeWithDatabase("report layouts", () => {
     expect(figures.notInReport).toEqual([]);
     const standard = await w.as((tx) => profitAndLoss(tx, { from: "2026-06-01", to: "2026-06-30" }));
     expect(standard.netProfit).toBe("590.00");
+  });
+
+  it("CR21: moving an account to another group moves its amount and keeps net profit", async () => {
+    const w = await setup(true);
+    const report = await w.start();
+    const moved = await w.save(report, (layout) => moveAccounts(layout, "main", "expenses", ["6120"], "cost_of_sales"));
+    const figures = moved.figures as CustomReportFigures;
+    const rows = rowsOf(figures);
+    expect(rows["Cost of sales"]).toEqual(["380.00"]);
+    expect(rows["Gross profit"]).toEqual(["820.00"]);
+    expect(rows["Operating expenses"]).toEqual(["250.00"]);
+    expect(rows["Net profit"]).toEqual(["590.00"]);
+    expect(table(figures).rows.find((row) => row.label === "Cost of sales")!.lines.map((line) => line.code)).toEqual(["5000", "6120"]);
+    expect(figures.inSeveralGroups).toEqual([]);
+    expect(figures.notInReport).toEqual([]);
+    // Cost of sales still takes its own type, and 6120 as well.
+    expect(rowsOfTable(moved.report.layout as CustomReportLayout).find((row) => row.id === "cost_of_sales")).toMatchObject({ accountTypes: ["direct_costs"], alsoCodes: ["6120"] });
+
+    // Moving it back puts every figure back.
+    const back = await w.save(report, (layout) => moveAccounts(layout, "main", "cost_of_sales", ["6120"], "expenses"));
+    const again = rowsOf(back.figures as CustomReportFigures);
+    expect(again["Cost of sales"]).toEqual(["300.00"]);
+    expect(again["Gross profit"]).toEqual(["900.00"]);
+    expect(again["Operating expenses"]).toEqual(["330.00"]);
+    expect(again["Net profit"]).toEqual(["590.00"]);
+
+    // A group can't both leave an account out and take it; and the account must exist.
+    await expect(
+      w.save(report, (layout) => {
+        const row = rowsOfTable(layout).find((entry) => entry.id === "expenses") as Extract<ReportRow, { kind: "group" }>;
+        row.exceptCodes = ["6120"];
+        row.alsoCodes = ["6120"];
+      }),
+    ).rejects.toThrow("It can only do one");
+    await expect(
+      w.save(report, (layout) => {
+        (rowsOfTable(layout).find((entry) => entry.id === "cost_of_sales") as Extract<ReportRow, { kind: "group" }>).alsoCodes = ["9999"];
+      }),
+    ).rejects.toThrow("There's no account 9999");
   });
 
   it("CR17: × ÷ and % of, with blanks for dividing by zero and decimal rounding", async () => {

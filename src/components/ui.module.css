@@ -1622,6 +1622,19 @@
   box-shadow: inset 0 2px 0 var(--link);
 }
 
+/* An account being dragged over a group (CR21): the whole group shows as the place it will land. */
+.table.statement tr.layoutDropGroup td {
+  background: color-mix(in srgb, var(--link) 9%, transparent);
+}
+
+.layoutDragLine {
+  cursor: grab;
+}
+
+.layoutDragLine:active {
+  cursor: grabbing;
+}
+
 .layoutNoteRow td {
   padding-top: 0 !important;
   color: var(--text-muted);
@@ -1635,10 +1648,17 @@
 }
 
 .layoutGroupBar {
-  display: inline-flex;
+  display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+
+/* One line on a wide screen: Move to, its button, "or", a new group's name, its button. */
+.layoutGroupBar input,
+.layoutGroupBar select {
+  width: 15rem;
+  max-width: 100%;
 }
 
 @media print {

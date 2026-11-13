@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useState } from "react";
 import { useAccounts } from "@/components/books";
 import { DateInput } from "@/components/date-input";
@@ -29,6 +29,7 @@ import {
   FORMULA_OPERATIONS,
   type FormulaOperation,
   groupAccounts,
+  moveAccounts,
   lastDayOfMonth,
   moveRow,
   newLayoutId,
@@ -359,6 +360,8 @@ function ReportTable({
   const tableOf = (layout: CustomReportLayout) => layout.blocks.find((entry) => entry.id === block.id) as Extract<ReportBlock, { kind: "table" }>;
   const rowOf = (layout: CustomReportLayout, id: string) => tableOf(layout).rows.find((r) => r.id === id)!;
   const [announce, setAnnounce] = useState("");
+  /** Just this table, for checking a change before it's made. */
+  const figuresLayout = (rows: ReportRow[]): CustomReportLayout => ({ title: "", columns: {} as CustomReportLayout["columns"], blocks: [{ id: block.id, kind: "table", title: block.title, rows }] });
 
   const editor: RowEditor | undefined = editable
     ? {
@@ -384,6 +387,21 @@ function ReportTable({
             const grouped = groupAccounts(layout, block.id, rowId, codes, label);
             layout.blocks = grouped.layout.blocks;
           }),
+        moveAccounts: (fromRowId, codes, toRowId) => {
+          const rows = layoutBlock?.rows ?? [];
+          const to = rows.find((entry) => entry.id === toRowId);
+          try {
+            // Checked first, so a refusal (the group's last account) shows as a message.
+            moveAccounts(figuresLayout(rows), block.id, fromRowId, codes, toRowId);
+          } catch (caught) {
+            onError(caught instanceof Error ? caught.message : "Those accounts can't be moved there.");
+            return;
+          }
+          onChange((layout) => {
+            layout.blocks = moveAccounts(layout, block.id, fromRowId, codes, toRowId).blocks;
+          });
+          setAnnounce(`${codes.length} ${codes.length === 1 ? "account" : "accounts"} moved to ${to?.label ?? "the group"}.`);
+        },
         rowMenu: (row) => {
           const layoutRow = layoutBlock?.rows.find((entry) => entry.id === row.id);
           if (!layoutRow) return [];
@@ -1294,6 +1312,7 @@ export function FavouriteToggle({ favourite, name }: { favourite: ReturnType<typ
 export function CustomReportPage({ organisationId, reportId }: { organisationId: string; reportId: string }) {
   const confirm = useConfirm();
   const router = useRouter();
+  const fromEditLayout = useSearchParams()?.get("from") === "edit-layout";
   const { can, current } = useWorkspace();
   const loaded = useApiData<Loaded>(`/api/custom-reports/${encodeURIComponent(reportId)}`, { organisationId });
   const accounts = useAccounts(organisationId, true);
@@ -1387,6 +1406,16 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
       setState(saved);
       setDraft(null);
       setPreview(null);
+      // Started with Edit layout on a report that has no layout of its own yet: Reports shows this one from now on, as in Xero (CR22, decision 1615).
+      if (fromEditLayout && !defaultList.some((entry) => entry.base === report.base)) {
+        const result = await api<{ defaults: Array<{ base: string; reportId: string }> }>("/api/report-layouts", {
+          method: "PUT",
+          body: { organisationId, base: report.base, reportId: report.id },
+        });
+        setDefaultsOverride(result.defaults);
+        setMessage(`Saved. Reports now shows the ${baseName} in this layout. To go back to the standard one, choose "Stop using as the ${baseName} layout" under ⋯.`);
+        return;
+      }
       setMessage("Saved.");
     });
 

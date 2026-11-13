@@ -41,7 +41,8 @@ export function useReportLayout(organisationId: string, base: LayoutBase) {
           periodEnd: lastDayOfMonth(periodEnd),
         },
       });
-      router.push(`/operations/reports/custom/${result.report.id}`);
+      // A layout started here becomes the report's layout on its first save, as in Xero (CR22).
+      router.push(`/operations/reports/custom/${result.report.id}?from=edit-layout`);
     } catch (caught) {
       setError(errorMessage(caught));
       setBusy(false);
