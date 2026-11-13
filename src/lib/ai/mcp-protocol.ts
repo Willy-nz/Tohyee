@@ -28,6 +28,7 @@ export const JSON_RPC = {
   UNAUTHORIZED: -32001,
 } as const;
 
+import { isDestructiveTool } from "@/lib/ai/tool-names";
 import { STALE_TOOL_LIST_NOTE, type ToolListState } from "@/lib/ai/mcp-tool-list";
 
 export type JsonRpcId = string | number | null;
@@ -139,8 +140,8 @@ export async function handleMcpMessage(message: unknown, server: McpServer): Pro
           annotations: {
             title: tool.title,
             readOnlyHint: tool.readOnly !== false,
-            // No tool deletes, voids or archives anything (decision 347).
-            destructiveHint: false,
+            // Voids, deletes, archives and the like (decisions 1609-1612; decision 347 said there were none).
+            destructiveHint: isDestructiveTool(tool.name),
             idempotentHint: tool.readOnly !== false,
             openWorldHint: false,
           },

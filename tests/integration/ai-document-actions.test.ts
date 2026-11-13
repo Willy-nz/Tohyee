@@ -8,7 +8,7 @@ import { createTestOrganisation, createTestUser, describeWithDatabase, inOrganis
 const ORG = "ai-document-actions";
 type Json = Record<string, unknown>;
 
-/** The sales, purchases and bank screens' actions as AI tools (decision 1600, part 2). Made-up figures. */
+/** The sales, purchases and bank screens' actions as AI tools (decision 1609, part 2). Made-up figures. */
 describeWithDatabase("AI tools for document actions", () => {
   let server: TestServer;
   let owner: SessionUser;

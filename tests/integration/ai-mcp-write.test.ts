@@ -130,7 +130,7 @@ describeWithDatabase("AI keys that make drafts and post (decisions 346-348)", ()
   });
 
   it("a tool that deletes, voids, archives, rolls back, refunds or removes anything is Full access and checks first", () => {
-    // Since decision 1600 (Will: an AI tool for every screen action) such tools exist, but only at Full access,
+    // Since decision 1609 (Will: an AI tool for every screen action) such tools exist, but only at Full access,
     // and each shows what it acts on before doing it: a previewHash or confirmHash from a first call.
     // discard_own_draft_journal discards only an AI's own unedited draft (decision 1595).
     const destructive = ["delete", "void", "archive", "unarchive", "rollback", "roll", "remove", "revoke", "undo", "unreconcile", "reopen", "dispose", "discard", "exclude"];

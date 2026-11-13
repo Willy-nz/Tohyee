@@ -28,7 +28,7 @@ import {
 import { CUSTOM_FIELD_RECORDS, CUSTOM_FIELD_TYPES, CONTACT_USES, DOCUMENT_KINDS } from "@/lib/custom-fields/values";
 
 /**
- * AI tools for screen actions, part 3 (decision 1600): journals, the lock
+ * AI tools for screen actions, part 3 (decision 1609): journals, the lock
  * date, tax codes, payment terms, salespeople, expense claims, fixed
  * assets, repeating invoices and bills, stock, item units and budgets. Each
  * calls the screen's own service at the screen's role; voids, rollbacks,

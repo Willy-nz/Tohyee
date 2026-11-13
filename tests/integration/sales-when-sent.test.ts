@@ -359,7 +359,7 @@ describeWithDatabase("Shopify sales when sent", () => {
     expect(await books(w)).toEqual({ held: "0.00", sales: "-130.00", cogs: "20.00", stock: "0.00" });
   });
 
-  it("the AI tools for these screens (decision 1600): list, apply, mark sent and void journals, at the screens' roles", async () => {
+  it("the AI tools for these screens (decision 1609): list, apply, mark sent and void journals, at the screens' roles", async () => {
     const w = await setup({ whenSent: false });
     const ai = (role: ToolContext["role"]): ToolContext => ({ role, organisationId: w.org, source: "ai-7", accessLevel: "full", grantedAccessLevel: "full" });
     const call = (name: string, args: Record<string, unknown>, role: ToolContext["role"] = "owner") => w.as((tx) => findAiTool(name)!.run(tx, args, ai(role))) as Promise<Record<string, unknown>>;

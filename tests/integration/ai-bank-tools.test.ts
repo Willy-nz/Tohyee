@@ -462,7 +462,7 @@ describeWithDatabase("AI keys reconciling bank lines (decision 488, AIB1-AIB8)",
   });
 
   it("only Full access tools that check first delete, void, exclude or switch anything off", () => {
-    // Decision 1600 (Will: an AI tool for every screen action): these exist, at Full access, each confirming first
+    // Decision 1609 (Will: an AI tool for every screen action): these exist, at Full access, each confirming first
     // (checked in ai-mcp-write.test.ts). Nothing else carries such a flag in its input.
     for (const tool of AI_TOOLS) {
       const destructive = tool.name.split("_").some((word) => ["delete", "void", "archive", "exclude", "deactivate", "unreconcile", "remove", "discard", "undo"].includes(word));
