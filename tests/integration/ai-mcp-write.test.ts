@@ -129,19 +129,20 @@ describeWithDatabase("AI keys that make drafts and post (decisions 346-348)", ()
     expect(DRAFT).not.toContain("approve_invoice");
   });
 
-  it("no tool deletes, voids, archives, rolls back, refunds or removes anything", () => {
+  it("a tool that deletes, voids, archives, rolls back, refunds or removes anything is Full access and checks first", () => {
+    // Since decision 1600 (Will: an AI tool for every screen action) such tools exist, but only at Full access,
+    // and each shows what it acts on before doing it: a previewHash or confirmHash from a first call.
+    // discard_own_draft_journal discards only an AI's own unedited draft (decision 1595).
+    const destructive = ["delete", "void", "archive", "unarchive", "rollback", "roll", "remove", "revoke", "undo", "unreconcile", "reopen", "dispose", "discard", "exclude"];
     for (const tool of AI_TOOLS) {
-      // Remove & redo voids what a line created, after a preview, at Full access only: Jess asked for it (decision 1574).
-      // void_own_journal voids only a manual journal the same AI posted, after a preview, at Full access: Jess asked for it (decision 1581).
-      // discard_own_draft_journal discards a draft an AI made that no person edited, at Full access (decision 1595).
-      if (tool.name === "remove_and_redo_bank_lines" || tool.name === "void_own_journal" || tool.name === "discard_own_draft_journal") {
-        expect(tool.level).toBe("full");
+      const named = tool.name.split("_").some((word) => destructive.includes(word));
+      if (named) {
+        expect(tool.level, tool.name).toBe("full");
+        const properties = Object.keys((tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {});
+        if (tool.name !== "discard_own_draft_journal" && tool.name !== "unmatch_bank_line") expect(properties.some((name) => name === "previewHash" || name === "confirmHash"), tool.name).toBe(true);
         continue;
       }
       const words = tool.name.split("_");
-      for (const word of ["delete", "void", "archive", "unarchive", "rollback", "roll", "remove", "revoke", "undo", "unreconcile", "reopen", "dispose"]) {
-        expect(words, tool.name).not.toContain(word);
-      }
       // Recording a refund paid or received is Full access only (#205 section 4, decision 489).
       if (words.includes("refund")) expect(tool.level, tool.name).toBe("full");
       // Write tools can't archive by passing a flag either.

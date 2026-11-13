@@ -1,4 +1,7 @@
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
+import { findAiTool } from "@/lib/ai/catalogue";
+import type { ToolContext } from "@/lib/ai/tools";
+import { postJournal } from "@/lib/ledger/journals";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { approveBill, createBill } from "@/lib/bills/service";
 import { createContact } from "@/lib/contacts/service";
@@ -354,6 +357,49 @@ describeWithDatabase("Shopify sales when sent", () => {
     w.state.orders[0].fulfilments = [{ id: 9901, createdAt: "2026-11-19T22:00:00Z", lines: [{ lineId: 8001, quantity: 1 }, { lineId: 8002, quantity: 1 }] }];
     await w.sync("2026-11-20T02:00:00Z");
     expect(await books(w)).toEqual({ held: "0.00", sales: "-130.00", cogs: "20.00", stock: "0.00" });
+  });
+
+  it("the AI tools for these screens (decision 1600): list, apply, mark sent and void journals, at the screens' roles", async () => {
+    const w = await setup({ whenSent: false });
+    const ai = (role: ToolContext["role"]): ToolContext => ({ role, organisationId: w.org, source: "ai-7", accessLevel: "full", grantedAccessLevel: "full" });
+    const call = (name: string, args: Record<string, unknown>, role: ToolContext["role"] = "owner") => w.as((tx) => findAiTool(name)!.run(tx, args, ai(role))) as Promise<Record<string, unknown>>;
+    w.state.orders.push(order({ fulfilmentStatus: "UNFULFILLED" }));
+    await w.sync("2026-11-01T02:00:00Z");
+    await w.as((tx) => updateConnectionSettings(tx, w.connectionId, { newSalesWhenSentAccount: { code: "2350", name: "Income in advance" } }));
+    const listed = await call("list_orders_to_hold", { connectionId: w.connectionId, limit: 1 });
+    expect(listed).toMatchObject({ held: "2350", total: 1, more: false, nextCursor: null });
+    expect((listed.orders as Array<{ orderId: string }>).map((entry) => entry.orderId)).toEqual(["7001"]);
+    await expect(call("apply_sales_when_sent", { connectionId: w.connectionId, orderIds: ["7001"] }, "viewer")).rejects.toThrow("bookkeepers and up");
+    expect(await call("apply_sales_when_sent", { connectionId: w.connectionId, orderIds: ["7001"] }, "bookkeeper")).toMatchObject({ marked: 1 });
+    await w.sync("2026-11-02T03:00:00Z");
+    expect(await books(w)).toMatchObject({ held: "-130.00", sales: "0.00" });
+    expect(await call("list_held_orders", { connectionId: w.connectionId })).toMatchObject({ total: 1, orders: [{ orderId: "7001", held: "130.00" }] });
+    expect(await call("mark_order_sent", { connectionId: w.connectionId, orderId: "7001", sentOn: "2026-11-05" })).toMatchObject({ order: { orderId: "7001" } });
+    expect(await books(w)).toMatchObject({ held: "0.00", sales: "-130.00" });
+
+    // Void on the Journals page, through the AI: a preview by account, then the reversal; a person's journal too.
+    const journal = (
+      await w.as((tx) =>
+        postJournal(tx, {
+          idempotencyKey: key("j"),
+          postingDate: "2026-11-06",
+          reference: "Mistake",
+          lines: [
+            { accountCode: "6020", debitAmount: "12.00", creditAmount: "0" },
+            { accountCode: "1000", debitAmount: "0", creditAmount: "12.00" },
+          ],
+        }),
+      )
+    ).journal.id;
+    const preview = await call("void_journals", { journalIds: [journal], reason: "Posted twice" });
+    expect(preview).toMatchObject({ preview: true, items: [{ journalId: journal, blocked: null }] });
+    expect(preview.effect).toEqual([
+      { accountCode: "1000", accountName: expect.any(String), debit: "12.00", credit: "0.00" },
+      { accountCode: "6020", accountName: expect.any(String), debit: "0.00", credit: "12.00" },
+    ]);
+    const done = await call("void_journals", { journalIds: [journal], reason: "Posted twice", previewHash: preview.previewHash, idempotencyKey: key("v") });
+    expect(done).toMatchObject({ created: true, voided: [{ journalId: journal }] });
+    expect((await call("void_journals", { journalIds: [journal] })).items).toMatchObject([{ blocked: "It's already been voided or corrected." }]);
   });
 
   it("SWS11: Sales › To send lists orders not yet fully sent, from Shopify's status or what's held", async () => {

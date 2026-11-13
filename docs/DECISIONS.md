@@ -14668,4 +14668,50 @@ show, 100 a page, and clicking one should let her edit it.
       matched to a bank line, like void_own_journal. Full access only, with
       the original's date by default. Claude's details, not yet reviewed.
       This is the third exception to decision 1277's "an AI never voids".
+### AI tools for every screen action (13 Nov 2026; decision 1600)
+
+1600. **Every screen action gets an AI tool, area by area.** Will: "can you
+      just add the AI tool for everything rather than fixing 1 little
+      thing", choosing proper tools with previews, accounting areas first,
+      over a single gateway tool. src/lib/ai/screen-coverage.ts lists every
+      POST, PUT, PATCH and DELETE under /api with its tool, or "person"
+      (left to a person on purpose: signing in, AI keys, server settings,
+      members, connecting other services with their secrets), or "next"
+      (not built yet, by area). A test fails when a new screen action isn't
+      listed. Each tool calls the same service as its screen, at the same
+      role, so none is new behaviour. The first set: list_orders_to_hold,
+      apply_sales_when_sent, list_held_orders, mark_order_sent,
+      sync_sales_platform, retry_sales_platform_payouts and void_journals
+      (the Journals page's Void, for any manual journal, after its
+      preview). Claude's details, not yet reviewed.
+1601. **Part 2: sales, purchases and bank actions, confirmed first.** Voids,
+      removals, deletes (drafts only, as on the screens), excluding a
+      statement line, OK on a confident match and rejecting bank coding
+      rows are Full access tools that take two calls: the first shows what
+      it acts on and a confirmHash, changing nothing; the second, with the
+      same arguments and the hash, does it. Will chose "proper tools with
+      previews" (decision 1600). This replaces decision 347's "no tool
+      deletes or voids" with "only at Full access, and only after showing
+      what it acts on"; the tests now check that instead. Moving quotes,
+      sales orders and purchase orders on (accept, decline, copy, invoice,
+      bill, close, cancel) are "post" tools. All at the screens' role,
+      bookkeepers and up. Claude's details, not yet reviewed.
+1602. **Part 3: journals and settings.** post_journal (a manual journal
+      straight away), set_lock_date (owners and admins, confirmed first),
+      GST codes, payment terms and salespeople (owners and admins;
+      switching one off is confirmed first), expense claims (submit,
+      decline; void, payment void and draft delete confirmed first), fixed
+      asset disposal (confirmed with the screen's own preview), undo and
+      archive, rolling back a depreciation run, running and pausing
+      repeating invoices and bills, stock movements and transfers, item
+      units, and renaming and archiving budgets. Same services and roles as
+      the screens. Claude's details, not yet reviewed.
+1603. **Custom fields through the AI.** Will asked for it. get_custom_fields
+      reads Settings › Custom fields. Owners and admins can add, change,
+      move and switch off fields, list choices and sections (switching off
+      and deleting a section are confirmed first). Fields on documents and
+      lines still need Advanced reporting on, as on the screen. Draft
+      invoices and bills made or edited by the AI now take document custom
+      fields too (lines already did), and their details show them. Claude's
+      details, not yet reviewed.
 

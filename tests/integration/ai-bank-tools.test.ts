@@ -461,14 +461,18 @@ describeWithDatabase("AI keys reconciling bank lines (decision 488, AIB1-AIB8)",
     for (const amount of ["-14.00", "-15.00", "-16.00"]) expect((await line(lines[amount].id)).status).toBe("reconciled");
   });
 
-  it("no tool deletes, excludes or switches anything off", () => {
+  it("only Full access tools that check first delete, void, exclude or switch anything off", () => {
+    // Decision 1600 (Will: an AI tool for every screen action): these exist, at Full access, each confirming first
+    // (checked in ai-mcp-write.test.ts). Nothing else carries such a flag in its input.
     for (const tool of AI_TOOLS) {
-      // void_own_journal: Jess's exception (decision 1581), checked in ai-journal-void.test.ts.
-      if (tool.name === "void_own_journal") continue;
-      for (const word of ["delete", "void", "archive", "exclude", "deactivate", "unreconcile"]) expect(tool.name.split("_"), tool.name).not.toContain(word);
-      // Remove & redo voids what a line created, after a preview: Jess asked for it (decision 1574).
-      if (tool.level !== "read" && !tool.readOnly && tool.name !== "remove_and_redo_bank_lines") {
-        expect(JSON.stringify(tool.inputSchema), tool.name).not.toMatch(/isActive|archiv|void|delete|"excluded"/i);
+      const destructive = tool.name.split("_").some((word) => ["delete", "void", "archive", "exclude", "deactivate", "unreconcile", "remove", "discard", "undo"].includes(word));
+      if (destructive) {
+        expect(tool.level, tool.name).toBe("full");
+        continue;
+      }
+      const confirms = /"(previewHash|confirmHash)"/.test(JSON.stringify(tool.inputSchema));
+      if (tool.level !== "read" && !tool.readOnly && !confirms) {
+        expect(JSON.stringify(tool.inputSchema), tool.name).not.toMatch(/isActive|archiv|"voidDate"|delete|"excluded"/i);
       }
     }
   });

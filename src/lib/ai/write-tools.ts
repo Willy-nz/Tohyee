@@ -136,6 +136,7 @@ const INVOICE_FIELDS: Record<string, JsonSchema> = {
   reference: { type: "string" },
   amountsMode: AMOUNTS_MODE,
   lines: SALES_DOCUMENT_LINES,
+  customFields: { type: ["object", "null"], description: "Document custom field id -> value (get_custom_fields). On an edit only the fields sent change; null clears one." },
 };
 
 const BILL_FIELDS: Record<string, JsonSchema> = {
@@ -145,6 +146,7 @@ const BILL_FIELDS: Record<string, JsonSchema> = {
   supplierInvoiceNumber: { type: "string", description: "The supplier's own invoice number (needed before it's approved)." },
   amountsMode: AMOUNTS_MODE,
   lines: DOCUMENT_LINES,
+  customFields: { type: ["object", "null"], description: "Document custom field id -> value (get_custom_fields). On an edit only the fields sent change; null clears one." },
 };
 
 const JOURNAL_FIELDS: Record<string, JsonSchema> = {
@@ -160,11 +162,11 @@ function journalInput(args: Record<string, unknown>) {
 
 const invoiceDetail = async (tx: Parameters<AiTool["run"]>[0], id: string) => {
   const invoice = await getInvoice(tx, id);
-  return { ...invoiceSummary(invoice), amountsMode: invoice.amountsMode, ...documentLines(await withLineIds(tx, "invoice", invoice.id, invoice.lines)) };
+  return { ...invoiceSummary(invoice), amountsMode: invoice.amountsMode, customFields: invoice.customFields, ...documentLines(await withLineIds(tx, "invoice", invoice.id, invoice.lines)) };
 };
 const billDetail = async (tx: Parameters<AiTool["run"]>[0], id: string) => {
   const bill = await getBill(tx, id);
-  return { ...billSummary(bill), amountsMode: bill.amountsMode, ...documentLines(await withLineIds(tx, "bill", bill.id, bill.lines)) };
+  return { ...billSummary(bill), amountsMode: bill.amountsMode, customFields: bill.customFields, ...documentLines(await withLineIds(tx, "bill", bill.id, bill.lines)) };
 };
 
 export const PAYMENT_FIELDS: Record<string, JsonSchema> = {
@@ -213,7 +215,7 @@ export const WRITE_TOOLS: readonly AiTool[] = [
       const { contactId, invoiceDate, dueDate, reference, amountsMode, lines } = args;
       const result = await createInvoice(
         tx,
-        { source: context.source, idempotencyKey: idempotencyKey(args.idempotencyKey), contactId, invoiceDate, dueDate, reference, amountsMode, lines },
+        { source: context.source, idempotencyKey: idempotencyKey(args.idempotencyKey), contactId, invoiceDate, dueDate, reference, amountsMode, lines, customFields: args.customFields },
         { foreignCurrency: true },
       );
       return { created: result.created, invoice: await invoiceDetail(tx, result.invoice.id) };
@@ -229,7 +231,7 @@ export const WRITE_TOOLS: readonly AiTool[] = [
     async run(tx, args) {
       const { contactId, invoiceDate, dueDate, reference, amountsMode } = args;
       const lines = await linesForEdit(tx, "invoice", args.invoiceId, "invoiceId", getInvoice, args);
-      const invoice = await updateInvoice(tx, args.invoiceId, { contactId, invoiceDate, dueDate, reference, amountsMode, lines });
+      const invoice = await updateInvoice(tx, args.invoiceId, { contactId, invoiceDate, dueDate, reference, amountsMode, lines, customFields: args.customFields });
       return { invoice: await invoiceDetail(tx, invoice.id) };
     },
   },
@@ -243,7 +245,7 @@ export const WRITE_TOOLS: readonly AiTool[] = [
       const { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines } = args;
       const result = await createBill(
         tx,
-        { source: context.source, idempotencyKey: idempotencyKey(args.idempotencyKey), contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines },
+        { source: context.source, idempotencyKey: idempotencyKey(args.idempotencyKey), contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines, customFields: args.customFields },
         null,
         { foreignCurrency: true },
       );
@@ -268,6 +270,7 @@ export const WRITE_TOOLS: readonly AiTool[] = [
         supplierInvoiceNumber,
         amountsMode,
         lines,
+        customFields: args.customFields,
       });
       // DU5: the AI is told, and can't approve past it.
       const warnings = (await billDuplicateWarnings(tx, result.bill.id)).map((warning) => warning.message);
@@ -318,7 +321,7 @@ export const WRITE_TOOLS: readonly AiTool[] = [
     async run(tx, args) {
       const { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode } = args;
       const lines = await linesForEdit(tx, "bill", args.billId, "billId", getBill, args);
-      const bill = await updateBill(tx, args.billId, { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines });
+      const bill = await updateBill(tx, args.billId, { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines, customFields: args.customFields });
       return { bill: await billDetail(tx, bill.id) };
     },
   },
