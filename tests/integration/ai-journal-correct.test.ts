@@ -35,7 +35,7 @@ async function call(token: string, name: string, args: Json = {}): Promise<Json>
   return JSON.parse(result.content[0].text) as Json;
 }
 
-/** AJC1-AJC5 (decision 1598, not yet reviewed): the AI correcting a manual journal, as Edit this journal does. Made-up figures. */
+/** AJC1-AJC5 (decision 1608, not yet reviewed): the AI correcting a manual journal, as Edit this journal does. Made-up figures. */
 describeWithDatabase("the AI correcting manual journals", () => {
   let server: TestServer;
   let owner: SessionUser;

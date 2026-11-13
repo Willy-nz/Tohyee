@@ -1,6 +1,6 @@
 /**
  * Every screen action (a POST, PUT, PATCH or DELETE under /api) and its AI
- * tool, or why it has none (decision 1600: Will, 13 Nov 2026, "add the AI
+ * tool, or why it has none (decision 1609: Will, 13 Nov 2026, "add the AI
  * tool for everything", area by area). tool: the tool that does it.
  * person: deliberately left to a person, with why. next: not built yet, by
  * area. tests/unit/ai-screen-coverage.test.ts fails when a new screen action

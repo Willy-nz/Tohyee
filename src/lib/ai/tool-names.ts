@@ -284,3 +284,16 @@ export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel;
   { name: "update_fixed_asset", level: "full", words: "Edit a fixed asset and its tax details and Investment Boost (not dispose of or archive it)" },
   { name: "run_depreciation", level: "full", words: "Run depreciation up to a month end" },
 ];
+
+/**
+ * Tools that void, delete, remove, archive, dispose of, undo, roll back,
+ * exclude, reject, discard, lock or redo something (decisions 1609-1612): AI
+ * apps are told they're destructive (MCP's destructiveHint), so an app that
+ * asks before such calls asks. Each still confirms first itself.
+ */
+export function isDestructiveTool(name: string): boolean {
+  return (
+    /^(void_|delete_|remove_|archive_|dispose_|undo_|roll_back_|exclude_|reject_|discard_)/.test(name) ||
+    ["set_lock_date", "recode_bank_transactions", "correct_journal", "unmatch_bank_lines"].includes(name)
+  );
+}
