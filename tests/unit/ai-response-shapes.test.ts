@@ -171,7 +171,7 @@ describe("one shape for profit and loss style reports (#575, decision 1380)", ()
     const table = budgetTable(report);
     expect(reportTableProblems(table)).toEqual([]);
     expect(table.columns.map((column) => column.key)).toEqual(["actual", "budget", "variance", "variance_pct"]);
-    expect(table.rows.map((row) => row.label)).toEqual(["Trading income", "4000 · Sales", "Total trading income", "Gross profit", "Net profit"]);
+    expect(table.rows.map((row) => row.label)).toEqual(["Trading income", "Sales", "Total trading income", "Gross profit", "Net profit"]);
     expect(table.rows[1]).toMatchObject({ kind: "account", accountId: "7", code: "4000", values: { actual: "100.00", variance_pct: "25.0" } });
   });
 
@@ -228,7 +228,7 @@ describe("one shape for profit and loss style reports (#575, decision 1380)", ()
     expect(reportTableProblems(table)).toEqual([]);
     expect(table.rows.map((row) => [row.kind, row.label])).toEqual([
       ["heading", "Income"],
-      ["account", "4000 · Sales"],
+      ["account", "Sales"],
       ["group", "Sales"],
       ["formula", "Margin"],
       ["text", "Made-up figures."],

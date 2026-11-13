@@ -288,7 +288,7 @@ export function CustomFiguresTable({
                             />
                           </label>
                         ) : null}
-                        {line.code} · {line.name}
+                        <span title={line.code}>{line.name}</span>
                       </td>
                       {columns.map((column) => (
                         <Cell key={column.key} column={column} values={line.values} accounts={{ accountId: line.accountId }} filter={filter} blankZero />

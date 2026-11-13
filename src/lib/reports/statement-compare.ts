@@ -31,6 +31,8 @@ export type StatementRow = {
   kind: StatementRowKind;
   label: string;
   accountId?: string;
+  /** The account's code; reports show the name only (decision 1604). */
+  code?: string;
   /** Explains a worked-out line (retained earnings, current year earnings). */
   note?: string;
   values: StatementValues;
@@ -101,8 +103,9 @@ function accountRows(groups: Array<{ key: string; group: Group }>, money: (value
         const row = entry.lines.get(line.accountId) ?? {
           key: `a${line.accountId}`,
           kind: "account" as const,
-          label: `${line.code} · ${line.name}`,
+          label: line.name,
           accountId: line.accountId,
+          code: line.code,
           values: Object.fromEntries(keys.map((k) => [k, money(ZERO_DECIMAL)])),
         };
         row.values[key] = line.amount;
@@ -273,7 +276,7 @@ export async function balanceSheetCompare(
       keys,
     ).filter((row) => row.kind === "account"),
     {
-      ...total("retained", "earnings", retained ? `${retained.code} · ${retained.name}` : "Retained earnings", (sheet) => sheet.equity.retainedEarnings.total),
+      ...total("retained", "earnings", retained ? retained.name : "Retained earnings", (sheet) => sheet.equity.retainedEarnings.total),
       ...(retained ? { accountId: retained.id } : {}),
       note: "Profit before the start of each column's financial year, with anything posted to the account.",
     },

@@ -138,9 +138,7 @@ type Valuation = {
 function AccountLine({ line, drilldown }: { line: Line; drilldown?: Drilldown }) {
   return (
     <tr className={ui.reportSection}>
-      <td>
-        {line.code} · {line.name}
-      </td>
+      <td title={line.code}>{line.name}</td>
       <td className={ui.num}>{drilldown ? <AccountAmount accountId={line.accountId} value={line.amount} drilldown={drilldown} /> : <Money value={line.amount} />}</td>
     </tr>
   );
@@ -240,9 +238,7 @@ function SplitGroupRows({
           ) : null}
           {section.lines.map((line) => (
             <tr key={line.accountId} className={ui.reportSection}>
-              <td>
-                {line.code} · {line.name}
-              </td>
+              <td title={line.code}>{line.name}</td>
               {columns.map((column) => (
                 <td key={column.key} className={ui.num}>
                   {column.valueId || column.key === "none" ? (

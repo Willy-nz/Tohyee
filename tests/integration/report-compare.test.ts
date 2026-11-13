@@ -75,7 +75,7 @@ describeWithDatabase("comparing reports and tracking filters", () => {
     const report = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-06-01", to: "2026-06-30" }, { periods: 2, periodLength: "month", total: true, order: "newest_first" }));
     expect(report.columns.map((column) => column.label)).toEqual(["Jun 2026", "May 2026", "Apr 2026", "Total"]);
     const rows = table(report);
-    expect(rows["4000 · Sales"]).toEqual(["1200.00", "1500.00", "1000.00", "3700.00"]);
+    expect(rows["Sales"]).toEqual(["1200.00", "1500.00", "1000.00", "3700.00"]);
     expect(rows["Total cost of sales"]).toEqual(["300.00", "400.00", "0.00", "700.00"]);
     expect(rows["Gross profit"]).toEqual(["900.00", "1100.00", "1000.00", "3000.00"]);
     expect(rows["Total other income"]).toEqual(["20.00", "0.00", "0.00", "20.00"]);
@@ -129,7 +129,7 @@ describeWithDatabase("comparing reports and tracking filters", () => {
     expect(report.columns.map((column) => column.label)).toEqual(["Apr 2026", "%", "May 2026", "%", "Jun 2026", "%", "Total", "%", "Year to date", "%"]);
     expect(report.from).toBe("2026-06-01");
     const rows = table(report);
-    expect(rows["4000 · Sales"]).toEqual(["1000.00", "100.0", "1500.00", "100.0", "1200.00", "100.0", "3700.00", "100.0", "3700.00", "100.0"]);
+    expect(rows["Sales"]).toEqual(["1000.00", "100.0", "1500.00", "100.0", "1200.00", "100.0", "3700.00", "100.0", "3700.00", "100.0"]);
     expect(rows["Net profit"]).toEqual(["900.00", "90.0", "1100.00", "73.3", "670.00", "55.8", "2670.00", "72.2", "2670.00", "72.2"]);
     // The rows are the same, in the same order, whichever way the columns run.
     const newest = await w.as((tx) =>
@@ -149,11 +149,11 @@ describeWithDatabase("comparing reports and tracking filters", () => {
     const june = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-06-01", to: "2026-06-30" }, { periods: 0, periodLength: "month", percentOfIncome: true }));
     expect(june.columns.map((column) => column.key)).toEqual(["p0", "p0_pct"]);
     const rows = table(june);
-    expect(rows["4000 · Sales"]).toEqual(["1200.00", "100.0"]);
+    expect(rows["Sales"]).toEqual(["1200.00", "100.0"]);
     expect(rows["Total cost of sales"]).toEqual(["300.00", "25.0"]);
     expect(rows["Gross profit"]).toEqual(["900.00", "75.0"]);
-    expect(rows["4200 · Interest income"]).toEqual(["20.00", "1.7"]);
-    expect(rows["6010 · Accounting fees"]).toEqual(["250.00", "20.8"]);
+    expect(rows["Interest income"]).toEqual(["20.00", "1.7"]);
+    expect(rows["Accounting fees"]).toEqual(["250.00", "20.8"]);
     expect(rows["Net profit"]).toEqual(["670.00", "55.8"]);
     const february = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-02-01", to: "2026-02-28" }, { periods: 0, periodLength: "month", percentOfIncome: true }));
     expect(table(february)["Net profit"]).toEqual(["0.00", null]);
