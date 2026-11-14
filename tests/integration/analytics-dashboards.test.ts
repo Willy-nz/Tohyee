@@ -496,6 +496,19 @@ describeWithDatabase("analytics dashboards", () => {
       { category: "Canterbury", m0: "1.0000", m1: "0.100000", m2: "0.100000" },
       { category: "Otago", m0: "4.0000", m1: "30.200000", m2: "7.550000" },
     ]);
+    // #692: money over money is a share, shown as a percentage unless the tile says otherwise; money over a quantity isn't.
+    expect(answer.data.columns.find((column: { key: string }) => column.key === "m2").number).toBeUndefined();
+    const share = await body(
+      await queryRoute.POST(
+        apiRequest("/api/analytics/query", {
+          method: "POST",
+          cookie: viewerCookie,
+          body: { organisationId: ORG, query: { table: "sales", groupBy: null, measures: [sales, { label: "Share", aggregate: "formula", formula: "[Sales] / [Sales]" }], filters: [] }, filters: {} },
+        }),
+        noContext,
+      ),
+    );
+    expect(share.data.columns.find((column: { key: string }) => column.key === "m1")).toMatchObject({ format: "number", number: { style: "percent", decimals: 1 } });
 
     const save = (payload: Record<string, unknown>, user = ownerCookie) =>
       measuresRoute.POST(apiRequest("/api/analytics/measures", { method: "POST", cookie: user, body: { organisationId: ORG, table: "sales", ...payload } }), noContext);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formulaKeepsMoney, formulaRefs, formulaText, parseFormula } from "@/lib/analytics/formula";
+import { formulaIsMoneyRatio, formulaKeepsMoney, formulaRefs, formulaText, parseFormula } from "@/lib/analytics/formula";
 import { builtInMeasures, definitionToSave, measureFromSaved } from "@/lib/analytics/measure-library";
 import { buildTileSql, parseTileQuery, type Measure } from "@/lib/analytics/query";
 
@@ -40,6 +40,16 @@ describe("formulas (#337)", () => {
     expect(formulaKeepsMoney(parseFormula("[A] / [B]"), money)).toBe(false);
     expect(formulaKeepsMoney(parseFormula("[A] - [Count]"), money)).toBe(false);
     expect(formulaKeepsMoney(parseFormula("[A] * 2"), money)).toBe(false);
+  });
+
+  it("knows a share of money from other sums (#692)", () => {
+    const money = (name: string) => name !== "Count";
+    expect(formulaIsMoneyRatio(parseFormula("([A] - [B]) / [A]"), money)).toBe(true);
+    expect(formulaIsMoneyRatio(parseFormula("-([A] / [B])"), money)).toBe(true);
+    expect(formulaIsMoneyRatio(parseFormula("[A] / [B] * 100"), money)).toBe(false);
+    expect(formulaIsMoneyRatio(parseFormula("[A] / [Count]"), money)).toBe(false);
+    expect(formulaIsMoneyRatio(parseFormula("[A] / 12"), money)).toBe(false);
+    expect(formulaIsMoneyRatio(parseFormula("[A] - [B]"), money)).toBe(false);
   });
 });
 

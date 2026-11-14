@@ -165,6 +165,16 @@ export function formulaKeepsMoney(node: FormulaNode, isMoney: (name: string) => 
   return false;
 }
 
+/**
+ * Whether the result is a share of money (#692): money divided by money, such
+ * as ([Sales] - [Costs]) / [Sales]. That is a fraction, so it reads best as a
+ * percentage. Anything multiplied afterwards (× 100) is left as a number.
+ */
+export function formulaIsMoneyRatio(node: FormulaNode, isMoney: (name: string) => boolean): boolean {
+  if (node.kind === "negate") return formulaIsMoneyRatio(node.operand, isMoney);
+  return node.kind === "binary" && node.op === "/" && formulaKeepsMoney(node.left, isMoney) && formulaKeepsMoney(node.right, isMoney);
+}
+
 /** Puts a formula tree back into text (used to inline saved values into another formula). */
 export function formulaText(node: FormulaNode): string {
   switch (node.kind) {

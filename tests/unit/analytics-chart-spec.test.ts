@@ -161,3 +161,10 @@ describe("analytics chart specs", () => {
     ).toEqual({ value: "0.30", previous: "0.10", change: "0.20" });
   });
 });
+
+describe("a slice's share on its label (#692)", () => {
+  it("is a whole percent, with a sliver as <1%", async () => {
+    const { wholePercent } = await import("@/lib/analytics/chart-spec");
+    expect([16.48, 0.5, 0.3, 0, 99.6].map(wholePercent)).toEqual(["16%", "1%", "<1%", "0%", "100%"]);
+  });
+});

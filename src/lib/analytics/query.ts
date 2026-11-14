@@ -1,7 +1,7 @@
 import { valueLabelsFor } from "@/lib/analytics/value-labels";
 import { ValidationError } from "@/lib/errors";
 import { DECIMAL_RESULT, exactAverageSql, exactDivideSql } from "@/lib/analytics/decimal-sql";
-import { formulaKeepsMoney, formulaRefs, parseFormula, type FormulaNode } from "@/lib/analytics/formula";
+import { formulaIsMoneyRatio, formulaKeepsMoney, formulaRefs, parseFormula, type FormulaNode } from "@/lib/analytics/formula";
 import { lastDays, lastMonths, presetRange } from "@/lib/analytics/date-ranges";
 import { columnKind, FILTER_OPS, MAX_LAST_DAYS, MAX_LAST_MONTHS, opAllowed, valueKind } from "@/lib/analytics/filters";
 import { cmp, dec } from "@/lib/money/decimal";
@@ -964,6 +964,10 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
   };
   // A field's own format (decision 775) for a value that adds it up as it is (not a count or a quick calculation's share or rank).
   const fieldNumber = (measure: Measure) => {
+    // Money over money is a share (#692): a percentage unless the tile says otherwise.
+    if (measure.aggregate === "formula" && !measure.quick && formulaIsMoneyRatio(parseFormula(measure.formula!), (name) => baseFormat(inputOf(measure, name)) === "money")) {
+      return { style: "percent" as const, decimals: 1 };
+    }
     if (measure.aggregate === "formula" || measure.aggregate === "count" || measure.aggregate === "count_distinct" || measure.times || !measure.field) return undefined;
     if (measure.quick && (quickIsPercent(measure.quick) || measure.quick.kind === "rank")) return undefined;
     return tableColumns.find((column) => column.name === measure.field)?.settings?.number;

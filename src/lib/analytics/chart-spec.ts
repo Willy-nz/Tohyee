@@ -212,6 +212,12 @@ function hueColour(theme: ChartTheme, name: Hue | undefined): string | undefined
   return name ? theme.palette[HUES.indexOf(name) % theme.palette.length] : undefined;
 }
 
+/** A slice's share on its label, in whole percents (#692): "16%", and "<1%" for a sliver. The tooltip keeps the decimals. */
+export function wholePercent(percent: number): string {
+  if (percent > 0 && percent < 0.5) return "<1%";
+  return `${Math.round(percent)}%`;
+}
+
 /** White or dark ink, whichever reads on a coloured fill (for labels inside columns and slices). */
 export function inkOn(fill: string): string {
   const match = /^#([0-9a-f]{6})$/i.exec(fill.trim());
@@ -559,7 +565,7 @@ export function toEChartsOption(spec: ChartSpec, allRows: ChartRow[], theme: Cha
             formatter: (params: { name?: string; value?: unknown; percent?: number }) => {
               const figures = [
                 content.value ? (labels.number ? labelFormatters[index] : fullFormatters[index])(Number(params.value)) : null,
-                content.percent ? `${params.percent ?? 0}%` : null,
+                content.percent ? wholePercent(params.percent ?? 0) : null,
               ].filter(Boolean).join(" · ");
               return [content.category ? params.name ?? "" : null, figures || null].filter((part) => part !== null).join("\n");
             },
