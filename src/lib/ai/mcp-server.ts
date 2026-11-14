@@ -1,3 +1,4 @@
+import { AI_TOOL_SCOPE_HELP, AI_TOOL_SCOPE_LABELS, outsideScopeMessage, scopeAllows } from "@/lib/ai/tool-scopes";
 import packageJson from "../../../package.json";
 import { AI_ACCESS_LEVEL_AI_WORDS, AI_ACCESS_LEVEL_LABELS, levelAllows, roleNeededFor } from "@/lib/ai/access-levels";
 import { findAiTool, toolsForLevel } from "@/lib/ai/catalogue";
@@ -70,7 +71,9 @@ export function mcpServerFor(
   // Only the tools for modules the organisation has on (#576, decision 1385); null (not known) hides nothing.
   const modules = options.modules ?? null;
   const moduleAllows = (tool: { name: string }) => moduleHidesTool(tool.name, modules) === null;
-  const tools = [...toolsForLevel(level).filter((tool) => roleAllows(tool) && moduleAllows(tool)), ...mailTools];
+  // What the key or connection is for (#696, decision 1630): "Reports only" narrows the list; nothing is added.
+  const scope = identity.toolScope ?? null;
+  const tools = [...toolsForLevel(level).filter((tool) => roleAllows(tool) && moduleAllows(tool) && scopeAllows(scope, tool.name)), ...(scope ? [] : mailTools)];
   const offered: ToolInfo[] = tools.map((tool) => ({ ...tool, readOnly: tool.readOnly ?? tool.level === "read" }));
   // What the client holds against what this connection has now (decisions 1342-1343).
   const toolList = toolListState(toolSetVersion(offered), options.toolListSeen);
@@ -79,6 +82,7 @@ export function mcpServerFor(
     instructions:
       `Access to ${organisation.displayName}'s books in Tohyee, a New Zealand accounting app, ` +
       `as ${identity.user.displayName} (${identity.membership.role}), at the level "${AI_ACCESS_LEVEL_LABELS[level]}". ${AI_ACCESS_LEVEL_AI_WORDS[level]} ` +
+      (scope ? `This connection is "${AI_TOOL_SCOPE_LABELS[scope]}": ${AI_TOOL_SCOPE_HELP[scope]} ` : "") +
       "Call get_organisation first for the base currency, financial year and today's date. " +
       "Amounts are decimal strings; dates are YYYY-MM-DD. " +
       // Jess, 4 Nov 2026 (decision 1368): stop asking permission for every single thing.
@@ -97,6 +101,7 @@ export function mcpServerFor(
       if (!tool) return null;
       const hiddenByModule = mailTools.some((mailTool) => mailTool.name === tool.name) ? null : moduleHidesTool(tool.name, modules);
       if (hiddenByModule) return hiddenByModule;
+      if (scope && !scopeAllows(scope, tool.name)) return outsideScopeMessage(scope, tool.name);
       if (!roleAllows(tool)) return `${name} is only for owners and admins; this key's owner isn't one now.`;
       return levelAllows(level, tool.level)
         ? null
@@ -106,7 +111,9 @@ export function mcpServerFor(
       const tool = findTool(name);
       // Checked again here: tools/list and tools/call are separate requests.
       if (!tool || !levelAllows(level, tool.level) || !roleAllows(tool)) return text(`This key can't use ${name}.`, true);
-      if (!offered.some((offeredTool) => offeredTool.name === tool.name)) return text(moduleHidesTool(tool.name, modules) ?? `This key can't use ${name}.`, true);
+      if (!offered.some((offeredTool) => offeredTool.name === tool.name)) {
+        return text(moduleHidesTool(tool.name, modules) ?? (scope && !scopeAllows(scope, tool.name) ? outsideScopeMessage(scope, tool.name) : `This key can't use ${name}.`), true);
+      }
       try {
         const people = await loadMemberNames(organisation.id);
         const actor = { userId: identity.user.id, email: identity.user.email, via: aiKeyVia(identity), role: identity.membership.role };

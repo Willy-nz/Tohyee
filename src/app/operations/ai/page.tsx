@@ -19,6 +19,7 @@ import {
   AI_KEY_END_LABELS,
   defaultKeyEndDays,
 } from "@/lib/ai/access-levels";
+import { AI_TOOL_SCOPE_HELP, AI_TOOL_SCOPE_LABELS, AI_TOOL_SCOPES, type AiToolScope } from "@/lib/ai/tool-scopes";
 import { AI_TOOL_PLAIN_WORDS } from "@/lib/ai/tool-names";
 import type { AiAccessToken } from "@/lib/ai/tokens";
 import { ROLE_LABELS } from "@/lib/auth/roles";
@@ -149,7 +150,8 @@ function AccessRow({ item, role, onRevoke }: { item: AiAccessToken; role: Role |
               <code>{item.startsWith}…</code> ·{" "}
             </>
           )}
-          <LevelText level={item.accessLevel} role={role} /> · {item.kind === "connection" ? "connected" : "made"} {formatDateTime(item.createdAt)} · last used{" "}
+          <LevelText level={item.accessLevel} role={role} />
+          {item.toolScope ? <> · {AI_TOOL_SCOPE_LABELS[item.toolScope].toLowerCase()}</> : null} · {item.kind === "connection" ? "connected" : "made"} {formatDateTime(item.createdAt)} · last used{" "}
           {item.lastUsedAt ? formatDateTime(item.lastUsedAt) : "never"}
           {item.kind === "key" && !ended && item.stopsAt ? (
             <>
@@ -217,6 +219,7 @@ function AiConnect({ organisationId }: { organisationId: string }) {
   const [fullConfirmed, setFullConfirmed] = useState(false);
   // "default": 90 days for a key that can post, none for one that only looks or drafts (#695).
   const [ends, setEnds] = useState<"default" | "30" | "90" | "365" | "none">("default");
+  const [toolScope, setToolScope] = useState<AiToolScope | "all">("all");
   const [busy, setBusy] = useState(false);
   const role = current?.role ?? null;
   const ceiling = role ? roleCeiling(role) : "read";
@@ -240,13 +243,14 @@ function AiConnect({ organisationId }: { organisationId: string }) {
     try {
       const result = await api<{ token: string; key: AiAccessToken }>("/api/ai/tokens", {
         method: "POST",
-        body: { organisationId, name, accessLevel, endsInDays: shownEnds === "none" ? null : Number(shownEnds), ...(accessLevel === "full" ? { confirmFullAccess: fullConfirmed } : {}) },
+        body: { organisationId, name, accessLevel, toolScope, endsInDays: shownEnds === "none" ? null : Number(shownEnds), ...(accessLevel === "full" ? { confirmFullAccess: fullConfirmed } : {}) },
       });
       setNewToken(result.token);
       setStatus({ tone: "success", text: `Made the key “${result.key.name}”.` });
       setName("");
       setAccessLevel("read");
       setEnds("default");
+      setToolScope("all");
       setFullConfirmed(false);
       keys.reload();
     } catch (caught) {
@@ -315,6 +319,15 @@ function AiConnect({ organisationId }: { organisationId: string }) {
               {AI_ACCESS_LEVELS.filter((level) => level !== "full" || ceiling === "full").map((level) => (
                 <option key={level} value={level}>
                   {AI_ACCESS_LEVEL_LABELS[level]}
+                </option>
+              ))}
+            </select>
+          </Field>
+<Field label="Which tools" hint={AI_TOOL_SCOPE_HELP[toolScope]}>
+            <select value={toolScope} onChange={(event) => setToolScope(event.target.value as AiToolScope | "all")}>
+              {(["all", ...AI_TOOL_SCOPES] as const).map((choice) => (
+                <option key={choice} value={choice}>
+                  {AI_TOOL_SCOPE_LABELS[choice]}
                 </option>
               ))}
             </select>

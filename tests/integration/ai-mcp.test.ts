@@ -726,6 +726,24 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
     await set("Looks", "last_used_at = now() - interval '91 days'");
     expect(await ping(looking.body.token)).toBe(401);
     expect((await list()).find((key) => key.name === "Looks")).toMatchObject({ expired: true, stopReason: "unused" });
+    // #696: a Reports only key lists under 30 tools, all of them ones it would have had anyway, and is told plainly about the rest.
+    expect((await make({ name: "Odd scope", toolScope: "banking" })).status).toBe(400);
+    const reports = await make({ name: "Reports", toolScope: "reports" });
+    expect(reports.body.key.toolScope).toBe("reports");
+    expect(posting.body.key.toolScope).toBeNull();
+    const offered = async (token: string) => (((await rpc(token, "tools/list")).body.result as Json).tools as Json[]).map((tool) => tool.name as string);
+    const narrowed = await offered(reports.body.token);
+    const everything = await offered(posting.body.token);
+    expect(narrowed.length).toBeLessThan(30);
+    expect(narrowed).toEqual(expect.arrayContaining(["get_organisation", "profit_and_loss", "trial_balance", "list_accounts"]));
+    expect(narrowed.every((name) => everything.includes(name))).toBe(true);
+    // A viewer's key can't build reports, scope or not: the level and role still decide.
+    expect(narrowed).not.toContain("create_analytics_dashboard");
+    expect((await callTool(reports.body.token, "trial_balance", { asAt: "2026-03-31" })).isError).toBe(false);
+    const refused = await rpc(reports.body.token, "tools/call", { name: "list_bank_accounts", arguments: {} });
+    expect(JSON.stringify(refused.body)).toContain('set up as \\"Reports only\\"');
+    expect((await callTool(posting.body.token, "list_bank_accounts")).isError).toBe(false);
+
     // A stopped key doesn't count towards the ten.
     expect((await coreQuery<{ last_used_at: string }>("select last_used_at from ai_access_tokens where name = 'Looks' and user_id = $1", [viewer.id])).rows).toHaveLength(1);
   });

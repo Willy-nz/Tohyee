@@ -1,3 +1,4 @@
+import { parseToolScope } from "@/lib/ai/tokens";
 import { writeAdminAuditEvent } from "@/lib/audit";
 import { type AiAccessLevel, isAiAccessLevel, roleCeiling } from "@/lib/ai/access-levels";
 import { ClientProblem, type OAuthClient, resolveClient } from "@/lib/ai/oauth/clients";
@@ -210,7 +211,7 @@ export async function decideConsent(
   auth: AuthContext,
   request: Request,
   handle: string,
-  body: { decision?: unknown; organisationId?: unknown; accessLevel?: unknown; confirmFullAccess?: unknown },
+  body: { decision?: unknown; organisationId?: unknown; accessLevel?: unknown; confirmFullAccess?: unknown; toolScope?: unknown },
 ): Promise<{ redirectTo: string }> {
   const addresses = await oauthAddresses();
   const browserCookie = readCookie(request, OAUTH_BROWSER_COOKIE);
@@ -227,13 +228,15 @@ export async function decideConsent(
   // The PowerPoint add-in (decision 835): nothing to choose; read-only Analytics as the person.
   const office = row.resource === addresses.officeResource;
   const level = office ? await checkOfficeChoice(auth) : await checkChoice(auth, body);
+  // Which tools the app is for (#696): chosen here, kept on the connection. The add-in has its own fixed reach.
+  const toolScope = office ? null : parseToolScope(body.toolScope);
   if (!(await claimRequest(handle))) throw new NotFoundError("This connection request was already used.");
   const code = randomToken(CODE_PREFIX);
   await withCoreTransaction(async (client) => {
     await client.query(
-      `insert into oauth_authorization_codes (code_hash, user_id, organisation_id, client_id, client_name, redirect_uri, code_challenge, resource, access_level, expires_at, kind)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now() + make_interval(secs => $10), $11)`,
-      [sha256Hex(code), auth.user.id, level.organisationId, row.client_id, row.client_name, row.redirect_uri, row.code_challenge, row.resource, level.accessLevel, AUTHORIZATION_CODE_SECONDS, office ? "office" : "connection"],
+      `insert into oauth_authorization_codes (code_hash, user_id, organisation_id, client_id, client_name, redirect_uri, code_challenge, resource, access_level, expires_at, kind, tool_scope)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now() + make_interval(secs => $10), $11, $12)`,
+      [sha256Hex(code), auth.user.id, level.organisationId, row.client_id, row.client_name, row.redirect_uri, row.code_challenge, row.resource, level.accessLevel, AUTHORIZATION_CODE_SECONDS, office ? "office" : "connection", toolScope],
     );
     await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, {
       eventType: office ? "office_connection.allowed" : "ai_connection.allowed",

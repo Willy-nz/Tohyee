@@ -121,6 +121,7 @@ type CodeRow = {
   code_challenge: string;
   resource: string;
   access_level: AiAccessLevel;
+  tool_scope: string | null;
   fresh: boolean;
 };
 
@@ -167,7 +168,7 @@ export async function exchangeCode(form: Form): Promise<TokenAnswer> {
       : false;
     const claimed = await client.query<CodeRow>(
       `update oauth_authorization_codes set used_at = now() where code_hash = $1 and used_at is null
-       returning user_id::text, organisation_id, kind, client_id, client_name, redirect_uri, code_challenge, resource, access_level, expires_at > now() as fresh`,
+       returning user_id::text, organisation_id, kind, client_id, client_name, redirect_uri, code_challenge, resource, access_level, tool_scope, expires_at > now() as fresh`,
       [codeHash],
     );
     const row = claimed.rows[0];
@@ -192,9 +193,9 @@ export async function exchangeCode(form: Form): Promise<TokenAnswer> {
       }
       const organisationId = membership.organisation.id;
       const inserted = await client.query<{ id: string }>(
-        `insert into ai_access_tokens (user_id, organisation_id, name, created_by_email, access_level, kind, oauth_client_id, redirect_uri, resource)
-         values ($1, $2, $3, $4, $5, 'connection', $6, $7, $8) returning id::text`,
-        [row.user_id, row.organisation_id, row.client_name, person.email, row.access_level, row.client_id, row.redirect_uri, row.resource],
+        `insert into ai_access_tokens (user_id, organisation_id, name, created_by_email, access_level, kind, oauth_client_id, redirect_uri, resource, tool_scope)
+         values ($1, $2, $3, $4, $5, 'connection', $6, $7, $8, $9) returning id::text`,
+        [row.user_id, row.organisation_id, row.client_name, person.email, row.access_level, row.client_id, row.redirect_uri, row.resource, row.tool_scope],
       );
       const connectionId = inserted.rows[0].id;
       await client.query("update oauth_authorization_codes set connection_id = $1 where code_hash = $2", [connectionId, codeHash]);

@@ -5,6 +5,7 @@ import { BrandMark } from "@/components/brand-mark";
 import { Button, Field, Notice } from "@/components/ui";
 import { AI_ACCESS_LEVEL_HELP, AI_ACCESS_LEVEL_LABELS, AI_ACCESS_LEVELS, type AiAccessLevel, FULL_ACCESS_CONNECTION_WARNING } from "@/lib/ai/access-levels";
 import { APP_NAME_WARNING, LOOPBACK_WARNING } from "@/lib/ai/oauth/messages";
+import { AI_TOOL_SCOPE_HELP, AI_TOOL_SCOPE_LABELS, AI_TOOL_SCOPES, type AiToolScope } from "@/lib/ai/tool-scopes";
 import type { ConsentDetails } from "@/lib/ai/oauth/authorize";
 import { ROLE_LABELS } from "@/lib/auth/roles";
 import { api, errorMessage } from "@/lib/client/api";
@@ -92,6 +93,7 @@ function OfficeConsent({ handle, details }: { handle: string; details: ConsentDe
 function AiAppConsent({ handle, details }: { handle: string; details: ConsentDetails }) {
   const [organisationId, setOrganisationId] = useState(details.organisations[0]?.id ?? "");
   const [accessLevel, setAccessLevel] = useState<AiAccessLevel>("read");
+  const [toolScope, setToolScope] = useState<AiToolScope | "all">("all");
   const [fullConfirmed, setFullConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +106,7 @@ function AiAppConsent({ handle, details }: { handle: string; details: ConsentDet
     try {
       const result = await api<{ redirectTo: string }>(`/api/oauth/requests/${handle}`, {
         method: "POST",
-        body: { decision, organisationId, accessLevel, ...(accessLevel === "full" ? { confirmFullAccess: fullConfirmed } : {}) },
+        body: { decision, organisationId, accessLevel, toolScope, ...(accessLevel === "full" ? { confirmFullAccess: fullConfirmed } : {}) },
       });
       window.location.assign(result.redirectTo);
     } catch (caught) {
@@ -181,6 +183,15 @@ function AiAppConsent({ handle, details }: { handle: string; details: ConsentDet
                 {levels.map((level) => (
                   <option key={level} value={level}>
                     {AI_ACCESS_LEVEL_LABELS[level]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+<Field label="Which tools" hint={AI_TOOL_SCOPE_HELP[toolScope]}>
+              <select value={toolScope} onChange={(event) => setToolScope(event.target.value as AiToolScope | "all")}>
+                {(["all", ...AI_TOOL_SCOPES] as const).map((choice) => (
+                  <option key={choice} value={choice}>
+                    {AI_TOOL_SCOPE_LABELS[choice]}
                   </option>
                 ))}
               </select>

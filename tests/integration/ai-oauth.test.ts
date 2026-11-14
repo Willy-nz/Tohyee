@@ -126,7 +126,7 @@ describeWithDatabase("AI apps sign in instead of using a key (#427, decisions 81
   let clientId: string;
 
   /** The whole browser flow up to the code: authorise, consent (allow), and the code back at the app. */
-  async function connect(options: { cookie?: string; organisationId?: string; accessLevel?: string; confirmFullAccess?: boolean; client?: string; redirect?: string } = {}) {
+  async function connect(options: { cookie?: string; organisationId?: string; accessLevel?: string; confirmFullAccess?: boolean; client?: string; redirect?: string; toolScope?: string } = {}) {
     const { verifier, challenge } = pkce();
     const redirectUri = options.redirect ?? CLAUDE_CALLBACK;
     const started = await authorize({
@@ -145,6 +145,7 @@ describeWithDatabase("AI apps sign in instead of using a key (#427, decisions 81
       organisationId: options.organisationId ?? ORG,
       accessLevel: options.accessLevel ?? "read",
       ...(options.confirmFullAccess ? { confirmFullAccess: true } : {}),
+      ...(options.toolScope ? { toolScope: options.toolScope } : {}),
     }, { browser: started.cookie });
     expect(decided.status).toBe(200);
     const back = new URL(decided.body.redirectTo as string);
@@ -548,5 +549,21 @@ describeWithDatabase("AI apps sign in instead of using a key (#427, decisions 81
     const made = await tokensRoute.POST(apiRequest("/api/ai/tokens", { method: "POST", cookie: ownerCookie, body: { organisationId: ORG, name: "Desktop" } }), noContext);
     const key = ((await made.json()) as Json).token as string;
     expect((await mcp(key, "ping")).status).toBe(200);
+  });
+
+  it("#696: an app connected as Reports only is offered the report tools and nothing else", async () => {
+    const everything = await connectAndExchange({ accessLevel: "post" });
+    const reports = await connectAndExchange({ accessLevel: "post", toolScope: "reports" });
+    const names = async (access: string) => (((await mcp(access)).body.result as Json).tools as Json[]).map((tool) => tool.name as string);
+    const all = await names(everything.access);
+    const narrowed = await names(reports.access);
+    expect(all.length).toBeGreaterThan(100);
+    expect(narrowed.length).toBeLessThan(30);
+    expect(narrowed).toEqual(expect.arrayContaining(["get_organisation", "profit_and_loss", "balance_sheet"]));
+    expect(narrowed).not.toContain("list_bank_lines");
+    expect(narrowed).not.toContain("create_draft_invoice");
+    expect(narrowed.every((name) => all.includes(name))).toBe(true);
+    const row = await coreQuery<{ tool_scope: string | null }>("select tool_scope from ai_access_tokens where kind = 'connection' order by id desc limit 2");
+    expect(row.rows.map((entry) => entry.tool_scope)).toEqual(["reports", null]);
   });
 });

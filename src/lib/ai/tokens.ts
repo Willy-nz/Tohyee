@@ -10,6 +10,7 @@ import { AI_KEY_END_CHOICES, type AiAccessLevel, defaultKeyEndDays, effectiveAcc
 import { aiTokenDisplayPrefix, AI_TOKEN_PREFIX, hashAiToken, newAiToken } from "@/lib/ai/token-format";
 import { ValidationError } from "@/lib/errors";
 import { redirectHost } from "@/lib/ai/oauth/format";
+import { type AiToolScope, isAiToolScope } from "@/lib/ai/tool-scopes";
 
 /** At most this many keys that aren't revoked, per person per organisation (decision 341). */
 export const MAX_ACTIVE_AI_TOKENS = 10;
@@ -48,6 +49,8 @@ export type AiAccessToken = {
   stopReason: "end_date" | "unused" | null;
   /** What it may do (decision 346), before the owner's role caps it. */
   accessLevel: AiAccessLevel;
+  /** Which tools it's for (#696): null is everything its level allows. */
+  toolScope: AiToolScope | null;
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
@@ -63,19 +66,27 @@ type TokenRow = {
   expires_at: string | null;
   unused_at: string | null;
   access_level: AiAccessLevel;
+  tool_scope: AiToolScope | null;
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;
 };
 
 /** A connection has expired when it has no access token left and no unused refresh token that hasn't run out. */
-const TOKEN_COLUMNS = `ai_access_tokens.id::text, kind, name, token_prefix, redirect_uri, access_level, created_at, last_used_at, revoked_at, expires_at,
+const TOKEN_COLUMNS = `ai_access_tokens.id::text, kind, name, token_prefix, redirect_uri, access_level, tool_scope, created_at, last_used_at, revoked_at, expires_at,
   case when kind = 'key' then coalesce(last_used_at, created_at) + interval '${AI_KEY_UNUSED_DAYS} days' end as unused_at,
   ((kind = 'connection' and not exists (
      select 1 from oauth_tokens o where o.connection_id = ai_access_tokens.id and o.expires_at > now() and (o.kind = 'access' or o.used_at is null)
    )) or (kind = 'key' and (coalesce(expires_at <= now(), false) or coalesce(last_used_at, created_at) <= now() - interval '${AI_KEY_UNUSED_DAYS} days'))) as expired`;
 
 const iso = (value: string | Date | null): string | null => (value === null ? null : new Date(value).toISOString());
+
+/** A scope as chosen on a form: left out, blank or "all" is everything (null). */
+export function parseToolScope(input: unknown): AiToolScope | null {
+  if (input === undefined || input === null || input === "" || input === "all") return null;
+  if (!isAiToolScope(input)) throw new ValidationError("toolScope must be reports, or left out for everything.");
+  return input;
+}
 
 /** When a key stops and why: the earlier of its end date and 90 days after it was last used. */
 function stopOf(row: TokenRow): Pick<AiAccessToken, "stopsAt" | "stopReason"> {
@@ -96,6 +107,7 @@ function toToken(row: TokenRow): AiAccessToken {
     endsAt: iso(row.expires_at),
     ...stopOf(row),
     accessLevel: row.access_level,
+    toolScope: row.tool_scope,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
     revokedAt: row.revoked_at,
@@ -120,7 +132,7 @@ export async function listAiTokens(auth: AuthContext, organisationId: string): P
 export async function createAiToken(
   auth: AuthContext,
   organisationId: string,
-  input: { name: unknown; accessLevel?: unknown; role: Role; confirmFullAccess?: unknown; endsInDays?: unknown },
+  input: { name: unknown; accessLevel?: unknown; role: Role; confirmFullAccess?: unknown; endsInDays?: unknown; toolScope?: unknown },
 ): Promise<{ token: string; key: AiAccessToken }> {
   const name = requireString(input.name, "Name", { maxLength: 100 });
   const accessLevel = input.accessLevel == null || input.accessLevel === "" ? "read" : input.accessLevel;
@@ -137,6 +149,7 @@ export async function createAiToken(
   // An end date (#695): 30, 90 or 365 days, or null for none; left out, 90 days for a key that can post.
   const endsInDays = input.endsInDays === undefined || input.endsInDays === "" ? defaultKeyEndDays(accessLevel) : input.endsInDays;
   if (!(AI_KEY_END_CHOICES as readonly unknown[]).includes(endsInDays)) throw new ValidationError("endsInDays must be 30, 90, 365 or null for no end date.");
+  const toolScope = parseToolScope(input.toolScope);
   const token = newAiToken();
   const key = await withCoreTransaction(async (client) => {
     // Serialise per person and organisation so the limit holds.
@@ -153,17 +166,17 @@ export async function createAiToken(
       );
     }
     const inserted = await client.query<TokenRow>(
-      `insert into ai_access_tokens (user_id, organisation_id, name, token_hash, token_prefix, created_by_email, access_level, expires_at)
-       values ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(days => $8::int))
+      `insert into ai_access_tokens (user_id, organisation_id, name, token_hash, token_prefix, created_by_email, access_level, expires_at, tool_scope)
+       values ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(days => $8::int), $9)
        returning ${TOKEN_COLUMNS}`,
-      [auth.user.id, organisationId, name, hashAiToken(token), aiTokenDisplayPrefix(token), auth.user.email, accessLevel, endsInDays],
+      [auth.user.id, organisationId, name, hashAiToken(token), aiTokenDisplayPrefix(token), auth.user.email, accessLevel, endsInDays, toolScope],
     );
     const row = inserted.rows[0];
     await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, {
       eventType: "ai_access_token.created",
       entityType: "organisation",
       entityId: organisationId,
-      details: { tokenId: row.id, name, accessLevel, endsInDays, startsWith: `${AI_TOKEN_PREFIX}${row.token_prefix}` },
+      details: { tokenId: row.id, name, accessLevel, toolScope, endsInDays, startsWith: `${AI_TOKEN_PREFIX}${row.token_prefix}` },
     });
     return toToken(row);
   });
@@ -207,6 +220,8 @@ export type AiTokenIdentity = {
   accessLevel: AiAccessLevel;
   /** That level capped by the owner's role now (decision 346). */
   effectiveLevel: AiAccessLevel;
+  /** Which tools it's for (#696); null is everything its level allows. */
+  toolScope: AiToolScope | null;
   user: { id: string; email: string; displayName: string };
   membership: Membership;
 };
@@ -243,6 +258,7 @@ export type GrantRow = {
   display_name: string;
   last_used_at: string | null;
   access_level: AiAccessLevel;
+  tool_scope: AiToolScope | null;
   resource: string | null;
 };
 
@@ -255,7 +271,7 @@ export type GrantRow = {
  */
 export async function grantIdentity(where: string, values: unknown[], extra: (row: GrantRow) => boolean = () => true): Promise<AiTokenIdentity | null> {
   const found = await coreQuery<GrantRow>(
-    `select t.id::text, t.kind, t.name, t.organisation_id, t.user_id, u.email, u.display_name, t.last_used_at, t.access_level, t.resource
+    `select t.id::text, t.kind, t.name, t.organisation_id, t.user_id, u.email, u.display_name, t.last_used_at, t.access_level, t.tool_scope, t.resource
        from ai_access_tokens t
        join users u on u.id = t.user_id
       where ${where} and t.revoked_at is null and u.is_active`,
@@ -274,6 +290,7 @@ export async function grantIdentity(where: string, values: unknown[], extra: (ro
     tokenName: row.name,
     accessLevel: row.access_level,
     effectiveLevel: effectiveAccessLevel(row.access_level, membership.role),
+    toolScope: row.tool_scope,
     user: { id: row.user_id, email: row.email, displayName: row.display_name },
     membership,
   };
