@@ -74,6 +74,44 @@ describe("checkReadOnlyQuery", () => {
     expect(() => checkReadOnlyQuery("select nextval, lo_value from t", "postgres")).not.toThrow();
   });
 
+  it("refuses functions that run a query held in a string, or just wait (#700)", () => {
+    for (const sql of [
+      "select query_to_xml('select pg_read_file(''/etc/passwd'')', true, true, '')",
+      "select * from query_to_xml_and_xmlschema('select 1', true, true, '')",
+      "select table_to_xml('pg_authid', true, true, '')",
+      "select schema_to_xml('public', true, true, '')",
+      "select database_to_xml(true, true, '')",
+      "select cursor_to_xml('c', 10, true, true, '')",
+      "select pg_catalog.query_to_xml('select 1', true, true, '')",
+      "select 1 from orders where pg_sleep(30) is null",
+      "select pg_sleep_for('5 minutes')",
+      "select pg_sleep_until('tomorrow')",
+    ]) {
+      expect(() => checkReadOnlyQuery(sql, "postgres"), sql).toThrow("can't call");
+    }
+    expect(() => checkReadOnlyQuery("select sleep(30)", "mysql")).toThrow("can't call sleep()");
+    expect(() => checkReadOnlyQuery("select benchmark(100000000, md5('x'))", "mysql")).toThrow("can't call benchmark()");
+    // A column or table with one of these names is fine: only a call is refused.
+    expect(() => checkReadOnlyQuery("select sleep, benchmark from habits", "postgres")).not.toThrow();
+    expect(() => checkReadOnlyQuery("select 'query_to_xml(1)' as note from t", "postgres")).not.toThrow();
+  });
+
+  it("refuses a refused function called by its quoted name", () => {
+    expect(() => checkReadOnlyQuery(`select "pg_read_file"('/etc/passwd')`, "postgres")).toThrow("can't call pg_read_file()");
+    expect(() => checkReadOnlyQuery(`select pg_catalog."query_to_xml" ('select 1', true, true, '')`, "postgres")).toThrow("can't call query_to_xml()");
+    expect(() => checkReadOnlyQuery(`select "PG_SLEEP"(5)`, "postgres")).toThrow("can't call");
+    expect(() => checkReadOnlyQuery("select `load_file`('/etc/passwd')", "mysql")).toThrow("can't call load_file()");
+    expect(() => checkReadOnlyQuery("select `sleep`(10)", "mysql")).toThrow("can't call sleep()");
+    // A name spelt with escapes would hide it, so that spelling is refused outright.
+    expect(() => checkReadOnlyQuery(`select U&"pg\\005Fread_file"('/etc/passwd')`, "postgres")).toThrow('U&"..."');
+    expect(() => checkReadOnlyQuery(`select u&"d\\0061ta" from t`, "postgres")).toThrow('U&"..."');
+    expect(() => checkReadOnlyQuery(`select U&'d\\0061ta' as note, "u&" from t`, "postgres")).not.toThrow();
+    // Quoted names that aren't calls, and ordinary quoted functions, still pass.
+    expect(() => checkReadOnlyQuery(`select "pg_read_file" from "nextval"`, "postgres")).not.toThrow();
+    expect(() => checkReadOnlyQuery(`select "upper"(name), [lo_export] from t`, "sqlserver")).not.toThrow();
+    expect(() => checkReadOnlyQuery(`select count("id") from orders where "set" in (1, 2)`, "postgres")).not.toThrow();
+  });
+
   it("refuses unclosed quotes, comments and brackets", () => {
     expect(() => checkReadOnlyQuery("select 'abc", "postgres")).toThrow(/quote/);
     expect(() => checkReadOnlyQuery("select [abc", "sqlserver")).toThrow(/quote/);

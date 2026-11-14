@@ -84,11 +84,34 @@ const FORBIDDEN_FUNCTIONS = new Set([
   "release_all_locks",
   "sys_exec",
   "sys_eval",
+  // Run a query given as text, which this check can't read (#700, decision 1635).
+  "query_to_xml",
+  "query_to_xml_and_xmlschema",
+  "query_to_xmlschema",
+  "table_to_xml",
+  "table_to_xml_and_xmlschema",
+  "table_to_xmlschema",
+  "cursor_to_xml",
+  "cursor_to_xmlschema",
+  "schema_to_xml",
+  "schema_to_xml_and_xmlschema",
+  "schema_to_xmlschema",
+  "database_to_xml",
+  "database_to_xml_and_xmlschema",
+  "database_to_xmlschema",
+  // Hold the connection without doing anything.
+  "sleep",
+  "benchmark",
 ]);
 
-const FORBIDDEN_FUNCTION_PREFIXES = ["pg_advisory", "pg_try_advisory", "pg_ls_", "pg_create_", "pg_drop_", "lo_", "dblink"];
+const FORBIDDEN_FUNCTION_PREFIXES = ["pg_advisory", "pg_try_advisory", "pg_ls_", "pg_create_", "pg_drop_", "pg_sleep", "pg_file_", "lo_", "dblink"];
 
-type Token = { kind: "word" | "symbol"; text: string; depth: number };
+function forbiddenFunction(name: string): boolean {
+  return FORBIDDEN_FUNCTIONS.has(name) || FORBIDDEN_FUNCTION_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
+
+/** `name`: for a quoted name ("x", `x`, [x]), what's inside it, so a refused function can't be called by quoting its name. */
+type Token = { kind: "word" | "symbol"; text: string; depth: number; name?: string };
 
 function refuse(message: string): never {
   throw new ValidationError(message);
@@ -101,7 +124,7 @@ function scan(sql: string, engine: DatabaseEngine): { tokens: Token[]; cleaned: 
   let depth = 0;
   let i = 0;
   const backslashEscapes = engine === "mysql";
-  const readQuoted = (close: string, escapes: boolean): void => {
+  const readQuoted = (close: string, escapes: boolean): string => {
     const start = i;
     i += 1;
     while (i < sql.length) {
@@ -117,11 +140,11 @@ function scan(sql: string, engine: DatabaseEngine): { tokens: Token[]; cleaned: 
         }
         i += 1;
         cleaned += sql.slice(start, i);
-        return;
+        return sql.slice(start + 1, i - 1).split(close + close).join(close);
       }
       i += 1;
     }
-    refuse("The query has a quote that isn't closed.");
+    return refuse("The query has a quote that isn't closed.");
   };
   while (i < sql.length) {
     const char = sql[i];
@@ -161,18 +184,20 @@ function scan(sql: string, engine: DatabaseEngine): { tokens: Token[]; cleaned: 
       continue;
     }
     if (char === '"') {
-      readQuoted('"', backslashEscapes);
-      tokens.push({ kind: "symbol", text: '"', depth });
+      // PostgreSQL's U&"..." spells a name with escapes (U&"pg\005Fread_file"), which would hide it from this check.
+      if (engine === "postgres" && /(^|[^A-Za-z0-9_$])u&$/i.test(sql.slice(Math.max(0, i - 3), i))) refuse('A name written as U&"..." can\'t be used here. Write the name as it is.');
+      const name = readQuoted('"', backslashEscapes);
+      tokens.push({ kind: "symbol", text: '"', depth, name: name.toLowerCase() });
       continue;
     }
     if (char === "`" && engine === "mysql") {
-      readQuoted("`", false);
-      tokens.push({ kind: "symbol", text: "`", depth });
+      const name = readQuoted("`", false);
+      tokens.push({ kind: "symbol", text: "`", depth, name: name.toLowerCase() });
       continue;
     }
     if (char === "[" && engine === "sqlserver") {
-      readQuoted("]", false);
-      tokens.push({ kind: "symbol", text: "[", depth });
+      const name = readQuoted("]", false);
+      tokens.push({ kind: "symbol", text: "[", depth, name: name.toLowerCase() });
       continue;
     }
     if (char === "$" && engine === "postgres") {
@@ -224,15 +249,19 @@ export function checkReadOnlyQuery(input: unknown, engine: DatabaseEngine): stri
   }
   for (let index = 0; index < meaningful.length; index += 1) {
     const token = meaningful[index];
-    if (token.kind !== "word") continue;
     const after = meaningful[index + 1];
+    // A refused function called by its quoted name: "pg_read_file"('...').
+    if (token.name !== undefined && after?.text === "(" && forbiddenFunction(token.name.trim())) {
+      refuse(`Tohyee only reads from the database, so a query can't call ${token.name.trim()}().`);
+    }
+    if (token.kind !== "word") continue;
     if (FORBIDDEN_WORDS.has(token.text)) {
       refuse(`Tohyee only reads, so a query can't use ${token.text.toUpperCase()}. Put the name in quotes if it's a column or table.`);
     }
     if (token.text === "for" && after?.kind === "word" && (after.text === "share" || after.text === "key" || after.text === "no")) {
       refuse("Tohyee only reads, so a query can't lock rows (FOR SHARE).");
     }
-    if (after?.text === "(" && (FORBIDDEN_FUNCTIONS.has(token.text) || FORBIDDEN_FUNCTION_PREFIXES.some((prefix) => token.text.startsWith(prefix)))) {
+    if (after?.text === "(" && forbiddenFunction(token.text)) {
       refuse(`Tohyee only reads from the database, so a query can't call ${token.text}().`);
     }
   }
