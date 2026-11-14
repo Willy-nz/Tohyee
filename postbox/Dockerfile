@@ -6,7 +6,7 @@
 # To build it yourself, from the repository's top folder:
 #   docker build -f postbox/Dockerfile -t tohyee-postbox .
 
-FROM node:22-bookworm-slim AS build
+FROM node:25-bookworm-slim AS build
 WORKDIR /app
 # Only esbuild is needed to bundle it, at the version the lock file says
 # (installed on its own, not with the whole project's packages).
@@ -20,7 +20,7 @@ COPY postbox ./postbox
 COPY scripts/build-postbox.mjs ./scripts/build-postbox.mjs
 RUN node scripts/build-postbox.mjs
 
-FROM node:22-bookworm-slim
+FROM node:25-bookworm-slim
 # openssl makes the post box's own certificate on first start.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl \
