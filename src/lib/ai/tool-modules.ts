@@ -110,10 +110,12 @@ export const TRACKING_TOOLS: readonly string[] = [
 /** Analytics reports and their tables (#591): the Analytics app (Settings › Modules › Analytics), apart from Accounting. */
 export const ANALYTICS_TOOLS: readonly string[] = [
   "list_analytics_tables",
+  "analytics_format_guide",
   "run_analytics_query",
   "list_analytics_dashboards",
   "get_analytics_dashboard",
   "create_analytics_dashboard",
+  "create_analytics_dashboard_from_template",
   "update_analytics_dashboard",
   "refresh_analytics_sources",
 ];
