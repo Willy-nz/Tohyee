@@ -5,6 +5,9 @@ import * as tokensRoute from "@/app/api/ai/tokens/route";
 import * as mcpRoute from "@/app/api/mcp/route";
 import { saveAiDashboard } from "@/lib/ai-workspace/dashboards";
 import { addAiFile } from "@/lib/ai-workspace/files";
+import { addPaddock, saveFarm } from "@/lib/farming/paddocks";
+import { listGrazings } from "@/lib/farming/pasture";
+import { addGauge } from "@/lib/farming/rainfall";
 import type { SessionUser } from "@/lib/auth/sessions";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
@@ -224,5 +227,42 @@ describeWithDatabase("the AI's farm workspace", () => {
     expect(noPay.includesPay).toBe(false);
     expect(noPay.staff).toEqual([{ name: "Aroha Ngata", jobTitle: null, startDate: "2026-04-01", finishDate: null, reportsTo: null, group: null, archived: false }]);
     expect(JSON.stringify(noPay)).not.toContain("70000");
+  });
+
+  it("#701: the AI records field work the way the screens do, marked as through the AI; a look-only key can't", async () => {
+    const farm = (await asOwner((tx) => saveFarm(tx, { name: "Home Farm" })))[0];
+    const paddock = await asOwner((tx) => addPaddock(tx, { farmId: farm.id, name: "Paddock 19", effectiveHa: "4.20", onDate: "2026-07-01" }));
+    const gauge = await asOwner((tx) => addGauge(tx, { farmId: farm.id, name: "House gauge" }));
+
+    // "I moved the milkers to paddock 19 this morning and fed 2 bales."
+    const grazing = (await call(tokens["bookkeeper-drafts"], "record_grazing", { paddockId: paddock.id, mob: "Milkers", head: 280, inOn: "2026-11-14", preCover: 2900, idempotencyKey: "field-work-0001" })).grazing as Json;
+    expect(grazing).toMatchObject({ mob: "Milkers", head: 280, inOn: "2026-11-14", outOn: null });
+    const fed = (await call(tokens["bookkeeper-drafts"], "record_supplements_fed", { paddockId: paddock.id, fedOn: "2026-11-14", feed: "Baleage", quantity: "2", unit: "bales", mob: "Milkers" })).supplement as Json;
+    expect(fed).toMatchObject({ feed: "Baleage", quantity: "2.00", unit: "bales" });
+    // The same call sent again (a lost answer) isn't recorded twice.
+    const again = (await call(tokens["bookkeeper-drafts"], "record_grazing", { paddockId: paddock.id, mob: "Milkers", head: 280, inOn: "2026-11-14", preCover: 2900, idempotencyKey: "field-work-0001" })).grazing as Json;
+    expect(again.id).toBe(grazing.id);
+    // The screen's own rules apply: a paddock holds one mob at a time.
+    await expect(call(tokens["bookkeeper-drafts"], "record_grazing", { paddockId: paddock.id, mob: "Heifers", inOn: "2026-11-14" })).rejects.toThrow("already has a mob in it");
+
+    const reading = (await call(tokens["owner-drafts"], "record_pasture_reading", { paddockId: paddock.id, measuredOn: "2026-11-14", cover: 2400, method: "visual", note: "By eye" })).reading as Json;
+    expect(reading).toMatchObject({ cover: 2400, method: "visual", source: 'Recorded via AI key "owner-drafts"' });
+    const gauges = (await call(tokens["owner-read"], "list_rain_gauges", {})).gauges as Json[];
+    expect(gauges.map((entry) => entry.name)).toEqual(["House gauge"]);
+    const rain = (await call(tokens["owner-drafts"], "record_rainfall", { gaugeId: gauge.id, readOn: "2026-11-14", mm: "12.5" })).reading as Json;
+    expect(rain).toMatchObject({ mm: "12.5" });
+
+    const task = (await call(tokens["owner-drafts"], "add_farm_task", { title: "Check the trough in Paddock 19", dueOn: "2026-11-15", paddockId: paddock.id })).task as Json;
+    expect(((await call(tokens["owner-read"], "list_farm_tasks", {})).tasks as Json[]).map((entry) => entry.title)).toEqual(["Check the trough in Paddock 19"]);
+    const done = (await call(tokens["owner-drafts"], "mark_farm_task_done", { taskId: task.id, doneFor: "2026-11-15" })).task as Json;
+    expect(done.next).toBeNull();
+    expect((await call(tokens["owner-read"], "list_farm_tasks", {})).tasks).toEqual([]);
+
+    // Look only can read the tasks and gauges, never record.
+    await expect(call(tokens["owner-read"], "record_pasture_reading", { paddockId: paddock.id, measuredOn: "2026-11-14", cover: 2400, method: "visual" })).rejects.toThrow();
+    // What was recorded shows where the screens show it, and the history says who and through what.
+    expect((await asOwner((tx) => listGrazings(tx, { farmId: farm.id }))).rows.map((entry) => entry.mob)).toEqual(["Milkers"]);
+    const audit = await asOwner((tx) => tx.query<{ actor_email: string; via: string | null }>("select actor_email, details->>'via' as via from audit_events where event_type = 'farming.grazing_added'"));
+    expect(audit.rows).toEqual([{ actor_email: bookkeeper.email, via: 'AI key "bookkeeper-drafts"' }]);
   });
 });

@@ -15095,3 +15095,23 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       in the Content-Security-Policy, keeping sign-in limits across
       restarts, pinning Actions by commit, and an outside penetration
       test. Claude's details, not yet reviewed.
+1637. **The AI records day-to-day field work at "Make drafts"** (#701,
+      first part). Jess: "I want it to be able to add and do stuff with the
+      farming modules." How the access levels, written in accounting
+      words, apply to a farm: **Make drafts** records field work that
+      changes no money (cover readings, grazings, feed, rain, tasks);
+      **Make and post** will set up and change the farm and anything that
+      feeds the books (livestock movements, counts); **Full access** will
+      delete or undo, with a preview first; app keys, cameras, mailboxes
+      and module settings stay with a person. Jess hasn't confirmed this
+      mapping. First tools: record_pasture_reading, record_grazing,
+      record_supplements_fed, record_rainfall, add_farm_task and
+      mark_farm_task_done, with list_farm_tasks and list_rain_gauges to
+      read. Each calls the service its screen calls, so the screen's rules
+      and farm access (decision 744) apply, the record shows it came
+      through the AI key, and the same call sent twice is recorded once.
+      As with every "Make drafts" tool, the key's owner needs the
+      bookkeeper role or higher; farm staff using an AI is #703. Eight
+      screen actions now point at a tool (two were the notebook's, which
+      already had tools); 197 farm actions still say "next". Claude's
+      details, not yet reviewed.
