@@ -15065,3 +15065,19 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       asked for. Not built: limiting what the AI can do after reading a
       document, and an allowed-senders list for a bills mailbox. Claude's
       details, not yet reviewed.
+1635. **The read-only check on typed database queries refuses functions
+      that run a query held in a string, functions that only wait, and
+      refused functions called by a quoted name** (#700). Added to the
+      refused functions: PostgreSQL's query_to_xml family (query, table,
+      cursor, schema and database, with their xmlschema forms), pg_sleep
+      and its relatives, pg_file_*, and MySQL's sleep and benchmark. A
+      refused function is now also refused when its name is quoted
+      ("pg_read_file"(...), `load_file`(...), [name](...)), which the
+      check used to skip, and PostgreSQL's U&"..." spelling of a name is
+      refused outright because its escapes would hide the name. A column
+      or table with one of these names is still fine: only a call is
+      refused. The read-only transaction and the advice to connect with a
+      read-only login are unchanged. Not built: checking the login's rights
+      when a database is connected, and allowing only a known list of
+      functions. Checked by unit tests of the guard; not run against a real
+      external database. Claude's details, not yet reviewed.
