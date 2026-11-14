@@ -1,13 +1,15 @@
 "use client";
 
 import { makeNumberFormatter, type ChartFormat } from "@/lib/analytics/chart-format";
-import { figureColour, figureStyle, keyFigure, keyFigureNumbers, sparkPoints } from "@/lib/analytics/key-figure";
+import { figureColour, figureStyle, headlineNumberFormat, keyFigure, keyFigureNumbers, sparkPoints } from "@/lib/analytics/key-figure";
 import type { QueryResult, ResultColumn, TrendPoint } from "@/lib/analytics/query";
 import { adaptForDark } from "@/lib/charts/colour-check";
 import styles from "./key-figure.module.css";
 
-function formatterFor(column: ResultColumn, format: ChartFormat | undefined, index: number) {
-  return makeNumberFormatter(format?.series?.[index]?.number ?? column.number, column.format === "money" ? "money" : "number");
+/** `beside`: the figure this card leads with, which decides whether cents show (#692). Left out, the exact figure. */
+function formatterFor(column: ResultColumn, format: ChartFormat | undefined, index: number, beside?: string | null) {
+  const set = format?.series?.[index]?.number ?? column.number;
+  return makeNumberFormatter(beside === undefined ? set : headlineNumberFormat(set, column, beside), column.format === "money" ? "money" : "number");
 }
 
 const MONTH = new Intl.DateTimeFormat("en-NZ", { month: "short", year: "numeric", timeZone: "UTC" });
@@ -77,7 +79,9 @@ export function KeyFigureView({ result, format, compact = false }: { result: Que
   if (!figure) return null;
   const kpi = format?.kpi ?? {};
   const measures = result.columns.filter((column) => column.role === "measure");
-  const show = formatterFor(figure.column, format, 0);
+  const show = formatterFor(figure.column, format, 0, figure.value);
+  // The figure to the cent, for the tooltip, when the card rounds it.
+  const exact = figure.value === null ? "" : formatterFor(figure.column, format, 0)(figure.value);
   const change = kpi.change ?? "both";
   const tone = figure.good === null ? styles.same : figure.good ? styles.good : styles.bad;
   const arrow = figure.direction === "up" ? "▲" : figure.direction === "down" ? "▼" : "▶";
@@ -105,7 +109,7 @@ export function KeyFigureView({ result, format, compact = false }: { result: Que
     return (
       <div className={`${styles.multi} ${compact ? styles.compact : ""}`} style={kpi.align ? { justifyItems: numberStyle.justifyItems as string, textAlign: kpi.align } : undefined}>
         {numbers.map((entry, index) => {
-          const own = formatterFor(entry.column, format, measures.indexOf(entry.column));
+          const own = formatterFor(entry.column, format, measures.indexOf(entry.column), entry.value);
           return (
             <div key={entry.column.key} className={styles.multiItem}>
               {label !== "below" ? <span className={styles.name}>{entry.column.label}</span> : null}
@@ -131,7 +135,7 @@ export function KeyFigureView({ result, format, compact = false }: { result: Que
   return (
     <div className={`${styles.kpi} ${compact ? styles.compact : ""}`} style={kpi.align ? { justifyItems: numberStyle.justifyItems as string, textAlign: kpi.align } : undefined}>
       {label === "above" ? name : null}
-      <span className={`${styles.value} ${numberClass}`} style={numberStyle}>
+      <span className={`${styles.value} ${numberClass}`} style={numberStyle} title={figure.value !== null && exact !== show(figure.value) ? exact : undefined}>
         {icon}
         {figure.value === null ? "—" : show(figure.value)}
       </span>
@@ -148,13 +152,13 @@ export function KeyFigureView({ result, format, compact = false }: { result: Que
             </span>
           </span>
         ) : (
-          <span className={styles.against}>Nothing to compare with for the {figure.comparison.label}{figure.comparison.label === "target" ? "" : " (set the dashboard's From and To)"}.</span>
+          <span className={styles.against} title={figure.comparison.label === "target" ? undefined : "This needs the report's From and To dates, and figures from before them."}>{figure.comparison.label === "target" ? "Nothing to compare with the target." : `Nothing in the ${figure.comparison.label} to compare with.`}</span>
         )
       ) : null}
       {result.trend?.length ? <Sparkline trend={result.trend} format={(value) => show(value)} style={kpi.sparkline} colour={kpi.sparkColor} /> : null}
       {figure.others.map((other) => (
         <span key={other.column.key} className={styles.against}>
-          {other.column.label}: {other.value === null ? "—" : formatterFor(other.column, format, measures.indexOf(other.column))(other.value)}
+          {other.column.label}: {other.value === null ? "—" : formatterFor(other.column, format, measures.indexOf(other.column), other.value)(other.value)}
         </span>
       ))}
     </div>

@@ -5,20 +5,32 @@
 }
 
 .menu > summary {
+  display: inline-grid;
+  place-items: center;
+  /* Big enough to tap. */
+  min-width: 32px;
+  min-height: 28px;
+  border-radius: var(--radius);
   cursor: pointer;
   list-style: none;
-  color: var(--link);
-  font-weight: 600;
-  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.menu > summary:hover,
+.menu[open] > summary {
+  background: var(--surface-muted, rgb(0 0 0 / 6%));
+  color: var(--text);
 }
 
 .menu > summary::-webkit-details-marker {
   display: none;
 }
 
-.menu > summary::after {
-  content: " ▾";
-  color: var(--text-muted);
+.heading {
+  font-weight: 600;
 }
 
 .list {

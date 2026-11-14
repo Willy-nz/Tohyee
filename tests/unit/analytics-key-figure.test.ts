@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keyFigure } from "@/lib/analytics/key-figure";
+import { headlineNumberFormat, keyFigure } from "@/lib/analytics/key-figure";
 import { addMonths, previousPeriod, previousYear } from "@/lib/analytics/periods";
 import type { QueryResult } from "@/lib/analytics/query";
 
@@ -63,5 +63,23 @@ describe("the period to compare with (#334)", () => {
     expect(previousYear("2025-02-01", "2025-02-28")).toEqual({ from: "2024-02-01", to: "2024-02-29" });
     expect(previousYear("2026-10-05", "2026-10-20")).toEqual({ from: "2025-10-05", to: "2025-10-20" });
     expect(addMonths("2026-03-31", -1)).toBe("2026-02-28");
+  });
+});
+
+describe("a headline money figure's cents (#692)", () => {
+  const money = { format: "money" as const };
+  it("drops the cents from 1,000 up, and keeps them below", () => {
+    expect(headlineNumberFormat(undefined, money, "91195.00")).toEqual({ decimals: 0 });
+    expect(headlineNumberFormat(undefined, money, "-9821.00")).toEqual({ decimals: 0 });
+    expect(headlineNumberFormat(undefined, money, "1000")).toEqual({ decimals: 0 });
+    expect(headlineNumberFormat(undefined, money, "999.99")).toBeUndefined();
+    expect(headlineNumberFormat({ prefix: "about" }, money, "5000")).toEqual({ prefix: "about", decimals: 0 });
+  });
+  it("leaves a tile's own decimals or short form, other kinds of number and a missing figure alone", () => {
+    expect(headlineNumberFormat({ decimals: 2 }, money, "91195.00")).toEqual({ decimals: 2 });
+    expect(headlineNumberFormat({ compact: true }, money, "91195.00")).toEqual({ compact: true });
+    expect(headlineNumberFormat({ style: "percent" }, money, "91195.00")).toEqual({ style: "percent" });
+    expect(headlineNumberFormat(undefined, { format: "number" }, "91195.1234")).toBeUndefined();
+    expect(headlineNumberFormat(undefined, money, null)).toBeUndefined();
   });
 });

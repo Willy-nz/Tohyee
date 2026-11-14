@@ -118,8 +118,12 @@ export function PinTileMenu({
         void loadDashboards();
       }}
     >
-      <summary>Pin to page</summary>
+      {/* A quiet "more" button (#692): the tile's own figures are the loudest thing on the card. */}
+      <summary aria-label="Pin to page" title="Pin to page">
+        <span aria-hidden="true">⋯</span>
+      </summary>
       <div className={styles.list}>
+        <strong className={styles.heading}>Pin to page</strong>
         {pages.map((page) => {
           const preference = preferences[page.id];
           const tiles = preference?.tiles ?? [];

@@ -1,4 +1,4 @@
-import type { ChartFormat } from "@/lib/analytics/chart-format";
+import type { ChartFormat, NumberFormat } from "@/lib/analytics/chart-format";
 import { ruleMatches } from "@/lib/analytics/conditional";
 import type { QueryResult, ResultColumn, TrendPoint } from "@/lib/analytics/query";
 import { abs, cmp, dec, divide, isZero, mul, sub, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
@@ -103,4 +103,23 @@ export function sparkPoints(trend: TrendPoint[], width: number, height: number, 
     y: value === null || !Number.isFinite(value) ? null : height - inset - ((value - low) * (height - inset * 2)) / span,
     value,
   }));
+}
+
+/**
+ * A headline money figure with no number format of its own drops its cents
+ * from 1,000 up (#692): "$91,195", not "$91,195.00". Smaller figures keep
+ * them, and a tile that sets decimals or the short form (K, M) is left as it
+ * is. `beside` is the card's main figure, so the change and the figure it's
+ * compared with are written the same way.
+ */
+export function headlineNumberFormat(set: NumberFormat | undefined, column: Pick<ResultColumn, "format">, beside: string | null): NumberFormat | undefined {
+  if (column.format !== "money" || beside === null) return set;
+  if (set?.decimals !== undefined || set?.compact !== undefined || (set?.style && set.style !== "auto" && set.style !== "currency")) return set;
+  let big: boolean;
+  try {
+    big = cmp(abs(dec(beside)), dec("1000")) >= 0;
+  } catch {
+    return set;
+  }
+  return big ? { ...set, decimals: 0 } : set;
 }
