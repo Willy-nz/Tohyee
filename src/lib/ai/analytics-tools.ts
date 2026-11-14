@@ -1,7 +1,8 @@
 import { boundedLimit, CURSOR, limitInput, pageByPosition } from "@/lib/ai/limits";
 import { type AiTool, DATE, type JsonSchema, schema, type ToolContext } from "@/lib/ai/tools";
 import { roleAtLeast } from "@/lib/auth/roles";
-import { PALETTES, SECOND_GROUPING, SECOND_GROUPING_REQUIRED } from "@/lib/analytics/chart-format";
+import { HUES, LEGEND_POSITIONS, PALETTES, SECOND_GROUPING, SECOND_GROUPING_REQUIRED } from "@/lib/analytics/chart-format";
+import { buildTemplate, TEMPLATES } from "@/lib/analytics/templates";
 import {
   checkDashboardDraft,
   createDashboard,
@@ -122,8 +123,8 @@ function buildingGuide() {
     widths: [...TILE_WIDTHS],
     heights: [...TILE_HEIGHTS],
     format:
-      `Optional. Common keys: palette (${Object.keys(PALETTES).join(", ")}), labels { show }, legend { show: auto|show|hide, position }, stack (none, stacked, percent), smooth, markers, valueAxis { title }, ` +
-      "kpi { target, change: both|amount|percent, downIsGood }, table { totals, banded }, referenceLines [{ kind: constant|target|average|median|min|max|percentile|band (constant when only value is given), value, to (band), percentile (1-99), label, style: solid|dashed|dotted }], negativeRed. Leave it out for Tohyee's look.",
+      "Optional, but a good report sets it: each value's number format (series[n].number: percent, currency, decimals, compact), a subtitle on each chart (card.subtitle), comparisons on key figures (kpi), colours and rules. " +
+      "analytics_format_guide has every key with examples, how to lay a report out, and the ready-made templates.",
     books:
       "The books' ledger (tohyee_ledger_lines) stores amount as debit less credit, so income and liabilities are negative: use the table's savedValues (e.g. revenue) or negate: true with a where on account_type.",
   };
@@ -388,6 +389,208 @@ const QUERY: JsonSchema = {
   },
   required: ["table", "measures"],
 };
+const HEX: JsonSchema = { type: "string", pattern: "^#[0-9a-fA-F]{6}$", description: "A colour as #rrggbb." };
+const NUMBER_FORMAT: JsonSchema = {
+  type: "object",
+  description: "How a number shows. A ratio such as a margin needs style percent, or it shows as 0.35.",
+  properties: {
+    style: { type: "string", enum: ["auto", "currency", "percent", "plain"] },
+    decimals: { type: "integer", minimum: 0, maximum: 4 },
+    compact: { type: "boolean", description: "12.3K, 4.5M." },
+    thousands: { type: "boolean" },
+    prefix: { type: "string", maxLength: 20 },
+    suffix: { type: "string", maxLength: 20 },
+  },
+};
+const TEXT_STYLE: Record<string, JsonSchema> = {
+  size: { type: "integer", minimum: 8, maximum: 32 },
+  bold: { type: "boolean" },
+  italic: { type: "boolean" },
+  color: HEX,
+  align: { type: "string", enum: ["left", "center", "right"] },
+};
+const AXIS: JsonSchema = {
+  type: "object",
+  properties: { title: { type: "string", maxLength: 60 }, show: { type: "boolean" }, gridlines: { type: "boolean" }, zero: { type: "boolean", description: "Start at zero." }, log: { type: "boolean" }, min: { type: "string" }, max: { type: "string" }, number: NUMBER_FORMAT, rotate: { type: "integer", minimum: -90, maximum: 90 }, reverse: { type: "boolean" } },
+};
+const COLOUR_RULE: JsonSchema = {
+  type: "object",
+  properties: { op: { type: "string", enum: [">=", ">", "<=", "<", "="] }, value: { type: "string", description: "A number as text." }, color: HEX },
+  required: ["op", "value", "color"],
+};
+/**
+ * A tile's format as the AI is told it (#689): the keys parseChartFormat
+ * takes that matter for how a report reads. Anything else the editor has is
+ * still accepted. tests/unit/ai-analytics-format.test.ts checks every key
+ * here is one parseChartFormat keeps.
+ */
+export const FORMAT_SCHEMA: JsonSchema = {
+  type: "object",
+  description: "How the tile looks. analytics_format_guide explains each key with examples.",
+  properties: {
+    palette: { type: "string", enum: Object.keys(PALETTES) },
+    series: {
+      type: "array",
+      maxItems: 12,
+      description: "One entry for each measure, in order: its number format, colour, and (combo) whether it's a bar or a line and which axis.",
+      items: {
+        type: "object",
+        properties: {
+          number: NUMBER_FORMAT,
+          as: { type: "string", enum: ["bar", "line"] },
+          axis: { type: "string", enum: ["left", "right"] },
+          color: { type: "string", enum: [...HUES] },
+          hex: HEX,
+          lineWidth: { type: "integer", minimum: 1, maximum: 6 },
+          lineStyle: { type: "string", enum: ["solid", "dashed", "dotted"] },
+          markers: { type: "boolean" },
+          trend: { type: "boolean", description: "A straight trend line." },
+        },
+      },
+    },
+    colorByCategory: { type: "boolean", description: "One measure: a colour for each bar." },
+    negativeRed: { type: "boolean" },
+    labels: {
+      type: "object",
+      properties: { show: { type: "boolean" }, position: { type: "string", enum: ["auto", "inside", "outside"] }, size: { type: "integer", minimum: 8, maximum: 24 }, number: NUMBER_FORMAT, density: { type: "string", enum: ["all", "auto", "ends"] } },
+    },
+    legend: { type: "object", properties: { show: { type: "string", enum: ["auto", "show", "hide"] }, position: { type: "string", enum: [...LEGEND_POSITIONS] }, title: { type: "string", maxLength: 60 } } },
+    categoryAxis: { type: "object", properties: { title: { type: "string", maxLength: 60 }, show: { type: "boolean" }, rotate: { type: "integer", minimum: -90, maximum: 90 }, interval: { type: "integer", minimum: 0, maximum: 50 } } },
+    valueAxis: AXIS,
+    rightAxis: AXIS,
+    stack: { type: "string", enum: ["none", "stacked", "percent"] },
+    smooth: { type: "boolean" },
+    markers: { type: "boolean" },
+    zoom: { type: "boolean", description: "A slider to zoom a long time series." },
+    donutTotal: { type: "boolean", description: "The total in the middle of a donut." },
+    bars: { type: "object", properties: { thickness: { type: "integer", minimum: 4, maximum: 80 }, gap: { type: "integer", minimum: 0, maximum: 90 }, rounded: { type: "boolean" } } },
+    referenceLines: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["constant", "target", "average", "median", "min", "max", "percentile", "band"] },
+          value: { type: "string" },
+          to: { type: "string", description: "A band's upper value." },
+          percentile: { type: "integer", minimum: 1, maximum: 99 },
+          label: { type: "string", maxLength: 60 },
+          color: HEX,
+          style: { type: "string", enum: ["solid", "dashed", "dotted"] },
+        },
+      },
+    },
+    card: {
+      type: "object",
+      description: "The tile's card: a subtitle says what to look for.",
+      properties: {
+        subtitle: { type: "string", maxLength: 200 },
+        showTitle: { type: "boolean" },
+        background: { type: "string", enum: ["plain", "tinted", "none"] },
+        border: { type: "boolean" },
+        shadow: { type: "string", enum: ["none", "soft", "strong"] },
+        radius: { type: "integer", minimum: 0, maximum: 24 },
+        fill: HEX,
+        title: { type: "object", properties: TEXT_STYLE },
+      },
+    },
+    kpi: {
+      type: "object",
+      description: "A key figure.",
+      properties: {
+        target: { type: "string", description: "A number as text: the change is shown against it." },
+        change: { type: "string", enum: ["both", "amount", "percent"] },
+        downIsGood: { type: "boolean", description: "For costs: a fall is green." },
+        size: { type: "string", enum: ["s", "m", "l", "xl"] },
+        align: { type: "string", enum: ["left", "center", "right"] },
+        label: { type: "string", enum: ["none", "above", "below"] },
+        colorBy: { type: "string", enum: ["none", "rules", "change"] },
+        rules: { type: "array", maxItems: 6, items: COLOUR_RULE },
+        icon: { type: "string", enum: ["none", "arrow", "dot"] },
+        sparkline: { type: "string", enum: ["line", "area", "column"] },
+        multi: { type: "boolean", description: "Several numbers in one card (one for each measure)." },
+      },
+    },
+    chartRules: { type: "array", maxItems: 6, description: "Colour bars by their value, e.g. red under a target.", items: { ...COLOUR_RULE, properties: { ...(COLOUR_RULE.properties as Record<string, JsonSchema>), series: { type: "integer", minimum: 0, maximum: 11 } } } },
+    dataBars: { type: "array", description: "Table and pivot: a bar in the cells of these measures (value is the measure's position, from 0).", items: { type: "object", properties: { value: { type: "integer", minimum: 0, maximum: 11 }, color: HEX }, required: ["value"] } },
+    table: {
+      type: "object",
+      properties: { totals: { type: "boolean" }, totalsStyle: { type: "string", enum: ["bold", "shaded"] }, banded: { type: "boolean" }, gridlines: { type: "string", enum: ["all", "rows", "none"] }, fontSize: { type: "integer", minimum: 10, maximum: 18 }, wrap: { type: "boolean" } },
+    },
+    waterfall: { type: "object", properties: { total: { type: "boolean" }, totalLabel: { type: "string", maxLength: 40 }, connectors: { type: "boolean" } } },
+    gauge: { type: "object", properties: { min: { type: "string" }, max: { type: "string" }, target: { type: "string" } } },
+    histogram: { type: "object", properties: { bins: { type: "integer", minimum: 2, maximum: 50 } } },
+    smallMultiples: { type: "object", properties: { max: { type: "integer", minimum: 2, maximum: 12 } } },
+    map: { type: "object", properties: { areas: { type: "string", enum: ["regions", "districts"] } } },
+  },
+};
+
+/** Worked formats the AI can copy (each is checked by parseChartFormat in the tests). */
+export const FORMAT_EXAMPLES: Record<string, { why: string; visual: string; format: Record<string, unknown> }> = {
+  percentKeyFigure: {
+    why: "A margin or rate: without this a ratio shows as 0.35, not 35.0%.",
+    visual: "kpi",
+    format: { series: [{ number: { style: "percent", decimals: 1 } }], kpi: { change: "percent", icon: "arrow" }, card: { subtitle: "Gross profit as a share of sales" } },
+  },
+  moneyKeyFigure: {
+    why: "A headline amount: whole dollars, with the change against the period before.",
+    visual: "kpi",
+    format: { series: [{ number: { style: "currency", decimals: 0 } }], kpi: { change: "both", icon: "arrow", sparkline: "area" } },
+  },
+  costKeyFigure: {
+    why: "A cost: a fall is good news, so it shows green.",
+    visual: "kpi",
+    format: { series: [{ number: { style: "currency", decimals: 0 } }], kpi: { change: "percent", downIsGood: true, icon: "arrow" } },
+  },
+  salesAndMargin: {
+    why: "Two measures of different sizes: sales as columns, margin % as a line on the right.",
+    visual: "combo",
+    format: {
+      series: [{ as: "bar", number: { style: "currency", decimals: 0, compact: true } }, { as: "line", axis: "right", number: { style: "percent", decimals: 0 } }],
+      rightAxis: { title: "Gross margin" },
+      card: { subtitle: "Sales by month, with gross margin on the right" },
+    },
+  },
+  trendWithTarget: {
+    why: "A line against a threshold or target.",
+    visual: "line",
+    format: { smooth: true, series: [{ number: { style: "currency", decimals: 0, compact: true } }], referenceLines: [{ kind: "constant", value: "60000", label: "Target", style: "dashed" }], card: { subtitle: "Where the line crosses the target" } },
+  },
+  rankedBars: {
+    why: "Top N by value: one colour, the value on each bar, sorted largest first (sort by value desc, limit 10).",
+    visual: "bar",
+    format: { labels: { show: true, number: { style: "currency", decimals: 0, compact: true } }, bars: { rounded: true }, legend: { show: "hide" } },
+  },
+  shareDonut: {
+    why: "A split of one total into at most 6 parts; more parts read better as ranked bars.",
+    visual: "donut",
+    format: { donutTotal: true, labels: { show: true, number: { style: "percent", decimals: 0 } } },
+  },
+  detailTable: {
+    why: "The rows behind the charts: a totals row, bands, and a bar in the first measure's cells.",
+    visual: "table",
+    format: { table: { totals: true, banded: true }, dataBars: [{ value: 0 }], series: [{ number: { style: "currency", decimals: 0 } }] },
+  },
+  barsBelowTarget: {
+    why: "Columns turn red when under a level.",
+    visual: "column",
+    format: { chartRules: [{ op: "<", value: "0", color: "#b32228" }], series: [{ number: { style: "currency", decimals: 0, compact: true } }] },
+  },
+};
+
+/** How to lay a report out so it reads well without anyone tidying it (#689). */
+const LAYOUT_ADVICE: string[] = [
+  "Start with a row of 3 or 4 key figures (width quarter or third, height small): the numbers a person checks first. Give each a dateField and compare previous_period or previous_year, and sparkline: true.",
+  "Then one main chart, full width: the trend over time that explains the key figures (line, area or combo by month).",
+  "Then breakdowns in pairs (width half): ranked bars for top customers, products or costs; a donut only for 6 parts or fewer.",
+  "End with a table of the detail (width full) with a totals row.",
+  "Give every chart a card.subtitle saying what to look for, in plain words.",
+  "Set each value's number format: currency with 0 decimals for headline money, percent for ratios, compact on axes and bar labels.",
+  "Name measures the way people say them (Sales, Gross margin %), never a column name.",
+  "Keep a page to about 8 tiles. A long report reads better as a second report than as a wall of tiles.",
+  "Use the report's dates (a preset such as this_financial_year or last_12_months) so it moves with today; give a tile its own dates only when it needs a different window.",
+  "After saving, read it back with get_analytics_dashboard and fix anything that looks wrong in the figures (blank tiles, a ratio with no percent format).",
+];
+
 const TILE_DATES: JsonSchema = {
   type: "object",
   description: "The tile's own dates, in place of the report's: { preset } or { from, to }.",
@@ -401,7 +604,7 @@ const TILE_PROPERTIES: Record<string, JsonSchema> = {
   query: QUERY,
   text: { type: "string", maxLength: 20000, description: "A text tile's notes." },
   textFormat: { type: "string", enum: ["rich"] },
-  format: { type: "object", description: "How it looks (optional; keys in list_analytics_tables' guide)." },
+  format: FORMAT_SCHEMA,
   dates: TILE_DATES,
   page: { type: "string", description: "The report page it's on (get_analytics_dashboard lists them); default the first." },
   shape: { type: "object" },
@@ -559,7 +762,75 @@ export const ANALYTICS_READ_TOOLS: AiTool[] = [
   }),
 ];
 
+/** The templates this organisation's tables allow, for analytics_format_guide and create_analytics_dashboard_from_template. */
+async function templateFacts(run: OrgRunner) {
+  const facts = await run(async (tx) => {
+    await requireAnalytics(tx);
+    return { organisationId: tx.organisationId, hidden: await hiddenFarmTables(tx), model: await loadModel(tx), dates: await dateContext(tx) };
+  });
+  const tables = (await describeTables(facts.organisationId, facts.model)).filter((table) => !facts.hidden?.has(table.name));
+  return { tables, today: facts.dates.today };
+}
+
+ANALYTICS_READ_TOOLS.push(
+  stepped({
+    name: "analytics_format_guide",
+    title: "How to make an Analytics report look good",
+    description:
+      "Read this before building or restyling a report: how to lay one out, every format key a tile takes (number formats, subtitles, key figure comparisons, colours, rules, table styles), worked examples to copy, and the ready-made templates this organisation's data allows.",
+    level: "read",
+    inputSchema: schema({}),
+    async runSteps(run, _args, context) {
+      requireTablesAllowed(context);
+      const { tables, today } = await templateFacts(run);
+      return {
+        layout: LAYOUT_ADVICE,
+        format: FORMAT_SCHEMA.properties,
+        examples: FORMAT_EXAMPLES,
+        widths: [...TILE_WIDTHS],
+        heights: [...TILE_HEIGHTS],
+        templates: TEMPLATES.map((template) => ({
+          id: template.id,
+          name: template.name,
+          description: template.description,
+          available: buildTemplate(template.id, tables, today) !== null,
+          ...(buildTemplate(template.id, tables, today) === null ? { needs: template.needs } : {}),
+        })),
+        templatesNote: "create_analytics_dashboard_from_template makes a report from one, which you then change with update_analytics_dashboard. A template is the quickest way to a well laid out report.",
+      };
+    },
+  }),
+);
+
 export const ANALYTICS_WRITE_TOOLS: AiTool[] = [
+  stepped({
+    name: "create_analytics_dashboard_from_template",
+    title: "Make an Analytics report from a template",
+    description:
+      "Makes a new report from one of Tohyee's ready-made templates (analytics_format_guide lists the ones this organisation's data allows): laid out, formatted and dated for the last 12 months. Every tile is run first. Then change it with update_analytics_dashboard.",
+    level: "draft",
+    inputSchema: schema(
+      {
+        template: { type: "string", enum: TEMPLATES.map((template) => template.id) },
+        name: { type: "string", maxLength: 100, description: "Default the template's own name." },
+        description: { type: "string", maxLength: 500 },
+      },
+      ["template"],
+    ),
+    async runSteps(run, args, context) {
+      requireEditor(context);
+      const template = TEMPLATES.find((entry) => entry.id === args.template);
+      if (!template) throw new ValidationError(`Choose a template: ${TEMPLATES.map((entry) => entry.id).join(", ")}.`);
+      const { tables, today } = await templateFacts(run);
+      const built = buildTemplate(template.id, tables, today);
+      if (!built) throw new ValidationError(`${template.name} needs data this organisation hasn't loaded: ${template.needs.join(", ")}. Nothing was saved.`);
+      const checked = await checkAndRun(run, { settings: built.settings, tiles: built.tiles }, () => true);
+      const name = typeof args.name === "string" && args.name.trim() ? args.name : built.name;
+      const description = typeof args.description === "string" && args.description.trim() ? args.description : built.description;
+      const dashboard = await run((tx) => createDashboard(tx, { name, description, settings: checked.settings, tiles: checked.tiles }));
+      return saved(dashboard, checked.runs);
+    },
+  }),
   stepped({
     name: "create_analytics_dashboard",
     title: "Make an Analytics report",

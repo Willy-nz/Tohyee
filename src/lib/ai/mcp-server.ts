@@ -39,7 +39,7 @@ export function analyticsWords(offered: readonly string[]): string {
     " Analytics: list_analytics_tables gives the tables this person can use (the books, Shopify, Google Analytics, Meta, files and databases) with their fields and a guide to tiles; " +
     "run_analytics_query asks one a question, and get_analytics_dashboard reads a report with its figures." +
     (builds
-      ? " You can build Analytics reports yourself: create_analytics_dashboard makes one and update_analytics_dashboard adds, changes and reorders tiles. Every tile is run before it's saved, and each change goes into the report's History, marked as made through the AI, where a person can put an earlier version back. People delete reports, take tiles off and change sharing in Tohyee."
+      ? " You can build Analytics reports yourself: read analytics_format_guide first (layout, formats, templates), then create_analytics_dashboard makes one (or create_analytics_dashboard_from_template starts from a ready-made one) and update_analytics_dashboard adds, changes and reorders tiles. Every tile is run before it's saved, and each change goes into the report's History, marked as made through the AI, where a person can put an earlier version back. People delete reports, take tiles off and change sharing in Tohyee."
       : "") +
     (offered.includes("refresh_analytics_sources")
       ? " refresh_analytics_sources loads the latest data for a report's sources or named tables, as Refresh now does; it never changes a connection or schedule."

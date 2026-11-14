@@ -320,4 +320,29 @@ describeWithDatabase("the AI's Analytics reports", () => {
     const sourceAfter = await inOrganisation(ORG, { userId: owner.id, email: owner.email }, (tx) => tx.query<{ updated_at: Date; columns: unknown }>("select updated_at, columns from analytics_sources"));
     expect(sourceAfter.rows).toEqual(sourceBefore.rows);
   });
+  it("#689: the format guide lists layout advice, examples and templates; formats the AI sends are kept; a template needs its data", async () => {
+    const guide = await call(tokens["viewer-read"], "analytics_format_guide");
+    expect((guide.layout as string[]).length).toBeGreaterThan(5);
+    expect(guide.format).toMatchObject({ series: expect.any(Object), card: expect.any(Object), kpi: expect.any(Object) });
+    expect(guide.examples).toMatchObject({ percentKeyFigure: { format: { series: [{ number: { style: "percent", decimals: 1 } }] } } });
+    // The books aren't loaded into Analytics here, so the books templates say what they need.
+    expect((guide.templates as Json[]).find((template) => template.id === "profit")).toMatchObject({ available: false, needs: ["tohyee_ledger_lines"] });
+    await expect(call(tokens["owner-drafts"], "create_analytics_dashboard_from_template", { template: "profit" })).rejects.toThrow(/needs data this organisation hasn't loaded: tohyee_ledger_lines\. Nothing was saved\./);
+    await expect(call(tokens["viewer-read"], "create_analytics_dashboard_from_template", { template: "profit" })).rejects.toThrow();
+
+    const share = {
+      id: "otago-share",
+      title: "Otago's share of orders",
+      visual: "kpi",
+      width: "quarter",
+      query: {
+        table: "sales",
+        measures: [{ label: "Otago share", aggregate: "formula", formula: "[Otago] / [All]", inputs: [{ name: "Otago", aggregate: "count", where: [{ field: "region", op: "eq", value: "Otago" }] }, { name: "All", aggregate: "count" }] }],
+      },
+      format: { series: [{ number: { style: "percent", decimals: 1 } }], card: { subtitle: "Orders from Otago as a share of all orders" } },
+    };
+    const made = await call(tokens["owner-drafts"], "create_analytics_dashboard", { name: "Formatted", tiles: [share] });
+    const read = await call(tokens["viewer-read"], "get_analytics_dashboard", { dashboardId: String((made.dashboard as Json).id) });
+    expect((read.tiles as Json[])[0]).toMatchObject({ format: { series: [{ number: { style: "percent", decimals: 1 } }], card: { subtitle: "Orders from Otago as a share of all orders" } } });
+  });
 });

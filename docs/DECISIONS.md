@@ -14777,3 +14777,21 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       group's in-use accounts with no amounts, marked `empty` (CR23). Only
       the editor shows them; reports, Preview, print and export leave them
       out, and nothing saved changes.
+
+### Telling the AI how to make a report look good (14 Nov 2026; decision 1617)
+
+1617. **A format guide, a real format schema and templates for the AI
+      (#689).** AI-built Analytics reports came out in the plain default
+      look because the AI was told about ten format keys and "leave it out
+      for Tohyee's look", so a margin showed as 0.35. Now: a tile's `format`
+      has a schema listing the keys that matter (each value's number format
+      in `series[n].number`, card subtitle, key figure comparisons, colours,
+      rules, table styles); **analytics_format_guide** (look only) gives
+      layout advice, worked examples to copy and the templates this
+      organisation's data allows; and
+      **create_analytics_dashboard_from_template** (Make drafts) makes a
+      report from one of Tohyee's own templates, checked by running every
+      tile, for the AI to change. A test checks every key the schema lists
+      is one `parseChartFormat` keeps. Nothing about how reports are stored
+      or drawn changes. Claude's details, not yet reviewed.
+
