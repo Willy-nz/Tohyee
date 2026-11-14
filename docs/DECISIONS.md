@@ -14833,3 +14833,23 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       slides, exporting the slides as a PDF or PowerPoint file, and the AI
       choosing pictures. Claude's details, not yet reviewed.
 
+### An accounting report on an Analytics page (14 Nov 2026; decision 1620)
+
+1620. **A Report tile (#710).** Jess: "Should be able to grab a draft or
+      published report in Analytics, as one of the slides. Or many." A page
+      can hold an **Accounting report** item (Add text or item, or the AI's
+      tools with visual `report`): a custom report from Reports › Drafts or
+      Published, drawn in statement style. A draft is worked out from the
+      books when the page is read, in its own columns; a published one is
+      its frozen copy, with the date. Profit and loss, balance sheet, cash
+      flow and changes in equity layouts are drawn; list reports aren't yet.
+      **Who sees it:** anyone who can open the Analytics report and works in
+      the books sees both kinds. A report viewer (a client, who sees nothing
+      of the books) sees a **published** report on a page shared with them,
+      and is refused a draft: publishing is the deliberate act of freezing
+      something to hand over. Jess hasn't confirmed this rule yet. A report
+      archived or deleted later shows "archived or deleted" on its tile and
+      doesn't stop the page saving. No migration. Not built yet: a draft
+      following the Analytics report's dates, splitting a long report over
+      slides at its page breaks, and adding several at once. Claude's
+      details, not yet reviewed.

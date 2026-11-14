@@ -43,6 +43,7 @@ import { additiveValues } from "@/lib/analytics/small-multiples";
 import { SmallMultiplesView } from "@/components/analytics/small-multiples";
 import { useTileResult } from "@/components/analytics/use-tile-result";
 import { ButtonItemView, ImageItemView, ItemEditor, ShapeItemView, TextItemView } from "@/components/analytics/items";
+import { ReportItemView } from "@/components/analytics/report-item";
 import { isItemVisual, type ButtonAction } from "@/lib/analytics/items";
 import { PanelTabs } from "@/components/analytics/panel-tabs";
 import { ArrangeBar } from "@/components/analytics/arrange-bar";
@@ -1162,10 +1163,10 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                     setEditingTile(tile);
                   }}
                 >
-                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} asSaved={savedQueries.get(tile.id) === JSON.stringify(tile.query)} onAction={runButtonAction} {...interactionFor(tile)} />
+                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} asSaved={savedQueries.get(tile.id) === JSON.stringify(tile.query)} reportSaved={tile.visual !== "report" || base?.tiles.find((entry) => entry.id === tile.id)?.report?.id === tile.report?.id} onAction={runButtonAction} {...interactionFor(tile)} />
                 </div>
               ) : (
-                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} asSaved={savedQueries.get(tile.id) === JSON.stringify(tile.query)} onAction={runButtonAction} {...interactionFor(tile)} />
+                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} asSaved={savedQueries.get(tile.id) === JSON.stringify(tile.query)} reportSaved={tile.visual !== "report" || base?.tiles.find((entry) => entry.id === tile.id)?.report?.id === tile.report?.id} onAction={runButtonAction} {...interactionFor(tile)} />
               )}
               {tile.commentary ? (
                 <CommentaryNote
@@ -1696,7 +1697,7 @@ type TileInteraction = {
   /** For a draft tile: its page's filters and range slicers, and dates that are its own (decisions 757-758). */
   draftWhere?: Filter[];
 };
-type TileBodyProps = { organisationId: string; dashboardId: string; tile: Tile; filters: Filters; asSaved: boolean; onAction?: (action: ButtonAction, target?: string) => void } & TileInteraction;
+type TileBodyProps = { organisationId: string; dashboardId: string; tile: Tile; filters: Filters; asSaved: boolean; onAction?: (action: ButtonAction, target?: string) => void; /** A placed report (#710) is read by its saved tile: false while that tile is new or changed and not saved. */ reportSaved?: boolean } & TileInteraction;
 
 function TileBody(props: TileBodyProps) {
   const { tile } = props;
@@ -1705,6 +1706,7 @@ function TileBody(props: TileBodyProps) {
   if (tile.visual === "image" && tile.image) return <ImageItemView organisationId={props.organisationId} dashboardId={props.dashboardId} image={tile.image} height={height} />;
   if (tile.visual === "shape" && tile.shape) return <ShapeItemView shape={tile.shape} height={height} />;
   if (tile.visual === "button" && tile.button) return <ButtonItemView button={tile.button} onAction={props.onAction} />;
+  if (tile.visual === "report") return <ReportItemView organisationId={props.organisationId} dashboardId={props.dashboardId} tileId={tile.id} saved={props.reportSaved !== false} />;
   return <QueryTileBody {...props} />;
 }
 

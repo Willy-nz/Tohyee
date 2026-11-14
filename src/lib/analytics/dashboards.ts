@@ -4,7 +4,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { HttpError, NotFoundError, ValidationError } from "@/lib/errors";
 import { parseChartFormat, parseVisualDefaults, SECOND_GROUPING, SECOND_GROUPING_REQUIRED, type ChartFormat, type VisualDefaults } from "@/lib/analytics/chart-format";
 import { findTheme } from "@/lib/analytics/themes";
-import { parseButton, parseImage, parseShape, type ButtonItem, type ImageItem, type ItemVisual, type ShapeItem } from "@/lib/analytics/items";
+import { parseButton, parseImage, parseReportItem, parseShape, type ButtonItem, type ImageItem, type ItemVisual, type ReportItem, type ShapeItem } from "@/lib/analytics/items";
 import { MAX_RICH_TEXT } from "@/lib/analytics/rich-text";
 import { checkDashboardImages } from "@/lib/analytics/images";
 import { customThemeId, parseThemeChoice, type ReportTheme } from "@/lib/charts/report-themes";
@@ -90,6 +90,8 @@ export type Tile = {
   /** A text tile the AI wrote as commentary (#706). */
   commentary?: TileCommentary;
   image?: ImageItem;
+  /** An accounting report shown on the page (#710). */
+  report?: ReportItem;
   shape?: ShapeItem;
   button?: ButtonItem;
   /** How the chart looks (#331, #333); left out, it looks as it always has. */
@@ -150,7 +152,7 @@ export type Dashboard = {
   updatedAt: string;
 };
 
-const VISUALS: TileVisual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey", "filledmap", "pointmap", "image", "shape", "button"];
+const VISUALS: TileVisual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey", "filledmap", "pointmap", "image", "shape", "button", "report"];
 /** Charts that can show one total, with no grouping. */
 const UNGROUPED: TileVisual[] = ["table", "kpi", "pivot", "gauge", "bullet"];
 export const MAX_TILES = 40;
@@ -471,6 +473,11 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>, pages?: R
       const commentary = parseCommentary(tile.commentary);
       return { id, title, visual, width, query, ...(text ? { text } : {}), ...(rich ? { textFormat: "rich" as const } : {}), ...(format ? { format } : {}), ...(commentary ? { commentary } : {}) };
     }
+    if (visual === "report") {
+      // A statement reads best across the page; its height is its own.
+      const wide: TileWidth = TILE_WIDTHS.includes(tile.width as TileWidth) ? (tile.width as TileWidth) : "full";
+      return { id, title, visual, width: wide, query: null, report: parseReportItem(tile.report, what) };
+    }
     if (visual === "image" || visual === "shape" || visual === "button") {
       let format: ChartFormat | undefined;
       try {
@@ -565,6 +572,7 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
   checkParameters(settings, tiles);
   // An image is uploaded to a report that's already saved.
   if (tiles.some((tile) => tile.visual === "image") || pagePictureIds(settings.pages).length) throw new ValidationError("Save the report first, then add images to it.");
+  await checkPlacedReports(tx, tiles, []);
   const result = await tx.query<{ id: string }>(
     `insert into analytics_dashboards (name, description, settings, tiles, created_by_email, updated_by_email)
      values ($1, $2, $3::jsonb, $4::jsonb, $5, $5) returning id::text`,
@@ -646,6 +654,7 @@ export async function updateDashboard(
   if (input.tiles !== undefined || input.settings !== undefined) checkParameters(settings, tiles);
   // Images must be this report's own; ones no tile uses any more are removed (decision 684).
   if (input.tiles !== undefined || input.settings !== undefined) await checkDashboardImages(tx, current.id, tiles, pagePictureIds(settings.pages));
+  if (input.tiles !== undefined) await checkPlacedReports(tx, tiles, current.tiles);
   const updated = await tx.query(
     `update analytics_dashboards set name = $2, description = $3, settings = $4::jsonb, tiles = $5::jsonb,
             updated_by_email = $6, updated_at = now(), version = version + 1 where id = $1 and version = $7`,
@@ -692,6 +701,22 @@ export async function restoreDashboardVersion(tx: OrgTx, id: string, input: Reco
     // A version's commentary marks were the server's own, so they come back as they were.
     { change: `Put back version ${version}`, commentary: "as_given" },
   );
+}
+
+/**
+ * An accounting report newly placed on a page (#710) has to be one of this
+ * organisation's custom reports, and not archived. One already there is
+ * left alone, so a report archived later doesn't stop the page being saved:
+ * its tile says it's gone.
+ */
+async function checkPlacedReports(tx: OrgTx, tiles: Tile[], before: Tile[]): Promise<void> {
+  const already = new Set(before.flatMap((tile) => (tile.visual === "report" && tile.report ? [`${tile.id}:${tile.report.id}`] : [])));
+  const placed = tiles.filter((tile) => tile.visual === "report" && tile.report && !already.has(`${tile.id}:${tile.report.id}`));
+  if (placed.length === 0) return;
+  const found = await tx.query<{ id: string }>("select id::text from custom_reports where id = any($1::bigint[]) and archived_at is null", [placed.map((tile) => tile.report!.id)]);
+  const known = new Set(found.rows.map((row) => row.id));
+  const missing = placed.find((tile) => !known.has(tile.report!.id));
+  if (missing) throw new ValidationError(`${missing.title}: that report isn't in Reports any more. Choose another.`);
 }
 
 export const MAX_COMMENTARY_TILES = 12;

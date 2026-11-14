@@ -7,7 +7,8 @@ import { useTileResult, type TileFilters } from "@/components/analytics/use-tile
 import { Button, Card, Field, Notice, ui } from "@/components/ui";
 import { adaptForDark } from "@/lib/charts/colour-check";
 import { showValue } from "@/lib/analytics/display";
-import { BUTTON_ACTIONS, SHAPE_KINDS, type ButtonAction, type ButtonItem, type ImageItem, type ItemVisual, type ShapeItem, type ShapeKind } from "@/lib/analytics/items";
+import { ReportPicker } from "@/components/analytics/report-item";
+import { BUTTON_ACTIONS, SHAPE_KINDS, type ButtonAction, type ButtonItem, type ImageItem, type ItemVisual, type ReportItem, type ShapeItem, type ShapeKind } from "@/lib/analytics/items";
 import { fieldLabel, measureLabel, tableLabel } from "@/lib/analytics/labels";
 import { CHART_HEIGHTS, HEIGHT_LABELS, TILE_HEIGHTS, TILE_WIDTHS, WIDTH_LABELS, paragraphs, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
 import { MAX_RICH_TEXT, parseRichText, valueNames, type Block, type Inline } from "@/lib/analytics/rich-text";
@@ -193,6 +194,7 @@ const KINDS: Array<{ value: ItemVisual; label: string }> = [
   { value: "image", label: "Image" },
   { value: "shape", label: "Shape or line" },
   { value: "button", label: "Button" },
+  { value: "report", label: "Accounting report" },
 ];
 
 const AGGREGATES: Array<{ value: Aggregate; label: string }> = [
@@ -247,7 +249,8 @@ export function ItemEditor({
   /** The report's pages and bookmarks, for a button that opens one (decision 759). */
   targets?: { pages: Array<{ id: string; name: string }>; bookmarks: Array<{ id: string; name: string }> };
 }) {
-  const [kind, setKind] = useState<ItemVisual>(tile && (tile.visual === "text" || tile.visual === "image" || tile.visual === "shape" || tile.visual === "button") ? tile.visual : "text");
+  const [kind, setKind] = useState<ItemVisual>(tile && (tile.visual === "text" || tile.visual === "image" || tile.visual === "shape" || tile.visual === "button" || tile.visual === "report") ? tile.visual : "text");
+  const [placed, setPlaced] = useState<ReportItem | null>(tile?.report ?? null);
   const [title, setTitle] = useState(tile?.title ?? "");
   const [showTitle, setShowTitle] = useState(tile?.format?.card?.showTitle !== false);
   const [width, setWidth] = useState<TileWidth>(tile?.width ?? (tile ? "half" : "full"));
@@ -294,7 +297,7 @@ export function ItemEditor({
     if (!query) return;
     setQuery({ ...query, measures: query.measures.map((measure, at) => (at === index ? { ...measure, ...patch } : measure)) });
   };
-  const ready = kind === "image" ? Boolean(image) : kind === "button" ? button.label.trim().length > 0 && (!BUTTON_ACTIONS[button.action].target || Boolean(button.target)) : true;
+  const ready = kind === "report" ? Boolean(placed) : kind === "image" ? Boolean(image) : kind === "button" ? button.label.trim().length > 0 && (!BUTTON_ACTIONS[button.action].target || Boolean(button.target)) : true;
   const save = () => {
     // The heading can be hidden (the card's "show the title"); the rest of a saved look is kept.
     const format: ChartFormat = { ...tile?.format };
@@ -314,6 +317,8 @@ export function ItemEditor({
       onSave({ ...base, height, query: null, shape });
     } else if (kind === "button") {
       onSave({ ...base, height: "small", query: null, button: { ...button, label: button.label.trim() } });
+    } else if (kind === "report" && placed) {
+      onSave({ ...base, query: null, report: placed });
     }
   };
 
@@ -433,6 +438,17 @@ export function ItemEditor({
             </>
           ) : null}
 
+          {kind === "report" ? (
+            <ReportPicker
+              organisationId={organisationId}
+              value={placed}
+              onChange={(report, reportTitle) => {
+                setPlaced(report);
+                // The report's own name, unless one has been typed.
+                if (!title.trim()) setTitle(reportTitle);
+              }}
+            />
+          ) : null}
           {kind === "image" ? (
             <>
               <Field label="Image" hint="JPG or PNG, up to 5 MB. Only people who can see this report can see it.">

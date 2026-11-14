@@ -26,7 +26,8 @@ import { effectiveDates } from "@/lib/analytics/report-filters";
 import { parseTileView, type TileDrill, viewQuery } from "@/lib/analytics/report-view";
 import { parseRanges, rangeFilters, slicerOnPage } from "@/lib/analytics/slicers";
 import { requireAnalytics } from "@/lib/analytics/sources";
-import { ForbiddenError } from "@/lib/errors";
+import { ForbiddenError, NotFoundError } from "@/lib/errors";
+import { getCustomReport } from "@/lib/reports/custom";
 import type { OrganisationRunner } from "@/lib/office/api";
 
 /*
@@ -50,6 +51,38 @@ export function dashboardRead(run: OrganisationRunner) {
       const dashboard = await getDashboard(tx, dashboardId, { userId: auth.user.id, reportViewer: membership.role === "report_viewer" });
       const dates = await dateContext(tx);
       return { dashboard, today: dates.today, financialYearEndMonth: dates.yearEndMonth };
+    });
+    return json(result);
+  };
+}
+
+/**
+ * GET an accounting report placed on a report's page (#710): the custom
+ * report's name and its figures, a draft worked out now and a published copy
+ * as it was frozen. For anyone who can see the Analytics report; a report
+ * viewer (a client, who sees nothing of the books) gets published copies
+ * only, never a draft.
+ */
+export function placedReportRead(run: OrganisationRunner) {
+  return async (request: Request, context: Context<{ dashboardId: string; tileId: string }>) => {
+    const { dashboardId, tileId } = await context.params;
+    const result = await run(request, searchParams(request).get("organisationId"), "report_viewer", async (tx, { auth, membership }) => {
+      await requireAnalytics(tx);
+      const viewer = membership.role === "report_viewer";
+      const dashboard = await getDashboard(tx, dashboardId, { userId: auth.user.id, reportViewer: viewer });
+      const tile = dashboard.tiles.find((entry) => entry.id === tileId);
+      if (!tile || tile.visual !== "report" || !tile.report) throw new NotFoundError("That report isn't on this page any more.");
+      let found: Awaited<ReturnType<typeof getCustomReport>>;
+      try {
+        found = await getCustomReport(tx, tile.report.id);
+      } catch (error) {
+        if (error instanceof NotFoundError) return { gone: true as const };
+        throw error;
+      }
+      if (found.report.archivedAt) return { gone: true as const };
+      if (viewer && found.report.kind !== "published") throw new ForbiddenError("This is a draft report, which is only for people who work in the books. Ask for it to be published.");
+      const { id, title, kind, base, publishedAt } = found.report;
+      return { report: { id, title, kind, base, publishedAt }, figures: found.figures };
     });
     return json(result);
   };

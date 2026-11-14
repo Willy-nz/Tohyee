@@ -121,3 +121,8 @@
   border-radius: 8px;
   min-width: 0;
 }
+
+/* An accounting report on a page (#710). */
+.placedReport { overflow-x: auto; }
+.placedReportKind { margin: 0 0 8px; color: var(--text-muted); font-size: var(--text-sm); }
+.reportNote { white-space: pre-wrap; }

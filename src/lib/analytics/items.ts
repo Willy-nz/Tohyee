@@ -8,7 +8,7 @@ import { ValidationError } from "@/lib/errors";
  * with the browser.
  */
 
-export const ITEM_VISUALS = ["text", "image", "shape", "button"] as const;
+export const ITEM_VISUALS = ["text", "image", "shape", "button", "report"] as const;
 export type ItemVisual = (typeof ITEM_VISUALS)[number];
 
 export function isItemVisual(visual: string): visual is ItemVisual {
@@ -23,6 +23,15 @@ export type ImageItem = {
   /** Fit inside the tile (all of it shows) or fill it (edges may be cut off). */
   fit?: "contain" | "cover";
 };
+
+/** An accounting report placed on a page (#710): a custom report, draft (worked out when it's read) or published (its frozen copy). */
+export type ReportItem = { id: string };
+
+export function parseReportItem(input: unknown, what: string): ReportItem {
+  const raw = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  if (typeof raw.id !== "string" || !/^[1-9]\d{0,17}$/.test(raw.id)) throw new ValidationError(`${what}: choose the report to show.`);
+  return { id: raw.id };
+}
 
 export const SHAPE_KINDS = ["rectangle", "rounded", "ellipse", "line", "arrow"] as const;
 export type ShapeKind = (typeof SHAPE_KINDS)[number];
