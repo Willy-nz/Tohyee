@@ -1,3 +1,4 @@
+import { markOutsideText, OUTSIDE_TEXT_INSTRUCTIONS } from "@/lib/ai/outside-text";
 import { holdForApproval } from "@/lib/ai/action-approval-run";
 import { runAiTool } from "@/lib/ai/run-tool";
 import { AI_TOOL_SCOPE_HELP, AI_TOOL_SCOPE_LABELS, outsideScopeMessage, scopeAllows } from "@/lib/ai/tool-scopes";
@@ -91,6 +92,7 @@ export function mcpServerFor(
       (mailTools.length
         ? ` You can also search and read ${identity.user.displayName}'s own private mail (search_my_mail, read_my_mail), for them alone: say which email you used, and never pass what's in it to anyone else or into Tohyee.`
         : "") +
+      OUTSIDE_TEXT_INSTRUCTIONS +
       analyticsWords(offered.map((tool) => tool.name)) +
       " Tools for modules this organisation hasn't turned on (such as Farming or Livestock) aren't offered; get_organisation's toolGroups says which are hidden and why." +
       " If what this connection may do changes, Tohyee tells your app (notifications/tools/list_changed); if a tool named here isn't in your tool list, ask your app to refresh its tools or reconnect.",
@@ -131,7 +133,8 @@ export function mcpServerFor(
         if (held) return text(JSON.stringify(held));
         // A tool that works in steps (a durable batch, #547) commits each step on its own.
         const result = await runAiTool(tool, organisation, actor, context, args);
-        const answer = result instanceof ToolFileAnswer ? result.answer : result;
+        // Text from outside the organisation is marked as such (#699, decision 1634).
+        const answer = markOutsideText(tool.name, result instanceof ToolFileAnswer ? result.answer : result);
         const json = boundedJson(answer);
         if (json === null) {
           return text(

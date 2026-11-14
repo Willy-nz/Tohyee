@@ -161,10 +161,10 @@ describeWithDatabase("the AI's private-mail scope", () => {
     expect(read.emails[0].text).toBe("The Olsen P for paddock twelve is 32.");
     expect(read.emails[0].cite).toContain(`My mail message ${answer.emails[0].messageId}`);
     // The directorship label was never ticked: nothing of it to find.
-    expect(JSON.parse((await call(tokens.look, "search_my_mail", { query: "directorship" })).text)).toEqual({ emails: [], more: null });
+    expect(JSON.parse((await call(tokens.look, "search_my_mail", { query: "directorship" })).text)).toEqual({ fromOutside: expect.objectContaining({ what: expect.any(String) }), emails: [], more: null });
     // Ana gives her own key the scope: it sees only her own (empty) mail, never Jess's.
     expect((await keysRoute(ana, "PUT", { tokenId: ids["Ana's Claude"], canReadMail: true })).status).toBe(200);
-    expect(JSON.parse((await call(tokens.ana, "search_my_mail", { query: "olsen" })).text)).toEqual({ emails: [], more: null });
+    expect(JSON.parse((await call(tokens.ana, "search_my_mail", { query: "olsen" })).text)).toEqual({ fromOutside: expect.objectContaining({ what: expect.any(String) }), emails: [], more: null });
     expect(await call(tokens.ana, "read_my_mail", { messageId: answer.emails[0].messageId })).toEqual({ text: "Not found.", isError: true });
   });
 

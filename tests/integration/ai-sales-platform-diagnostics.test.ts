@@ -261,7 +261,7 @@ describeWithDatabase("AI access level and sales platform diagnostics (#531, #532
     ]);
     const one = await call(tokens.viewer, "list_sales_platform_log", { externalId: "9003" });
     expect((one.data!.entries as Json[]).map((entry) => entry.action)).toEqual(["linked", "skipped"]);
-    expect((await call(tokens.viewer, "list_sales_platform_log", { connectionId: offId })).data).toEqual({ entries: [], more: false, nextCursor: null });
+    expect((await call(tokens.viewer, "list_sales_platform_log", { connectionId: offId })).data).toEqual({ fromOutside: expect.objectContaining({ what: expect.any(String) }), entries: [], more: false, nextCursor: null });
     expect((await call(tokens.viewer, "list_sales_platform_log", { action: "deleted" })).isError).toBe(true);
   });
 
