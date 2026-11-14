@@ -14987,3 +14987,20 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       Core migration 0026 adds `expires_at`. Not built: an email before a
       key ends, an alert when a Full access key is first used from a new
       address, and "used from". Claude's details, not yet reviewed.
+1630. **A key or connected app can be "Reports only"** (#696, first
+      part). Making a key, or allowing an app on the consent screen, has a
+      "Which tools" choice: everything its level allows (as before, and
+      what every existing key and connection keeps), or Reports only. A
+      Reports only connection is offered under 30 tools: the organisation,
+      the chart of accounts, the accounting reports (trial balance, profit
+      and loss, balance sheet, aged receivables and payables, cash flow
+      forecast, budgets, custom reports, account transactions), the AI's
+      own tables, and the Analytics tools. It can't list or call anything
+      to do with bank lines, bills, invoices, payroll or settings, and is
+      told why if it tries. A scope only narrows: the level, the person's
+      role and the modules still decide what's allowed inside it, so a
+      Look only Reports key can't build a report. It can't be changed
+      afterwards; the person makes a new key or connects again. Core
+      migration 0027. Not built: other groups (Banking, Bills and
+      invoices, Settings) and shorter per-level instructions. Claude's
+      details, not yet reviewed.

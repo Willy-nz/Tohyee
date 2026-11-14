@@ -45,6 +45,7 @@ export const POST = route(async (request) => {
     role: membership.role,
     confirmFullAccess: body.confirmFullAccess,
     endsInDays: body.endsInDays,
+    toolScope: body.toolScope,
   });
   return json(result, { status: 201 });
 });
