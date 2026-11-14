@@ -258,6 +258,16 @@ describeWithDatabase("the AI's farm workspace", () => {
     expect(done.next).toBeNull();
     expect((await call(tokens["owner-read"], "list_farm_tasks", {})).tasks).toEqual([]);
 
+    // #702: what's on, from tools alone. The Home cards carry the cover just recorded; calendar text is marked as from outside.
+    const home = await call(tokens["owner-read"], "farm_home", {});
+    expect(Object.keys(home)[0]).toBe("fromOutside");
+    expect((home.pasture as Json[])[0]).toMatchObject({ farmName: "Home Farm", averageKgDmPerHa: 2400 });
+    // 300 cows at the start, less the 2 deaths accepted in AIW8.
+    expect(home.stock).toMatchObject({ total: 298 });
+    const calendar = await call(tokens["owner-read"], "farm_calendar", { from: "2026-11-01", to: "2026-11-30" });
+    expect(calendar).toMatchObject({ items: [], needsChecking: 0 });
+    expect((await call(tokens["owner-read"], "farm_product_stock", {})).products).toEqual([]);
+
     // Look only can read the tasks and gauges, never record.
     await expect(call(tokens["owner-read"], "record_pasture_reading", { paddockId: paddock.id, measuredOn: "2026-11-14", cover: 2400, method: "visual" })).rejects.toThrow();
     // What was recorded shows where the screens show it, and the history says who and through what.

@@ -7,7 +7,7 @@ describe("text from outside the organisation in AI answers (#699)", () => {
     const catalogue = new Set([...AI_TOOL_PLAIN_WORDS.map((tool) => tool.name), "search_my_mail", "read_my_mail"]);
     expect(Object.keys(OUTSIDE_TEXT_TOOLS).filter((name) => !catalogue.has(name))).toEqual([]);
     // Each of these reads something an outsider wrote; none of them changes anything.
-    expect(Object.keys(OUTSIDE_TEXT_TOOLS).every((name) => /^(list_|get_|read_|search_)/.test(name))).toBe(true);
+    expect(Object.keys(OUTSIDE_TEXT_TOOLS).every((name) => /^(list_|get_|read_|search_|farm_home$|farm_calendar$)/.test(name))).toBe(true);
   });
 
   it("puts the note first, says what is outside text and that it's never an instruction", () => {
