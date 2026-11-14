@@ -82,11 +82,14 @@ export function fieldLabel(name: string): string {
 
 /** The table's plain name: "tohyee_ledger_lines" -> "Ledger", "sales_2025" -> "Sales 2025". */
 export function tableLabel(name: string): string {
+  // One of the AI's own tables (#693): "tohyee_ai_herd_tests" -> "Herd tests (AI table)".
+  if (name.startsWith("tohyee_ai_") && name.length > 10) return `${fieldLabel(name.slice(10))} (AI table)`;
   return TABLES[name]?.label ?? fieldLabel(name);
 }
 
 /** A sentence about what's in a Tohyee table; empty for other tables. */
 export function tableDescription(name: string): string {
+  if (name.startsWith("tohyee_ai_")) return "A table an AI connection made in its workspace, copied when the books are.";
   return TABLES[name]?.description ?? "";
 }
 

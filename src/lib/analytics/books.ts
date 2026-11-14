@@ -3,6 +3,7 @@ import { ConflictError } from "@/lib/errors";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { columnNameFrom, replaceTohyeeTables, type TableCopy, type TableCopyRow } from "@/lib/analytics/engine";
 import { type LoadRun, requireAnalytics } from "@/lib/analytics/sources";
+import { readAiTables } from "@/lib/analytics/ai-tables";
 import { readFarmTables } from "@/lib/analytics/farm";
 import { rebuildShapedTablesForTables } from "@/lib/analytics/shaped-tables";
 import { coreQuery } from "@/lib/db/transactions";
@@ -492,8 +493,10 @@ export async function readBooks(
   }
   // Farm data while Farming is on (#249); Farming needs Accounting, so it goes with the books.
   tables.push(...(await readFarmTables(tx)));
+  // The AI's own tables (#693), whatever is switched on: they're the organisation's own notes, not the books.
+  const aiTables = await readAiTables(tx);
   // With Accounting off (MOD4), only the CRM's tables: no ledger, documents, contacts, items or farm data.
-  return settings.rows[0]?.accounting_enabled === false ? tables.filter((table) => table.name.startsWith("tohyee_crm_")) : tables;
+  return [...(settings.rows[0]?.accounting_enabled === false ? tables.filter((table) => table.name.startsWith("tohyee_crm_")) : tables), ...aiTables];
 }
 
 /**

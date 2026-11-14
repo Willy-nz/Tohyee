@@ -6,6 +6,7 @@ import * as booksRoute from "@/app/api/analytics/books/route";
 import * as analyticsRoute from "@/app/api/analytics/route";
 import * as sourcesRoute from "@/app/api/analytics/sources/route";
 import { runTile } from "@/lib/analytics/dashboards";
+import { addDatasetRows, archiveDataset, saveDataset } from "@/lib/ai-workspace/datasets";
 import { readBooks } from "@/lib/analytics/books";
 import { builtInMeasures, measureFromSaved } from "@/lib/analytics/measure-library";
 import { closeAnalytics, queryAnalytics, replaceTohyeeTables, type TableCopy, type TableCopyRow } from "@/lib/analytics/engine";
@@ -360,5 +361,52 @@ describeWithDatabase("analytics: the books and CRM", () => {
     await expect(
       runTile(ORG, { table: "tohyee_ledger_lines", groupBy: { field: "posting_date", grain: "month" }, measures: [measureFromSaved(builtIns.find((measure) => measure.name === "Cash in bank")!)], filters: [] }),
     ).rejects.toThrow("A balance can't be grouped by date");
+  });
+
+  it("#693: the AI's own tables are copied as tohyee_ai_ tables, exactly, and go when archived", async () => {
+    await as((tx) =>
+      saveDataset(tx, {
+        name: "herd_tests",
+        description: "Herd test results",
+        columns: [
+          { name: "cow", type: "text" },
+          { name: "tested_on", type: "date" },
+          { name: "milk_solids", type: "number" },
+          { name: "ratio", type: "number" },
+          { name: "in_milk", type: "boolean" },
+        ],
+      }),
+    );
+    await as((tx) =>
+      addDatasetRows(tx, {
+        name: "herd_tests",
+        rows: [
+          { cow: "Daisy", tested_on: "2026-09-01", milk_solids: "1.85", ratio: "0.1234567", in_milk: true },
+          { cow: "Bluebell", tested_on: "2026-09-01", milk_solids: "2.105", ratio: "2", in_milk: false },
+          { cow: "Clover", tested_on: null, milk_solids: null, ratio: null, in_milk: null },
+        ],
+      }),
+    );
+    // A name too long for an Analytics table is left out; it doesn't stop the copy.
+    await as((tx) => saveDataset(tx, { name: `a${"b".repeat(60)}`, description: "Too long for Analytics", columns: [{ name: "x", type: "text" }] }));
+    expect((await refresh()).run).toMatchObject({ status: "ok", error: null });
+
+    const types = await queryAnalytics(ORG, "select column_name, data_type from information_schema.columns where table_name = 'tohyee_ai_herd_tests' order by ordinal_position");
+    // A number that fits six decimals is a number; one that doesn't stays as its exact text, never rounded.
+    expect(types.map((row) => `${row.column_name}:${row.data_type}`)).toEqual(["cow:VARCHAR", "tested_on:DATE", "milk_solids:DECIMAL(28,6)", "ratio:VARCHAR", "in_milk:BOOLEAN"]);
+    const rows = await queryAnalytics(ORG, "select cow, tested_on::varchar as tested_on, milk_solids::varchar as milk_solids, ratio, in_milk::varchar as in_milk from tohyee_ai_herd_tests order by cow nulls last");
+    expect(rows).toEqual([
+      { cow: "Bluebell", tested_on: "2026-09-01", milk_solids: "2.105000", ratio: "2", in_milk: "false" },
+      { cow: "Clover", tested_on: null, milk_solids: null, ratio: null, in_milk: null },
+      { cow: "Daisy", tested_on: "2026-09-01", milk_solids: "1.850000", ratio: "0.1234567", in_milk: "true" },
+    ]);
+    // An Analytics tile adds it up exactly, like any other table.
+    const total = await runTile(ORG, { table: "tohyee_ai_herd_tests", groupBy: null, measures: [{ label: "Milk solids", aggregate: "sum", field: "milk_solids" }], filters: [] });
+    expect(total.rows[0].m0).toBe("3.955000");
+    expect((await queryAnalytics(ORG, "select count(*)::int as n from information_schema.tables where table_name like 'tohyee_ai_%'"))[0].n).toBe(1);
+
+    await as((tx) => archiveDataset(tx, "herd_tests"));
+    await refresh();
+    expect((await queryAnalytics(ORG, "select count(*)::int as n from information_schema.tables where table_name like 'tohyee_ai_%'"))[0].n).toBe(0);
   });
 });

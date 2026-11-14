@@ -231,7 +231,7 @@ export const FARM_READ_TOOLS: AiTool[] = [
   {
     name: "list_ai_dashboards",
     title: "List dashboards",
-    description: "Dashboards over your tables.",
+    description: "The older kind of dashboard over your tables. Reports people use are in Analytics (list_analytics_dashboards).",
     level: "read",
     inputSchema: schema(PAGE),
     run: async (tx, args) => paged("dashboards", await listAiDashboards(tx), args),
@@ -573,7 +573,7 @@ export const FARM_WRITE_TOOLS: AiTool[] = [
     name: "save_dataset",
     title: "Make or change one of your tables",
     description:
-      "Make a table in your workspace, laid out however suits the data (e.g. calving, herd tests, milk production, sales by animal). Columns are text, number, date or boolean. Saving an existing name changes its description and columns; its rows must still fit.",
+      "Make a table in your workspace, laid out however suits the data (e.g. calving, herd tests, milk production, sales by animal). Columns are text, number, date or boolean. Saving an existing name changes its description and columns; its rows must still fit. Each table is also copied into Analytics as tohyee_ai_<name> when the books are (nightly, or refresh_analytics_sources), so a report over it is built with create_analytics_dashboard like any other.",
     level: "draft",
     inputSchema: schema(
       {
@@ -603,7 +603,7 @@ export const FARM_WRITE_TOOLS: AiTool[] = [
     name: "save_ai_dashboard",
     title: "Make or change a dashboard",
     description:
-      "Lay out a dashboard of up to 12 tiles over your tables. Each tile: title, kind (column, bar, line, area, pie, donut, kpi, table), dataset, groupBy, measures, filters, sort, limit, width (1 half, 2 full), note. Charts need groupBy and a measure; a kpi needs a measure. Pass dashboardId to replace one. Every tile is checked by running it.",
+      "The older, plainer kind of dashboard, kept for ones already made. For anything new, build an Analytics report instead (create_analytics_dashboard): it has themes, formats, dates, slicers and pages, and your tables are there as tohyee_ai_<name>. This tool: lay out a dashboard of up to 12 tiles over your tables. Each tile: title, kind (column, bar, line, area, pie, donut, kpi, table), dataset, groupBy, measures, filters, sort, limit, width (1 half, 2 full), note. Charts need groupBy and a measure; a kpi needs a measure. Pass dashboardId to replace one. Every tile is checked by running it.",
     level: "draft",
     inputSchema: schema(
       {
