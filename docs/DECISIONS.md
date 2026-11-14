@@ -15016,3 +15016,15 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       the depreciation schedule. The trial balance, ledger and account
       transactions keep both accounts.
 
+### More than one draft set of the annual statements (14 Nov 2026; decision 1631)
+
+1631. **Annual statements: many draft sets a year, in Reports › Drafts.**
+      Jess: "You should be able to have more than 1 draft set of the end of
+      year accounts. They should be in the drafts folder like the other
+      reports." She chose live figures: each set is a title, its own words
+      and, once saved, its own notes; the figures always come from the books
+      (FS16-FS19). Drafts list under Reports › Drafts and final sets under
+      Published; only one set a year is final. Tenant migration 0282 adds
+      annual_statement_drafts and copies each year's saved words into it.
+      Claude's details (titles, Copy of, one final a year), not yet reviewed.
+

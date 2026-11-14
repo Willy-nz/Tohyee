@@ -19324,6 +19324,32 @@ Tested in `tests/integration/financial-statements-report.test.ts` and
   **Save as draft**, **Save as final** or **Cancel** (FS13). The page shows
   DRAFT or Final. The notes keep their own Save button. Amounts still click
   through (FS8) when not editing.
+- **FS16** (Jess, 14 Nov 2026: "You should be able to have more than 1
+  draft set of the end of year accounts. They should be in the drafts folder
+  like the other reports"; she chose live figures) A year end can have any
+  number of saved sets of words, each with a title. The figures are always
+  live from the books; only the words and notes differ. **Save as draft** on
+  a saved set changes it; on the defaults it starts "Financial statements
+  2027"; **Save as a new draft** keeps the set as it was and saves the changes
+  as "Copy of Financial statements 2027". A set with no title given takes the
+  next free one ("Financial statements 2027 (2)"). Two sets for a year can't
+  share a title. With no set chosen, the report shows the year's final set,
+  else the most recently changed draft, else the defaults.
+- **FS17** Draft sets are listed under Reports › Drafts beside custom report
+  drafts ("Started from: Annual financial statements, year ended 31 Mar
+  2027"), and final sets under Published, marked Final. Clicking one opens
+  the statements at that year with that set; the report's Set list switches
+  between a year's sets. A draft set can be deleted; a final set is saved as
+  a draft first.
+- **FS18** A set's notes: saving the notes while a set is open keeps them
+  with that set, replacing the organisation's notes for it only; an empty
+  list goes back to the organisation's. Save as a new draft copies the
+  set's notes.
+- **FS19** Only one set a year can be final. Saving a second as final is
+  refused ("'Financial statements 2027' is already the final set for this
+  year. Save this one as a draft, or save that one as a draft first."). The
+  PDF (Download PDF) is the set on screen. Sets saved before this change
+  become one set each, called "Financial statements 2027". Nothing posts.
 
 ### Cash flow layouts (CFL1-CFL5; Jess chose on 6 Nov 2026 to rename, group, move accounts between sections, reorder, hide and add notes; the details are Claude's calls, not yet reviewed)
 

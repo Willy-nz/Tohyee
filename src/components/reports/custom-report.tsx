@@ -12,7 +12,8 @@ import { useWorkspace } from "@/components/workspace";
 import type { Account } from "@/lib/accounts/service";
 import { ACCOUNT_TYPES, type AccountType } from "@/lib/accounts/types";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDateTime, todayInBrowser, personName } from "@/lib/format";
+import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
+import type { AnnualDraftSummary } from "@/lib/reports/annual-document";
 import type { CustomReport, CustomReportView } from "@/lib/reports/custom";
 import type { AnyCustomReportFigures } from "@/lib/reports/custom";
 import {
@@ -166,6 +167,21 @@ export function StartCustomReport({ organisationId }: { organisationId: string }
   );
 }
 
+/** A row of Drafts, Published or Archived: a custom report or a saved set of annual financial statements (FS17). */
+type ListedReport = {
+  key: string;
+  id: string;
+  source: "custom" | "annual";
+  title: string;
+  startedFrom: string;
+  when: string;
+  who: string;
+  href: string;
+  /** Drafts can be deleted; published copies are archived instead, and a final set is saved as a draft first. */
+  deletable: boolean;
+  badge: "Published" | "Draft" | "Final" | null;
+};
+
 export function CustomReportList({ organisationId, view }: { organisationId: string; view: CustomReportView }) {
   const { can } = useWorkspace();
   const confirm = useConfirm();
@@ -175,17 +191,55 @@ export function CustomReportList({ organisationId, view }: { organisationId: str
     view,
     v: version,
   });
+  // Saved sets of annual financial statements: drafts under Drafts, final sets under Published (FS17).
+  const annual = useApiData<{ drafts: AnnualDraftSummary[] }>(view === "archived" ? null : "/api/reports/annual-statements/drafts", {
+    organisationId,
+    status: view === "drafts" ? "draft" : "final",
+    v: version,
+  });
   const [chosen, setChosen] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Drafts can be deleted (CR7), a few at a time or all at once; published copies are archived instead.
-  const deletable = (list.data?.reports ?? []).filter((report) => report.kind === "draft");
+  const loaded = list.data && (view === "archived" || annual.data);
+  const rows: ListedReport[] = loaded
+    ? [
+        ...list.data!.reports.map(
+          (report): ListedReport => ({
+            key: `custom-${report.id}`,
+            id: report.id,
+            source: "custom",
+            title: report.title,
+            startedFrom: CUSTOM_REPORT_BASES[report.base],
+            when: report.publishedAt ?? report.updatedAt,
+            who: personName(report, "publishedBy") ?? personName(report, "updatedBy") ?? "",
+            href: pageHref(report.id),
+            deletable: report.kind === "draft",
+            badge: view === "archived" ? (report.kind === "published" ? "Published" : "Draft") : null,
+          }),
+        ),
+        ...(annual.data?.drafts ?? []).map(
+          (set): ListedReport => ({
+            key: `annual-${set.id}`,
+            id: set.id,
+            source: "annual",
+            title: set.title,
+            startedFrom: `Annual financial statements, year ended ${formatDate(set.yearEnd)}`,
+            when: set.updatedAt,
+            who: personName(set, "updatedBy") ?? "",
+            href: `/operations/reports?report=statements&yearEnd=${encodeURIComponent(set.yearEnd)}&draft=${encodeURIComponent(set.id)}`,
+            deletable: set.status === "draft",
+            badge: view === "published" ? "Final" : null,
+          }),
+        ),
+      ].sort((a, b) => (a.when < b.when ? 1 : a.when > b.when ? -1 : 0))
+    : [];
+  const deletable = rows.filter((row) => row.deletable);
   const canDelete = can("bookkeeper") && deletable.length > 0;
-  async function remove(ids: string[]) {
-    const titles = deletable.filter((report) => ids.includes(report.id)).map((report) => report.title);
-    if (ids.length === 0) return;
-    const ok = await confirm(ids.length === 1 ? `Delete the draft "${titles[0]}"? This can't be undone.` : `Delete these ${ids.length} drafts? This can't be undone.`, {
-      title: ids.length === 1 ? "Delete draft" : "Delete drafts",
+  async function remove(keys: string[]) {
+    const picked = deletable.filter((row) => keys.includes(row.key));
+    if (picked.length === 0) return;
+    const ok = await confirm(picked.length === 1 ? `Delete the draft "${picked[0].title}"? This can't be undone.` : `Delete these ${picked.length} drafts? This can't be undone.`, {
+      title: picked.length === 1 ? "Delete draft" : "Delete drafts",
       confirmLabel: "Delete",
       danger: true,
     });
@@ -193,8 +247,8 @@ export function CustomReportList({ organisationId, view }: { organisationId: str
     setBusy(true);
     setError(null);
     try {
-      for (const id of ids)
-        await api(`/api/custom-reports/${id}`, {
+      for (const row of picked)
+        await api(row.source === "annual" ? `/api/reports/annual-statements/drafts/${row.id}` : `/api/custom-reports/${row.id}`, {
           method: "DELETE",
           query: { organisationId },
         });
@@ -207,10 +261,11 @@ export function CustomReportList({ organisationId, view }: { organisationId: str
     }
   }
   const empty = {
-    drafts: "No draft reports. Start one under Custom.",
+    drafts: "No draft reports. Start one under Custom, or save the annual financial statements as a draft.",
     published: "No published reports. Publish a draft to keep a copy that never changes.",
     archived: "Nothing archived.",
   }[view];
+  const loadError = list.error ?? (view === "archived" ? null : annual.error);
   return (
     <Card
       title={{ drafts: "Drafts", published: "Published", archived: "Archived" }[view]}
@@ -222,11 +277,11 @@ export function CustomReportList({ organisationId, view }: { organisationId: str
         ) : undefined
       }
     >
-      {list.error ? <Notice tone="error">{list.error}</Notice> : null}
+      {loadError ? <Notice tone="error">{loadError}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {!list.data && !list.error ? <p className={ui.muted}>Loading…</p> : null}
-      {list.data && list.data.reports.length === 0 ? <Empty>{empty}</Empty> : null}
-      {list.data && list.data.reports.length > 0 ? (
+      {!loaded && !loadError ? <p className={ui.muted}>Loading…</p> : null}
+      {loaded && rows.length === 0 ? <Empty>{empty}</Empty> : null}
+      {loaded && rows.length > 0 ? (
         <div className={ui.tableWrap}>
           <table className={ui.table}>
             <thead>
@@ -237,44 +292,44 @@ export function CustomReportList({ organisationId, view }: { organisationId: str
                       type="checkbox"
                       aria-label="Select every draft"
                       checked={chosen.length > 0 && chosen.length === deletable.length}
-                      onChange={(event) => setChosen(event.target.checked ? deletable.map((report) => report.id) : [])}
+                      onChange={(event) => setChosen(event.target.checked ? deletable.map((row) => row.key) : [])}
                     />
                   </th>
                 ) : null}
                 <th>Title</th>
                 <th>Started from</th>
                 <th>{view === "published" ? "Published" : "Last changed"}</th>
-                {view === "archived" ? <th>Was</th> : null}
+                {view !== "drafts" ? <th>{view === "archived" ? "Was" : ""}</th> : null}
                 {canDelete ? <th aria-label="Delete" /> : null}
               </tr>
             </thead>
             <tbody>
-              {list.data.reports.map((report) => (
-                <tr key={report.id}>
+              {rows.map((row) => (
+                <tr key={row.key}>
                   {canDelete ? (
                     <td>
-                      {report.kind === "draft" ? (
+                      {row.deletable ? (
                         <input
                           type="checkbox"
-                          aria-label={`Select ${report.title}`}
-                          checked={chosen.includes(report.id)}
-                          onChange={(event) => setChosen(event.target.checked ? [...chosen, report.id] : chosen.filter((id) => id !== report.id))}
+                          aria-label={`Select ${row.title}`}
+                          checked={chosen.includes(row.key)}
+                          onChange={(event) => setChosen(event.target.checked ? [...chosen, row.key] : chosen.filter((key) => key !== row.key))}
                         />
                       ) : null}
                     </td>
                   ) : null}
                   <td>
-                    <Link href={pageHref(report.id)}>{report.title}</Link>
+                    <Link href={row.href}>{row.title}</Link>
                   </td>
-                  <td>{CUSTOM_REPORT_BASES[report.base]}</td>
+                  <td>{row.startedFrom}</td>
                   <td>
-                    {formatDateTime(report.publishedAt ?? report.updatedAt)} · {personName(report, "publishedBy") ?? personName(report, "updatedBy") ?? ""}
+                    {formatDateTime(row.when)} · {row.who}
                   </td>
-                  {view === "archived" ? <td>{report.kind === "published" ? <Badge tone="blue">Published</Badge> : <Badge>Draft</Badge>}</td> : null}
+                  {view !== "drafts" ? <td>{row.badge ? <Badge tone={row.badge === "Draft" ? undefined : row.badge === "Final" ? "green" : "blue"}>{row.badge}</Badge> : null}</td> : null}
                   {canDelete ? (
                     <td>
-                      {report.kind === "draft" ? (
-                        <Button size="small" variant="secondary" disabled={busy} onClick={() => void remove([report.id])}>
+                      {row.deletable ? (
+                        <Button size="small" variant="secondary" disabled={busy} onClick={() => void remove([row.key])}>
                           Delete
                         </Button>
                       ) : null}
