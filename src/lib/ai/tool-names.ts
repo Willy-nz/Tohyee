@@ -121,7 +121,6 @@ export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel;
   { name: "update_farm_note", level: "draft", words: "Update a note in the farm notebook" },
   { name: "save_dataset", level: "draft", words: "Make or change a table in the AI's own workspace" },
   { name: "add_dataset_rows", level: "draft", words: "Add or rebuild rows in the AI's own tables" },
-  { name: "save_ai_dashboard", level: "draft", words: "Make or change a dashboard over the AI's tables" },
   { name: "propose_pasture_cover_estimate", level: "draft", words: "Propose a cover from a paddock photo for a person to accept, change or decline (it can't save a reading)" },
   { name: "suggest_bcs", level: "draft", words: "Suggest a body condition score from a photo for a person to accept, change or decline (it can't save a score)" },
   { name: "suggest_livestock_movements", level: "draft", words: "Suggest livestock movements for a person to accept or decline (it can't record them)" },

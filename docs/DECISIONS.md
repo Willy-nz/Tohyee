@@ -14962,3 +14962,11 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       plain numbers until someone sets a format. Not built: taking
       save_ai_dashboard away from AI connections, which waits until
       organisations have moved theirs. Claude's details, not yet reviewed.
+1628. **An AI can no longer make the older dashboards** (#693, last part).
+      Jess: "the old dashboards are crap", and nothing in use depends on
+      them, so save_ai_dashboard is taken away from AI connections now
+      rather than after a wait. list_ai_dashboards and get_ai_dashboard
+      stay, read-only, so an AI can still see what an older dashboard held,
+      and people can still open one and move it to Analytics (decision
+      1627). Reports are made in Analytics only. Worked example AIW7 is
+      updated.

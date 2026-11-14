@@ -52,7 +52,6 @@ export const ALWAYS_OFFERED: readonly string[] = [
   "get_ai_dashboard",
   "save_dataset",
   "add_dataset_rows",
-  "save_ai_dashboard",
 ];
 
 const ACCOUNTING_OFF = "Accounting is turned off for this organisation (Settings › Modules).";
