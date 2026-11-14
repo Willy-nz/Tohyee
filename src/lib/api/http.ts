@@ -1,3 +1,4 @@
+import { CLIENT_PG_ERRORS, pgErrorCode, plainDatabaseError } from "@/lib/db/plain-errors";
 import { NextResponse } from "next/server";
 import { assertSameOrigin, authenticate, type AuthContext, requireOrganisationRole } from "@/lib/auth/guard";
 import { farmWorkAllows, type Role } from "@/lib/auth/roles";
@@ -19,18 +20,6 @@ export function json(data: unknown, init: { status?: number; headers?: HeadersIn
   });
 }
 
-/** Postgres error codes that mean "your request broke a rule", not "the server broke". */
-const CLIENT_PG_ERRORS: Record<string, number> = {
-  "23505": 409, // unique_violation
-  "23503": 400, // foreign_key_violation
-  "23514": 400, // check_violation (includes unbalanced journals)
-  "23502": 400, // not_null_violation
-  "22P02": 400, // invalid_text_representation
-  "22007": 400, // invalid_datetime_format
-  "22008": 400, // datetime_field_overflow
-  P0001: 400, // raise_exception (append-only guard)
-};
-
 /** Turns any thrown error into a JSON response. Unexpected errors are logged, not leaked. */
 export function errorResponse(error: unknown): NextResponse {
   if (error instanceof HttpError) {
@@ -40,10 +29,10 @@ export function errorResponse(error: unknown): NextResponse {
       { status: error.status, ...(Number.isFinite(retryAfter) && retryAfter > 0 ? { headers: { "retry-after": String(retryAfter) } } : {}) },
     );
   }
-  const pgCode = (error as { code?: unknown })?.code;
-  if (typeof pgCode === "string" && CLIENT_PG_ERRORS[pgCode]) {
-    const message = error instanceof Error ? error.message : "The request was rejected by the database.";
-    return json({ error: message, code: `db_${pgCode}` }, { status: CLIENT_PG_ERRORS[pgCode] });
+  // The database refused it: a plain sentence goes out and its own words go to the log (#698).
+  const pgCode = pgErrorCode(error);
+  if (pgCode && CLIENT_PG_ERRORS[pgCode]) {
+    return json({ error: plainDatabaseError(error, "a request") ?? "The request was rejected by the database.", code: `db_${pgCode}` }, { status: CLIENT_PG_ERRORS[pgCode] });
   }
   console.error("[tohyee] unexpected error:", error);
   return json({ error: "Something went wrong on the server. Check the server logs.", code: "internal_error" }, { status: 500 });

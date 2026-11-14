@@ -1,3 +1,4 @@
+import { plainDatabaseError } from "@/lib/db/plain-errors";
 import { markOutsideText, OUTSIDE_TEXT_INSTRUCTIONS } from "@/lib/ai/outside-text";
 import { holdForApproval } from "@/lib/ai/action-approval-run";
 import { runAiTool } from "@/lib/ai/run-tool";
@@ -146,11 +147,9 @@ export function mcpServerFor(
         return text(json);
       } catch (error) {
         if (error instanceof HttpError) return text(error.message, true);
-        const pgCode = (error as { code?: unknown })?.code;
-        if (typeof pgCode === "string" && /^(23|22|P0)/.test(pgCode) && error instanceof Error) {
-          // The database refused it (a rule it enforces); the message says which.
-          return text(error.message, true);
-        }
+        // The database refused it: a rule Tohyee wrote says which; anything else gets a plain sentence (#698).
+        const refused = plainDatabaseError(error, `the AI tool ${name}`);
+        if (refused) return text(refused, true);
         console.error("[tohyee] MCP tool failed:", name, error);
         return text("Something went wrong on the Tohyee server answering that. The server logs have the details.", true);
       }

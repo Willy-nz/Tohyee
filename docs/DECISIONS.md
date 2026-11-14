@@ -15081,3 +15081,17 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       when a database is connected, and allowing only a known list of
       functions. Checked by unit tests of the guard; not run against a real
       external database. Claude's details, not yet reviewed.
+1636. **Three hardening items from the November 2026 review** (#698).
+      (1) When the database refuses something, the browser and the AI get
+      a plain sentence ("That's already there: it would be a duplicate.")
+      and PostgreSQL's own message, which names tables, columns and
+      constraints, goes to the server log. A rule Tohyee wrote itself
+      (raise exception in a trigger) still passes through word for word.
+      (2) A stored password hash's cost has a ceiling (N up to 2^20 and a
+      power of two, r up to 16, p up to 4); one asking for more is refused
+      without being worked out. (3) `.github/dependabot.yml` asks for
+      weekly, grouped updates for npm (the app and the relay), GitHub
+      Actions, Gradle, NuGet and Docker. Still open on #698: script rules
+      in the Content-Security-Policy, keeping sign-in limits across
+      restarts, pinning Actions by commit, and an outside penetration
+      test. Claude's details, not yet reviewed.
