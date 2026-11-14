@@ -14756,8 +14756,12 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       chosen accounts gains or loses the codes; a group by account type
       leaves them out (`exceptCodes`) or takes them as well (the new
       `alsoCodes`), so it still takes new accounts of its types. Formulas
-      aren't touched, so net profit can't change. A layout can't both leave
-      out and take the same account in one group. No migration: layouts are
+      aren't touched, so net profit can't change: an account moved into a
+      group by type that runs the other way (a cost into income, a liability
+      into assets) counts against that group and shows as a minus. A layout
+      can't both leave out and take the same account in one group. The drag
+      is tracked in the page, since a page can't read a drag's own data
+      until the drop; each account row has a grip, and the whole row drags. No migration: layouts are
       JSON, and old ones have no `alsoCodes`.
 1615. **Edit layout's first save makes it the report's layout.** Before,
       Update layout saved a draft that Reports didn't use until "Set as
@@ -14766,3 +14770,10 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       no default yet, becomes the default on its first save (CR22), with a
       message that says so and how to go back. Versions are still kept
       (decision 1359); drafts started other ways are unchanged.
+1616. **The editor lists every account.** Before, an account with nothing in
+      the editor's dates wasn't listed, so it couldn't be moved (and the
+      editor opens on the current month). The editor now asks for its
+      figures with `everyAccount` (the preview route), which adds each
+      group's in-use accounts with no amounts, marked `empty` (CR23). Only
+      the editor shows them; reports, Preview, print and export leave them
+      out, and nothing saved changes.

@@ -1631,6 +1631,24 @@
   cursor: grab;
 }
 
+/* The grip on an account row: shown faintly, stronger when the row is under the pointer. */
+.layoutLineGrip {
+  margin-right: 6px;
+  color: var(--text-muted);
+  opacity: 0.35;
+  font-size: var(--text-sm);
+  line-height: 1;
+}
+
+.layoutDragLine:hover .layoutLineGrip {
+  opacity: 1;
+}
+
+/* An account with nothing in these dates (CR23): listed in the editor only. */
+.layoutEmptyLine td {
+  color: var(--text-muted);
+}
+
 .layoutDragLine:active {
   cursor: grabbing;
 }

@@ -346,7 +346,14 @@ export type ReportColumn = {
 /** Amounts as strings, keyed by column; null for a % that can't be worked out (the compared amount is 0.00). */
 export type ReportValues = Record<string, string | null>;
 
-export type ComputedLine = { code: string; name: string; values: ReportValues; accountId?: string };
+export type ComputedLine = {
+  code: string;
+  name: string;
+  values: ReportValues;
+  accountId?: string;
+  /** Nothing in these columns: only listed for the layout editor, so it can be moved (CR23). Never printed. */
+  empty?: boolean;
+};
 
 export type ComputedRow = RowExtras & {
   id: string;

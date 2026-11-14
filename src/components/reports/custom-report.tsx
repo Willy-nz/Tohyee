@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useAccounts } from "@/components/books";
 import { DateInput } from "@/components/date-input";
 import { useApiData } from "@/components/hooks";
@@ -1345,6 +1345,34 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
   // Changes are kept here until Save (decision 1360); the figures shown are a preview of them.
   const [draft, setDraft] = useState<CustomReportLayout | null>(null);
   const [preview, setPreview] = useState<CustomReportFigures | null>(null);
+  // The editor's own figures (CR23): the saved layout with every account listed, so ones with nothing in these dates can be moved too.
+  const [editorFigures, setEditorFigures] = useState<{ version: number; figures: CustomReportFigures } | null>(null);
+  const shownReport = (state ?? loaded.data)?.report;
+  const editorVersion =
+    shownReport && shownReport.kind === "draft" && !shownReport.archivedAt && can("bookkeeper") && (shownReport.base === "profit_and_loss" || shownReport.base === "balance_sheet")
+      ? shownReport.version
+      : null;
+  const editorLayout = editorVersion == null ? null : shownReport!.layout;
+  useEffect(() => {
+    if (editorVersion == null || !editorLayout) return;
+    let stale = false;
+    api<{ figures: CustomReportFigures }>(`/api/custom-reports/${encodeURIComponent(reportId)}/preview`, {
+      method: "POST",
+      body: { organisationId, layout: editorLayout, everyAccount: true },
+    }).then(
+      (result) => {
+        if (!stale) setEditorFigures({ version: editorVersion, figures: result.figures });
+      },
+      () => {
+        // The report's own figures still show; only accounts with nothing in these dates are missing.
+      },
+    );
+    return () => {
+      stale = true;
+    };
+    // The layout only changes with the version.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organisationId, reportId, editorVersion]);
 
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
   if (!loaded.data) return <p className={ui.muted}>Loading…</p>;
@@ -1363,7 +1391,8 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
     layout: CustomReportLayout;
   };
   const layout = draft ?? report.layout;
-  const figures = (draft ? preview : null) ?? (currentLoaded.figures as CustomReportFigures);
+  const figures =
+    (draft ? preview : null) ?? (editorFigures && editorFigures.version === report.version ? editorFigures.figures : null) ?? (currentLoaded.figures as CustomReportFigures);
   const editable = report.kind === "draft" && !report.archivedAt && can("bookkeeper");
   const titleValue = title ?? layout.title;
   const defaultList = defaultsOverride ?? defaults.data?.defaults ?? [];
@@ -1388,7 +1417,10 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
     const next = structuredClone(layout);
     if (apply(next) === false) return;
     void run(async () => {
-      const result = await api<{ figures: CustomReportFigures }>(`/api/custom-reports/${report.id}/preview`, { method: "POST", body: { organisationId, layout: next } });
+      const result = await api<{ figures: CustomReportFigures }>(`/api/custom-reports/${report.id}/preview`, {
+        method: "POST",
+        body: { organisationId, layout: next, everyAccount: true },
+      });
       setDraft(next);
       setPreview(result.figures);
       setTitle(null);

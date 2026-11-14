@@ -124,6 +124,32 @@ describeWithDatabase("report layouts", () => {
     expect(again["Operating expenses"]).toEqual(["330.00"]);
     expect(again["Net profit"]).toEqual(["590.00"]);
 
+    // A cost moved into an income group counts against it, shown as a minus, and net profit still holds.
+    const against = await w.save(report, (layout) => moveAccounts(layout, "main", "expenses", ["6120"], "revenue"));
+    const againstFigures = against.figures as CustomReportFigures;
+    const income = rowsOf(againstFigures);
+    expect(income["Trading income"]).toEqual(["1120.00"]);
+    expect(income["Gross profit"]).toEqual(["820.00"]);
+    expect(income["Operating expenses"]).toEqual(["250.00"]);
+    expect(income["Net profit"]).toEqual(["590.00"]);
+    expect(table(againstFigures).rows.find((row) => row.label === "Trading income")!.lines.map((line) => [line.code, line.values.p0])).toEqual([
+      ["4000", "1200.00"],
+      ["6120", "-80.00"],
+    ]);
+    await w.save(report, (layout) => moveAccounts(layout, "main", "revenue", ["6120"], "expenses"));
+
+    // CR23: the editor's figures also list accounts with nothing in June, marked empty; the report's own don't.
+    const current = (await w.as((tx) => getCustomReport(tx, report.id))).report;
+    const editor = (await w.as((tx) => previewCustomReport(tx, report.id, current.layout, { everyAccount: true }))) as CustomReportFigures;
+    const editorExpenses = table(editor).rows.find((row) => row.label === "Operating expenses")!;
+    expect(editorExpenses.lines.find((line) => line.code === "6150")).toMatchObject({ empty: true });
+    expect(editorExpenses.lines.find((line) => line.code === "6010")).not.toHaveProperty("empty");
+    expect(editorExpenses.lines.some((line) => line.code === "1000")).toBe(false);
+    expect(rowsOf(editor)["Operating expenses"]).toEqual(["330.00"]);
+    expect(editorExpenses.accountIds).toHaveLength(2);
+    const plain = (await w.as((tx) => getCustomReport(tx, report.id))).figures as CustomReportFigures;
+    expect(table(plain).rows.find((row) => row.label === "Operating expenses")!.lines.map((line) => line.code)).toEqual(["6010", "6120"]);
+
     // A group can't both leave an account out and take it; and the account must exist.
     await expect(
       w.save(report, (layout) => {

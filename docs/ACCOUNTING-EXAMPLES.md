@@ -4703,9 +4703,12 @@ expenses **80.00** / Cr 1000, so June's net profit is **590.00**.
   out. Moving it back puts every figure back. A group of chosen accounts
   can't be emptied this way (move or delete the group instead). A layout
   where one group both leaves an account out and takes it is refused.
-  Amounts keep the direction the standard reports show them in, as for any
-  group: a cost moved into an income group adds to it, so keep income and
-  costs in separate groups.
+  An account moved into a group by account type that runs the other way
+  counts against it and shows as a minus: 6120 moved into Trading income
+  gives Trading income **1,120.00** (4000 **1,200.00**, 6120 **-80.00**),
+  Gross profit **820.00**, Operating expenses **250.00**, Net profit still
+  **590.00**. The same goes for a liability moved into an asset group. A
+  group of chosen accounts adds its accounts up as before (CR5).
 - **CR22** Edit layout's first save (as Xero does, not yet reviewed;
   decision 1615; screen behaviour, checked by hand). **Edit layout** on a
   report with no layout of its own starts a draft; its first **Update
@@ -4714,6 +4717,15 @@ expenses **80.00** / Cr 1000, so June's net profit is **590.00**.
   difference from Xero: versions are still kept and "Save as" still makes a
   named copy that isn't the default. A draft started any other way (Custom,
   Save as) only becomes the default with "Set as default layout".
+
+- **CR23** Every account in the editor (as Xero does, not yet reviewed;
+  decision 1616). The editor lists each group's accounts that are in use
+  even when they have nothing in the dates shown, greyed with no amount, so
+  they can be moved or grouped too: in the CR16 setup for June, Operating
+  expenses lists 6150 Rent (nothing in June) as well as 6010 and 6120, and
+  its total is still **330.00**. They're never on the report itself, the
+  Preview, a print or an export, and an account from the other statement
+  (1000 on a profit and loss) is never listed.
 
 ### The layout editor (LE1-LE3; Jess, 11 Nov 2026, from a screenshot of the editor she's used to; Claude's details, not yet reviewed)
 

@@ -19,9 +19,17 @@ import type { ComputedBlock, ComputedRow, CustomReportFigures, ReportColumn, Rep
  * accounts can also be moved with "Move to", for the keyboard and touch.
  */
 
-/** What a dragged account carries: the group it's in and the codes moving (the ticked ones when it's one of them). */
-const ACCOUNTS_DRAG = "application/x-tohyee-report-accounts";
-const draggingAccounts = (event: React.DragEvent) => event.dataTransfer.types.includes(ACCOUNTS_DRAG);
+/**
+ * The accounts being dragged: the table and group they're in and the codes
+ * moving (the ticked ones when the dragged one is ticked). Kept here, not in
+ * the drag's own data, because a page can't read that data while dragging
+ * over a row, only on the drop; the drag carries the account's name as text.
+ */
+type AccountDrag = { tableId: string; rowId: string; codes: string[] };
+const accountDrag: { current: AccountDrag | null } = { current: null };
+function holdAccountDrag(drag: AccountDrag | null): void {
+  accountDrag.current = drag;
+}
 
 export type RowEditor = {
   busy: boolean;
@@ -173,12 +181,22 @@ export function CustomFiguresTable({
   const [dropGroup, setDropGroup] = useState<string | null>(null);
   const groups = block.rows.filter((row) => row.kind === "group");
   const canMoveAccounts = Boolean(editor?.moveAccounts) && groups.length > 1;
+  const draggingAccounts = () => accountDrag.current?.tableId === id;
+  const startAccountDrag = (event: React.DragEvent, rowId: string, code: string, name: string, ticked: string[]) => {
+    holdAccountDrag({ tableId: id, rowId, codes: ticked.includes(code) ? ticked : [code] });
+    event.dataTransfer.setData("text/plain", name);
+    event.dataTransfer.effectAllowed = "move";
+  };
+  const endAccountDrag = () => {
+    holdAccountDrag(null);
+    setDropGroup(null);
+  };
   /** Dropping an account on any row of a group moves it into that group. */
   const accountDrop = (groupId: string) =>
     canMoveAccounts
       ? {
           onDragOver: (event: React.DragEvent) => {
-            if (!draggingAccounts(event)) return;
+            if (!draggingAccounts()) return;
             event.preventDefault();
             event.stopPropagation();
             event.dataTransfer.dropEffect = "move";
@@ -186,24 +204,22 @@ export function CustomFiguresTable({
           },
           onDragLeave: () => setDropGroup((current) => (current === groupId ? null : current)),
           onDrop: (event: React.DragEvent) => {
-            if (!draggingAccounts(event)) return;
+            const carried = accountDrag.current;
+            if (!carried || carried.tableId !== id) return;
             event.preventDefault();
             event.stopPropagation();
-            setDropGroup(null);
-            try {
-              const carried = JSON.parse(event.dataTransfer.getData(ACCOUNTS_DRAG)) as { rowId: string; codes: string[] };
-              if (carried.rowId !== groupId && carried.codes.length > 0) {
-                editor!.moveAccounts!(carried.rowId, carried.codes, groupId);
-                setSelected(null);
-              }
-            } catch {
-              // Not one of ours.
+            endAccountDrag();
+            if (carried.rowId !== groupId && carried.codes.length > 0) {
+              editor!.moveAccounts!(carried.rowId, carried.codes, groupId);
+              setSelected(null);
             }
           },
         }
       : {};
   // Hidden rows, and groups with nothing in these periods, are left out of the report (as Xero leaves out empty sections).
-  const rows = editor ? block.rows : block.rows.filter((row) => !row.hidden && !(row.kind === "group" && row.showAccounts && row.lines.length === 0));
+  // Accounts with nothing in these columns are only listed in the editor, to be moved (CR23).
+  const linesOf = (row: ComputedRow) => (editor ? row.lines : row.lines.filter((line) => !line.empty));
+  const rows = editor ? block.rows : block.rows.filter((row) => !row.hidden && !(row.kind === "group" && row.showAccounts && linesOf(row).length === 0));
   // The last money formula (net profit, total equity) gets the double line.
   const lastFormula = [...rows].reverse().find((row) => row.kind === "formula" && !row.hidden && (row.format ?? "money") === "money")?.id;
   const allPositions = new Map(block.rows.map((row, index) => [row.id, index]));
@@ -231,7 +247,7 @@ export function CustomFiguresTable({
               }
             : {}),
           onDragOver: (event: React.DragEvent) => {
-            if (draggingAccounts(event)) {
+            if (draggingAccounts()) {
               if (row.kind === "group") accountDrop(row.id).onDragOver?.(event);
               return;
             }
@@ -243,7 +259,7 @@ export function CustomFiguresTable({
             if (row.kind === "group") accountDrop(row.id).onDragLeave?.();
           },
           onDrop: (event: React.DragEvent) => {
-            if (draggingAccounts(event)) {
+            if (draggingAccounts()) {
               if (row.kind === "group") accountDrop(row.id).onDrop?.(event);
               return;
             }
@@ -324,28 +340,40 @@ export function CustomFiguresTable({
                     <td colSpan={columns.length + 1}>{name(row)}</td>
                     {tools(row)}
                   </tr>
-                  {row.lines.map((line) => (
+                  {linesOf(row).map((line) => (
                     <tr
                       key={line.code}
-                      className={`${ui.reportSection} ${row.hidden ? ui.layoutHiddenRow : ""} ${dropGroup === row.id ? ui.layoutDropGroup : ""} ${canMoveAccounts ? ui.layoutDragLine : ""}`}
-                      {...(row.hidden ? { "data-export-ignore": "true" } : {})}
+                      className={`${ui.reportSection} ${row.hidden ? ui.layoutHiddenRow : ""} ${line.empty ? ui.layoutEmptyLine : ""} ${dropGroup === row.id ? ui.layoutDropGroup : ""} ${canMoveAccounts ? ui.layoutDragLine : ""}`}
+                      {...(row.hidden || line.empty ? { "data-export-ignore": "true" } : {})}
+                      {...(line.empty ? { "data-print": "hide" } : {})}
                       {...accountDrop(row.id)}
                       {...(canMoveAccounts
                         ? {
                             draggable: !editor!.busy,
                             title: "Drag to another group to move it there",
-                            onDragStart: (event: React.DragEvent) => {
-                              const codes = picked.includes(line.code) ? picked : [line.code];
-                              event.dataTransfer.setData(ACCOUNTS_DRAG, JSON.stringify({ rowId: row.id, codes }));
-                              event.dataTransfer.effectAllowed = "move";
-                            },
-                            onDragEnd: () => setDropGroup(null),
+                            onDragStart: (event: React.DragEvent) => startAccountDrag(event, row.id, line.code, line.name, picked),
+                            onDragEnd: endAccountDrag,
                           }
                         : {})}
                     >
                       <td>
                         {editor ? (
                           <label className={ui.layoutPick} data-export-ignore>
+                            {canMoveAccounts ? (
+                              <span
+                                className={ui.layoutLineGrip}
+                                aria-hidden="true"
+                                draggable={!editor.busy}
+                                onDragStart={(event) => {
+                                  // The grip drags the same way the row does; stop the row starting a second drag.
+                                  event.stopPropagation();
+                                  startAccountDrag(event, row.id, line.code, line.name, picked);
+                                }}
+                                onDragEnd={endAccountDrag}
+                              >
+                                ⠿
+                              </span>
+                            ) : null}
                             <input
                               type="checkbox"
                               checked={picked.includes(line.code)}
@@ -359,7 +387,7 @@ export function CustomFiguresTable({
                             />
                           </label>
                         ) : null}
-                        <span title={line.code}>{line.name}</span>
+                        <span title={line.empty ? `${line.code}: nothing in these dates, so it isn't on the report` : line.code}>{line.name}</span>
                       </td>
                       {columns.map((column) => (
                         <Cell key={column.key} column={column} values={line.values} accounts={{ accountId: line.accountId }} filter={filter} blankZero />
