@@ -21,7 +21,37 @@ export async function listTopBarNotices(tx: OrgTx, role: Role | null = null): Pr
     : [];
   // Time-limited access ending within 3 days (decision 1471): admins see everyone's, a member their own.
   const accessNotices = await accessEndingNotices(tx, role);
-  return [...handoverNotice, ...accessNotices, ...(await accountingNotices(tx))];
+  return [...handoverNotice, ...accessNotices, ...(await accountingNotices(tx)), ...(await analyticsNotices(tx, role))];
+}
+
+/**
+ * Analytics data that has stopped refreshing (#694): a source whose last two
+ * loads both failed, so reports are showing older figures. For owners and
+ * admins, who can fix it on Data sources; one failure alone is often a
+ * passing fault and shows on the reports themselves.
+ */
+async function analyticsNotices(tx: OrgTx, role: Role | null): Promise<TopBarNotice[]> {
+  if (!role || !roleAtLeast(role, "admin")) return [];
+  const on = await tx.query<{ analytics_enabled: boolean }>("select analytics_enabled from organisation_settings where id = true");
+  if (on.rows[0]?.analytics_enabled !== true) return [];
+  const stuck = await tx.query<{ count: string }>(
+    `with ranked as (
+       select table_name, status, row_number() over (partition by table_name order by started_at desc, id desc) as place
+         from analytics_load_runs where status <> 'running'
+     )
+     select count(*)::text as count from (
+       select table_name from ranked where place <= 2 group by table_name having count(*) = 2 and bool_and(status = 'failed')
+     ) failing`,
+  );
+  const count = Number(stuck.rows[0]?.count ?? "0");
+  if (count === 0) return [];
+  return [
+    {
+      id: "analytics-refresh-failing",
+      message: count === 1 ? "1 Analytics data source has failed to refresh twice in a row." : `${count} Analytics data sources have failed to refresh twice in a row.`,
+      href: "/analytics/sources",
+    },
+  ];
 }
 
 async function accountingNotices(tx: OrgTx): Promise<TopBarNotice[]> {

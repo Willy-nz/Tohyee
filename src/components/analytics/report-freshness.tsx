@@ -21,9 +21,11 @@ function sourceText(source: SourceFreshness): string {
       : `${source.name} is loading for the first time.`;
   }
   if (source.failedAt) {
+    // Why, when the reader may be told (#694): the reason Load history has.
+    const why = source.failedReason ? ` Why: ${/[.!?…]$/.test(source.failedReason) ? source.failedReason : `${source.failedReason}.`}` : "";
     return source.refreshedAt
-      ? `${source.name}: the last refresh failed (${formatDateTime(source.failedAt)}), so this is still the data loaded ${formatDateTime(source.refreshedAt)}${through}. It may be out of date.`
-      : `${source.name}: loading failed (${formatDateTime(source.failedAt)}) and no data has loaded yet.`;
+      ? `${source.name}: the last refresh failed (${formatDateTime(source.failedAt)}), so this is still the data loaded ${formatDateTime(source.refreshedAt)}${through}. It may be out of date.${why}`
+      : `${source.name}: loading failed (${formatDateTime(source.failedAt)}) and no data has loaded yet.${why}`;
   }
   return source.refreshedAt ? `${source.name} refreshed ${formatDateTime(source.refreshedAt)}${through}.` : `${source.name}: when it was last loaded isn't recorded${through}.`;
 }

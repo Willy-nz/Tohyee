@@ -806,7 +806,7 @@ export const ANALYTICS_READ_TOOLS: AiTool[] = [
       const facts = await run(async (tx) => {
         await requireAnalytics(tx);
         const dashboard = await getDashboard(tx, String(args.dashboardId ?? ""), readerOf(tx, context));
-        const freshness = (await reportLoadFacts(tx, dashboard)).map(({ name, tables, refreshedAt, failedAt, running }) => ({ name, tables, refreshedAt, failedAt, running }));
+        const freshness = (await reportLoadFacts(tx, dashboard)).map(({ name, tables, refreshedAt, failedAt, failedReason, running }) => ({ name, tables, refreshedAt, failedAt, ...(failedReason ? { failedReason } : {}), running }));
         return { organisationId: tx.organisationId, dashboard, freshness, dates: await dateContext(tx), model: await loadModel(tx), hidden: await hiddenFarmTables(tx) };
       });
       const { dashboard } = facts;

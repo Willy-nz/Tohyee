@@ -14872,3 +14872,13 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       changed one. Still for people only: deleting a report, sharing, and
       images (an image's file goes with its tile, so History couldn't bring
       it back; the AI is refused). Claude's details, not yet reviewed.
+1622. **A failed Analytics refresh says why, and two in a row tells the
+      owner** (#694). The line on a report that says a refresh failed now
+      adds the reason the load recorded (cut to 300 characters), and the AI
+      gets the same reason from get_analytics_dashboard. A client (report
+      viewer) still sees that the data is older but not the reason, which
+      is the server's own words and can name a file or a database. When a
+      source's last two loads have both failed, owners and admins get a
+      top-bar notice that leads to Data sources; one failure alone is often
+      a passing fault and stays on the report. Not built: a "Try again"
+      link on the report, and an email. Claude's details, not yet reviewed.

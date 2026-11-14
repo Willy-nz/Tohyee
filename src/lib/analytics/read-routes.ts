@@ -103,7 +103,9 @@ export function freshnessRead(run: OrganisationRunner) {
       // Farm tables this person can't use (decision 744): no date is read from them.
       const farm = await hiddenFarmTables(tx);
       const tables = dashboard.tiles.flatMap((tile) => (tile.query ? [tile.query.table] : []));
-      return { organisationId: tx.organisationId, dashboard, facts: await reportLoadFacts(tx, dashboard), hidden: new Set(farm ? tables.filter((table) => farm.has(table)) : []) };
+      // Why a refresh failed is the server's own words (a file path, a database's name): not for a client (#694).
+      const facts = (await reportLoadFacts(tx, dashboard)).map((fact) => (membership.role === "report_viewer" ? { ...fact, failedReason: null } : fact));
+      return { organisationId: tx.organisationId, dashboard, facts, hidden: new Set(farm ? tables.filter((table) => farm.has(table)) : []) };
     });
     // The latest dates are read from the analytics file, outside the transaction.
     const through = new Map<string, string | null>();
