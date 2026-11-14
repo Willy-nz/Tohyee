@@ -14742,3 +14742,38 @@ show, 100 a page, and clicking one should let her edit it.
       ledger, bank reconciliation and transaction lists keep their codes, so
       it's clear which account is which. Claude's details, not yet reviewed.
 
+### Moving accounts between groups in a report layout (14 Nov 2026; decisions 1614-1615)
+
+Jess: the report editing "is ok but not great" beside Xero's; she asked
+Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
+
+1614. **An account drags to another group.** In the layout editor an
+      account row drags onto any row of another group and moves there
+      (the group it will land in is shaded); ticked accounts all move
+      together. For the keyboard and touch, ticking accounts also offers
+      **Move to** with the table's other groups, beside the existing new
+      group. `moveAccounts` changes only the two groups (CR21): a group of
+      chosen accounts gains or loses the codes; a group by account type
+      leaves them out (`exceptCodes`) or takes them as well (the new
+      `alsoCodes`), so it still takes new accounts of its types. Formulas
+      aren't touched, so net profit can't change: an account moved into a
+      group by type that runs the other way (a cost into income, a liability
+      into assets) counts against that group and shows as a minus. A layout
+      can't both leave out and take the same account in one group. The drag
+      is tracked in the page, since a page can't read a drag's own data
+      until the drop; each account row has a grip, and the whole row drags. No migration: layouts are
+      JSON, and old ones have no `alsoCodes`.
+1615. **Edit layout's first save makes it the report's layout.** Before,
+      Update layout saved a draft that Reports didn't use until "Set as
+      default layout" was found under "⋯", and each Edit layout started
+      another draft. Now a draft started from Edit layout, on a report with
+      no default yet, becomes the default on its first save (CR22), with a
+      message that says so and how to go back. Versions are still kept
+      (decision 1359); drafts started other ways are unchanged.
+1616. **The editor lists every account.** Before, an account with nothing in
+      the editor's dates wasn't listed, so it couldn't be moved (and the
+      editor opens on the current month). The editor now asks for its
+      figures with `everyAccount` (the preview route), which adds each
+      group's in-use accounts with no amounts, marked `empty` (CR23). Only
+      the editor shows them; reports, Preview, print and export leave them
+      out, and nothing saved changes.

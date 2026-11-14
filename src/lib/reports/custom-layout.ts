@@ -189,6 +189,8 @@ export type ReportRow = RowExtras &
         accountCodes: string[];
         /** With account types: these accounts are left out (they've been grouped elsewhere, CR16). */
         exceptCodes?: string[];
+        /** With account types: these accounts as well (they've been moved in from another group, CR21). */
+        alsoCodes?: string[];
         showAccounts: boolean;
       }
     | {
@@ -344,7 +346,14 @@ export type ReportColumn = {
 /** Amounts as strings, keyed by column; null for a % that can't be worked out (the compared amount is 0.00). */
 export type ReportValues = Record<string, string | null>;
 
-export type ComputedLine = { code: string; name: string; values: ReportValues; accountId?: string };
+export type ComputedLine = {
+  code: string;
+  name: string;
+  values: ReportValues;
+  accountId?: string;
+  /** Nothing in these columns: only listed for the layout editor, so it can be moved (CR23). Never printed. */
+  empty?: boolean;
+};
 
 export type ComputedRow = RowExtras & {
   id: string;
@@ -599,6 +608,56 @@ export function groupAccounts(
     }
   }
   return { layout: next, rowId: newId };
+}
+
+/**
+ * Moves accounts from one group to another group in the same table (CR21,
+ * decision 1614), as dragging an account does in Xero's layout editor. A
+ * group of chosen accounts gains or loses the codes. A group by account type
+ * leaves the accounts out (`exceptCodes`) or takes them as well
+ * (`alsoCodes`), so it still takes any new account of its types. Moving an
+ * account back where its type puts it just undoes the earlier move. A group
+ * of chosen accounts must keep at least one account. Formulas aren't
+ * changed: the two groups' totals move by the accounts' amounts.
+ */
+export function moveAccounts(layout: CustomReportLayout, blockId: string, fromRowId: string, codes: string[], toRowId: string): CustomReportLayout {
+  const next = structuredClone(layout);
+  const block = next.blocks.find((entry) => entry.id === blockId);
+  if (!block || block.kind !== "table") throw new Error("That table isn't in the report.");
+  const from = block.rows.find((row) => row.id === fromRowId);
+  const to = block.rows.find((row) => row.id === toRowId);
+  if (!from || from.kind !== "group" || !to || to.kind !== "group") throw new Error("Accounts move from one group to another group.");
+  const moving = [...new Set(codes)];
+  if (moving.length === 0) throw new Error("Choose at least one account.");
+  if (from.id === to.id) return next;
+
+  if (from.accountCodes.length > 0) {
+    const left = from.accountCodes.filter((code) => !moving.includes(code));
+    if (left.length === 0) throw new Error(`${from.label} would have no accounts left. Move the group, or delete it, instead.`);
+    from.accountCodes = left;
+  } else {
+    // Left out by code (harmless for an account that was only here because it was moved in), and no longer taken as well.
+    const also = (from.alsoCodes ?? []).filter((code) => !moving.includes(code));
+    const except = [...new Set([...(from.exceptCodes ?? []), ...moving])];
+    if (also.length > 0) from.alsoCodes = also;
+    else delete from.alsoCodes;
+    if (except.length > 0) from.exceptCodes = except;
+    else delete from.exceptCodes;
+  }
+
+  if (to.accountCodes.length > 0) {
+    to.accountCodes = [...new Set([...to.accountCodes, ...moving])];
+  } else {
+    // Coming back to the group its type puts it in: stop leaving it out. Otherwise take it as well.
+    const returning = moving.filter((code) => (to.exceptCodes ?? []).includes(code));
+    const except = (to.exceptCodes ?? []).filter((code) => !moving.includes(code));
+    const also = [...new Set([...(to.alsoCodes ?? []), ...moving.filter((code) => !returning.includes(code))])];
+    if (except.length > 0) to.exceptCodes = except;
+    else delete to.exceptCodes;
+    if (also.length > 0) to.alsoCodes = also;
+    else delete to.alsoCodes;
+  }
+  return next;
 }
 
 /** Moves a row to another place in its table (drag and drop, or the keyboard, decision 1360). */

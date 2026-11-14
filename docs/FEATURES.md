@@ -313,7 +313,11 @@ that something happened.
   standard rows; the editor has one Save (changes preview first), drag or
   arrow-key row moves, names typed in place, Group for chosen accounts,
   hidden rows, page breaks, row notes, and × ÷ and % of formulas (blank
-  when dividing by zero). Save as keeps named versions; one can be the
+  when dividing by zero). An account drags onto another group to move it
+  there, or ticked accounts **Move to** a group (CR21); the editor lists
+  every account in use, with or without an amount (CR23); the first Update
+  layout makes the layout the one Reports shows (CR22; decisions
+  1614-1615, not yet reviewed). Save as keeps named versions; one can be the
   **default layout** that Reports shows (deliberately unlike Xero, which
   keeps one org-wide layout). Saved reports are in the picker, with
   favourites; custom reports export like the standard ones. The AI can

@@ -1,4 +1,4 @@
-import { type AccountClass, type AccountType, isAccountType } from "@/lib/accounts/types";
+import { type AccountClass, type AccountType, classOfType, isAccountType } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
 import { parseIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -259,6 +259,11 @@ function parseRowBody(base: FinancialReportBase, raw: Record<string, unknown>, i
       const except = list(raw.exceptCodes, `The accounts left out of ${label}`, LIMITS.accountCodesPerGroup).map((code) =>
         text(code, `An account code left out of ${label}`, 20, { required: true }),
       );
+      const also = list(raw.alsoCodes, `The accounts moved into ${label}`, LIMITS.accountCodesPerGroup).map((code) =>
+        text(code, `An account code moved into ${label}`, 20, { required: true }),
+      );
+      const both = also.filter((code) => except.includes(code));
+      if (both.length > 0) throw new ValidationError(`${label} both leaves out and takes ${both.join(", ")}. It can only do one.`);
       return {
         id,
         kind: "group",
@@ -266,6 +271,7 @@ function parseRowBody(base: FinancialReportBase, raw: Record<string, unknown>, i
         accountTypes: [...new Set(types as AccountType[])],
         accountCodes: [...new Set(codes)],
         ...(except.length > 0 && codes.length === 0 ? { exceptCodes: [...new Set(except)] } : {}),
+        ...(also.length > 0 && codes.length === 0 ? { alsoCodes: [...new Set(also)] } : {}),
         showAccounts: bool(raw.showAccounts, "showAccounts"),
       };
     }
@@ -361,7 +367,7 @@ export async function parseLayout(tx: OrgTx, base: FinancialReportBase, input: u
     return { id, kind: "table", title: text(block.title, "A table's title", LIMITS.labelLength, { required: false }), rows, ...extras };
   });
   const codes = new Set(
-    blocks.flatMap((block) => (block.kind === "table" ? block.rows.flatMap((row) => (row.kind === "group" ? [...row.accountCodes, ...(row.exceptCodes ?? [])] : [])) : [])),
+    blocks.flatMap((block) => (block.kind === "table" ? block.rows.flatMap((row) => (row.kind === "group" ? [...row.accountCodes, ...(row.exceptCodes ?? []), ...(row.alsoCodes ?? [])] : [])) : [])),
   );
   if (codes.size > 0) {
     const found = await tx.query<{ code: string }>("select code from accounts where code = any($1::text[])", [[...codes]]);
@@ -399,15 +405,32 @@ export async function parseLayout(tx: OrgTx, base: FinancialReportBase, input: u
   return { title, columns, blocks, ...(filter ? { filter } : {}) };
 }
 
-type Account = { id: string; code: string; name: string; accountClass: AccountClass; accountType: AccountType };
+type Account = { id: string; code: string; name: string; accountClass: AccountClass; accountType: AccountType; isActive: boolean };
 
 const SCOPE: Record<FinancialReportBase, AccountClass[]> = {
   profit_and_loss: ["revenue", "expense"],
   balance_sheet: ["asset", "liability", "equity"],
 };
 
+/** Classes whose amounts are credits when positive; the rest (assets, expenses) are debits. */
+const CREDIT_CLASSES: readonly AccountClass[] = ["revenue", "liability", "equity"];
+
+/**
+ * An account moved into a group by account type counts against it when it
+ * runs the other way (CR21): a cost moved into an income group, or a
+ * liability moved into an asset group, is shown as a minus and taken off the
+ * group's total, as Xero shows it, so no formula has to change. Groups of
+ * chosen accounts add their accounts up as they always have (CR5).
+ */
+function countsAgainst(row: Extract<ReportRow, { kind: "group" }>, account: Account): boolean {
+  if (row.accountCodes.length > 0 || row.accountTypes.length === 0 || !(row.alsoCodes ?? []).includes(account.code)) return false;
+  if (row.accountTypes.includes(account.accountType)) return false;
+  return CREDIT_CLASSES.includes(classOfType(row.accountTypes[0])) !== CREDIT_CLASSES.includes(account.accountClass);
+}
+
 function groupIncludes(row: Extract<ReportRow, { kind: "group" }>, account: Account): boolean {
   if (row.accountCodes.length > 0) return row.accountCodes.includes(account.code);
+  if ((row.alsoCodes ?? []).includes(account.code)) return true;
   return row.accountTypes.includes(account.accountType) && !(row.exceptCodes ?? []).includes(account.code);
 }
 
@@ -421,6 +444,11 @@ export type CustomReportRunOptions = {
   columns?: ReportColumn[];
   /** Replaces the layout's filter; null for none. */
   filter?: { categoryId: string; valueIds: string[]; unassigned?: boolean; label: string } | null;
+  /**
+   * For the layout editor (CR23): each group also lists its accounts with
+   * nothing in these columns, marked `empty`, so they can be moved too.
+   */
+  everyAccount?: boolean;
 };
 
 /** Works out a layout's figures (CR1-CR6, CR9, CR16-CR18). */
@@ -506,8 +534,8 @@ export async function computeCustomReport(
     columns.push({ key, kind: column.kind, label, from: null, to: null, ...(format ? { format } : {}) });
   }
 
-  const accountsResult = await tx.query<{ id: string; code: string; name: string; account_class: AccountClass; account_type: AccountType }>(
-    "select id, code, coalesce(reporting_name, name) as name, account_class, account_type from accounts order by code",
+  const accountsResult = await tx.query<{ id: string; code: string; name: string; account_class: AccountClass; account_type: AccountType; is_active: boolean }>(
+    "select id, code, coalesce(reporting_name, name) as name, account_class, account_type, is_active from accounts order by code",
   );
   const accounts: Account[] = accountsResult.rows.map((row) => ({
     id: row.id,
@@ -515,6 +543,7 @@ export async function computeCustomReport(
     name: row.name,
     accountClass: row.account_class,
     accountType: row.account_type,
+    isActive: row.is_active,
   }));
 
   // Each account's amount in its natural direction, per amount column, and the earnings lines.
@@ -594,7 +623,8 @@ export async function computeCustomReport(
     }
     return out;
   };
-  const accountValues = (account: Account) => new Map(amountColumns.map((column) => [column.key, amountOf(account.id, column.key)]));
+  const accountValues = (account: Account, against = false) =>
+    new Map(amountColumns.map((column) => [column.key, against ? sub(ZERO_DECIMAL, amountOf(account.id, column.key)) : amountOf(account.id, column.key)]));
 
   const inGroups = new Set<string>();
   const inSeveralGroups: CustomReportFigures["inSeveralGroups"] = [];
@@ -623,7 +653,10 @@ export async function computeCustomReport(
       for (const column of amountColumns) {
         let total: Decimal | null = ZERO_DECIMAL;
         if (row.kind === "group") {
-          for (const account of accounts) if (groupIncludes(row, account)) total = add(total!, amountOf(account.id, column.key));
+          for (const account of accounts) {
+            if (!groupIncludes(row, account)) continue;
+            total = countsAgainst(row, account) ? sub(total!, amountOf(account.id, column.key)) : add(total!, amountOf(account.id, column.key));
+          }
         } else if (row.kind === "formula" && (row.operation ?? "sum") === "sum") {
           for (const term of row.terms) {
             const part = valuesOf(rowsById.get(term.rowId)!).get(column.key) ?? null;
@@ -653,9 +686,17 @@ export async function computeCustomReport(
         for (const account of accounts) {
           if (!groupIncludes(row, account)) continue;
           inGroups.add(account.id);
-          if (!hasAmount(account.id)) continue;
-          groupsOfAccount.set(account.id, [...(groupsOfAccount.get(account.id) ?? []), row.label]);
-          lines.push({ code: account.code, name: account.name, values: withDerived(accountValues(account), "money", { rowValues }), accountId: String(account.id) });
+          const empty = !hasAmount(account.id);
+          // The editor lists accounts with nothing in these columns too, so they can be moved (CR23); only the ones still in use.
+          if (empty && !(options.everyAccount && account.isActive && SCOPE[base].includes(account.accountClass))) continue;
+          if (!empty) groupsOfAccount.set(account.id, [...(groupsOfAccount.get(account.id) ?? []), row.label]);
+          lines.push({
+            code: account.code,
+            name: account.name,
+            values: withDerived(accountValues(account, countsAgainst(row, account)), "money", { rowValues }),
+            accountId: String(account.id),
+            ...(empty ? { empty: true } : {}),
+          });
         }
       }
       const format = formatOf(row);
@@ -668,7 +709,7 @@ export async function computeCustomReport(
         ...extras,
         showAccounts: row.kind === "group" && row.showAccounts,
         lines,
-        ...(row.kind === "group" ? { accountIds: lines.map((line) => line.accountId!) } : {}),
+        ...(row.kind === "group" ? { accountIds: lines.filter((line) => !line.empty).map((line) => line.accountId!) } : {}),
       };
     });
     for (const [accountId, groups] of groupsOfAccount) {
@@ -901,14 +942,16 @@ export async function updateCustomReport(
 }
 
 /** A draft's figures for a layout that isn't saved yet, so the editor can show changes before Save (decision 1360). Saves nothing. */
-export async function previewCustomReport(tx: OrgTx, idInput: unknown, layoutInput: unknown): Promise<AnyCustomReportFigures> {
+export async function previewCustomReport(tx: OrgTx, idInput: unknown, layoutInput: unknown, options: { everyAccount?: boolean } = {}): Promise<AnyCustomReportFigures> {
   const id = requireId(idInput, "reportId");
   const report = await findReport(tx, id);
   if (report.kind === "published") throw new ConflictError("A published report can't be changed.");
   if (isEquityLayout(report.base, report.layout)) return computeEquityLayout(tx, await parseEquityLayout(tx, layoutInput));
   if (isTransactionReportBase(report.base)) return computeTransactionCustomReport(tx, report.base, await parseTransactionReportLayout(tx, report.base, layoutInput));
   if (isCashFlowBase(report.base)) return computeCashFlowLayout(tx, await parseCashFlowLayout(tx, layoutInput));
-  return computeCustomReport(tx, report.base as FinancialReportBase, await parseLayout(tx, report.base as FinancialReportBase, layoutInput));
+  return computeCustomReport(tx, report.base as FinancialReportBase, await parseLayout(tx, report.base as FinancialReportBase, layoutInput), {
+    everyAccount: options.everyAccount === true,
+  });
 }
 
 /** Keeps a frozen copy of a draft: its layout and today's figures (CR7). */
