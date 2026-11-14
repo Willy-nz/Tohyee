@@ -4,6 +4,8 @@ import { ValidationError } from "@/lib/errors";
 type ScryptParams = { N: number; r: number; p: number };
 
 const DEFAULT_PARAMS: ScryptParams = { N: 2 ** 15, r: 8, p: 1 };
+/** The most work a stored hash may ask for: 32 times today's N, and r and p no higher than any setting in common use. */
+const MAX_PARAMS: ScryptParams = { N: 2 ** 20, r: 16, p: 4 };
 const KEY_LENGTH = 64;
 const MAX_MEMORY = 128 * 1024 * 1024;
 
@@ -51,6 +53,11 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const [, n, r, p, saltText, hashText] = parts;
   const params = { N: Number(n), r: Number(r), p: Number(p) };
   if (![params.N, params.r, params.p].every((value) => Number.isInteger(value) && value > 0)) {
+    return false;
+  }
+  // The cost comes from the stored hash, so it has a ceiling (#698): a hash asking for more work than Tohyee
+  // would ever set is refused, not run. Only someone who could already write to the core database could plant one.
+  if (params.N > MAX_PARAMS.N || (params.N & (params.N - 1)) !== 0 || params.r > MAX_PARAMS.r || params.p > MAX_PARAMS.p) {
     return false;
   }
   const expected = Buffer.from(hashText, "base64");

@@ -4,6 +4,7 @@ import { runAiTool } from "@/lib/ai/run-tool";
 import { type AiTool, ToolFileAnswer, type ToolContext } from "@/lib/ai/tools";
 import type { Role } from "@/lib/auth/roles";
 import { type Actor, withOrganisationTransaction } from "@/lib/db/org-transaction";
+import { plainDatabaseError } from "@/lib/db/plain-errors";
 import { ConflictError, HttpError } from "@/lib/errors";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 
@@ -68,9 +69,9 @@ export async function approveAiAction(organisation: OrganisationRecord, approver
     try {
       result = { ok: true, outcome: plain(await runAiTool(tool, organisation, actor, context, claimed.args)) };
     } catch (error) {
-      const pgCode = (error as { code?: unknown })?.code;
-      if (error instanceof HttpError || (typeof pgCode === "string" && /^(23|22|P0)/.test(pgCode) && error instanceof Error)) {
-        result = { ok: false, error: (error as Error).message };
+      const refused = error instanceof HttpError ? error.message : plainDatabaseError(error, `approving ${claimed.toolName}`);
+      if (refused) {
+        result = { ok: false, error: refused };
       } else {
         console.error("[tohyee] approving an AI action failed:", claimed.toolName, error);
         result = { ok: false, error: "Something went wrong on the Tohyee server. The server logs have the details." };
