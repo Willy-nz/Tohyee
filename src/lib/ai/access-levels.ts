@@ -89,3 +89,13 @@ export function levelAllows(effective: AiAccessLevel, needed: AiAccessLevel): bo
 export function isAiAccessLevel(value: unknown): value is AiAccessLevel {
   return typeof value === "string" && (AI_ACCESS_LEVELS as readonly string[]).includes(value);
 }
+
+/** The end dates offered when a key is made (#695, decision 1629), in days; null is no end date. */
+export const AI_KEY_END_CHOICES = [30, 90, 365, null] as const;
+export type AiKeyEndDays = (typeof AI_KEY_END_CHOICES)[number];
+export const AI_KEY_END_LABELS: Record<string, string> = { "30": "In 30 days", "90": "In 90 days", "365": "In a year", none: "No end date" };
+
+/** The end date a key gets when none is chosen: 90 days for one that can post, none for one that only reads or drafts. */
+export function defaultKeyEndDays(level: AiAccessLevel): AiKeyEndDays {
+  return level === "post" || level === "full" ? 90 : null;
+}

@@ -844,4 +844,15 @@ alter table organisation_members add constraint organisation_members_access_orde
 create index organisation_members_access_ends_idx on organisation_members (access_ends_at) where access_ends_at is not null;
 `,
   },
+  {
+    version: "0026",
+    name: "ai_key_end_dates",
+    sql: `
+-- An AI key can have an end date (#695, decision 1629): the first moment it
+-- no longer works. Null means none was set. Keys made before this have none.
+-- A key also stops when it hasn't been used for 90 days, worked out from
+-- last_used_at (or created_at for one never used), with nothing stored.
+alter table ai_access_tokens add column expires_at timestamptz;
+`,
+  },
 ];

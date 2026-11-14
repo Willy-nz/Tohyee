@@ -14970,3 +14970,20 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       and people can still open one and move it to Analytics (decision
       1627). Reports are made in Analytics only. Worked example AIW7 is
       updated.
+1629. **An AI key can have an end date, and stops when it isn't used for
+      90 days** (#695). Making a key offers Ends: in 30 days, 90 days, a
+      year, or no end date. Left alone it is 90 days for a key that can
+      post (Make and post, Full access) and no end date for one that only
+      looks or makes drafts. Any key, old or new, also stops once it hasn't
+      been used for 90 days (from when it was made, if never used), as an
+      app connected by signing in does after 60. A stopped key is refused
+      exactly like an unknown one, shows on the AI page as "Ended" or
+      "Stopped: not used for 90 days", doesn't count towards the ten, and
+      can't be restarted: the person makes a new one. The AI page shows
+      when each working key ends or would stop. In the week before a key
+      stops, its owner (nobody else) sees a notice in the top bar. Keys
+      made before this have no end date, so only the 90-day rule reaches
+      them; one already unused for 90 days stops when this is installed.
+      Core migration 0026 adds `expires_at`. Not built: an email before a
+      key ends, an alert when a Full access key is first used from a new
+      address, and "used from". Claude's details, not yet reviewed.

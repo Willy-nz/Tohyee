@@ -16,6 +16,8 @@ import {
   effectiveAccessLevel,
   FULL_ACCESS_WARNING,
   roleCeiling,
+  AI_KEY_END_LABELS,
+  defaultKeyEndDays,
 } from "@/lib/ai/access-levels";
 import { AI_TOOL_PLAIN_WORDS } from "@/lib/ai/tool-names";
 import type { AiAccessToken } from "@/lib/ai/tokens";
@@ -128,7 +130,13 @@ function AccessRow({ item, role, onRevoke }: { item: AiAccessToken; role: Role |
           {item.revokedAt ? (
             <Badge tone="red">{item.kind === "connection" ? "Disconnected" : "Revoked"} {formatDateTime(item.revokedAt)}</Badge>
           ) : item.expired ? (
-            <Badge tone="red">Expired: not used for 60 days</Badge>
+            <Badge tone="red">
+              {item.kind === "connection"
+                ? "Expired: not used for 60 days"
+                : item.stopReason === "end_date"
+                  ? `Ended ${item.stopsAt ? formatDateTime(item.stopsAt) : ""}`
+                  : "Stopped: not used for 90 days"}
+            </Badge>
           ) : null}
         </div>
         <div className={ui.muted}>
@@ -143,6 +151,12 @@ function AccessRow({ item, role, onRevoke }: { item: AiAccessToken; role: Role |
           )}
           <LevelText level={item.accessLevel} role={role} /> · {item.kind === "connection" ? "connected" : "made"} {formatDateTime(item.createdAt)} · last used{" "}
           {item.lastUsedAt ? formatDateTime(item.lastUsedAt) : "never"}
+          {item.kind === "key" && !ended && item.stopsAt ? (
+            <>
+              {" "}
+              · {item.stopReason === "end_date" ? "ends" : "stops if not used by"} {formatDateTime(item.stopsAt)}
+            </>
+          ) : null}
         </div>
       </div>
       {ended ? null : (
@@ -201,6 +215,8 @@ function AiConnect({ organisationId }: { organisationId: string }) {
   const [name, setName] = useState("");
   const [accessLevel, setAccessLevel] = useState<AiAccessLevel>("read");
   const [fullConfirmed, setFullConfirmed] = useState(false);
+  // "default": 90 days for a key that can post, none for one that only looks or drafts (#695).
+  const [ends, setEnds] = useState<"default" | "30" | "90" | "365" | "none">("default");
   const [busy, setBusy] = useState(false);
   const role = current?.role ?? null;
   const ceiling = role ? roleCeiling(role) : "read";
@@ -214,7 +230,8 @@ function AiConnect({ organisationId }: { organisationId: string }) {
   const all = keys.data?.keys ?? [];
   const connections = all.filter((item) => item.kind === "connection");
   const keyList = all.filter((item) => item.kind === "key");
-  const activeKeys = keyList.filter((key) => !key.revokedAt);
+  const activeKeys = keyList.filter((key) => !key.revokedAt && !key.expired);
+  const shownEnds = ends === "default" ? String(defaultKeyEndDays(accessLevel) ?? "none") : ends;
   const atKeyLimit = keys.data ? activeKeys.length >= keys.data.maxActiveKeys : false;
 
   async function create(event: FormEvent<HTMLFormElement>) {
@@ -223,12 +240,13 @@ function AiConnect({ organisationId }: { organisationId: string }) {
     try {
       const result = await api<{ token: string; key: AiAccessToken }>("/api/ai/tokens", {
         method: "POST",
-        body: { organisationId, name, accessLevel, ...(accessLevel === "full" ? { confirmFullAccess: fullConfirmed } : {}) },
+        body: { organisationId, name, accessLevel, endsInDays: shownEnds === "none" ? null : Number(shownEnds), ...(accessLevel === "full" ? { confirmFullAccess: fullConfirmed } : {}) },
       });
       setNewToken(result.token);
       setStatus({ tone: "success", text: `Made the key “${result.key.name}”.` });
       setName("");
       setAccessLevel("read");
+      setEnds("default");
       setFullConfirmed(false);
       keys.reload();
     } catch (caught) {
@@ -301,6 +319,15 @@ function AiConnect({ organisationId }: { organisationId: string }) {
               ))}
             </select>
           </Field>
+          <Field label="Ends" hint="It also stops if it isn't used for 90 days.">
+            <select value={shownEnds} onChange={(event) => setEnds(event.target.value as "30" | "90" | "365" | "none")}>
+              {["30", "90", "365", "none"].map((choice) => (
+                <option key={choice} value={choice}>
+                  {AI_KEY_END_LABELS[choice]}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Button type="submit" disabled={busy || (accessLevel === "full" && !fullConfirmed) || atKeyLimit}>
             Create a key
           </Button>
@@ -323,7 +350,7 @@ function AiConnect({ organisationId }: { organisationId: string }) {
           </Notice>
         ) : null}
         {keys.data && atKeyLimit ? <p className={ui.muted}>You have {keys.data.maxActiveKeys} keys, the most you can have here. Revoke one to make another.</p> : null}
-        <AccessList items={keyList} role={role} empty="No keys yet." endedLabel="Revoked keys" onRevoke={(item) => void revoke(item)} />
+        <AccessList items={keyList} role={role} empty="No keys yet." endedLabel="Revoked and ended keys" onRevoke={(item) => void revoke(item)} />
       </Card>
 
       <div className={styles.more}>
