@@ -87,6 +87,15 @@ export const FARMING_TOOLS: readonly string[] = [
   "list_bcs_photos_to_score",
   "get_bcs_photos_to_score",
   "suggest_bcs",
+  // Field work recorded through the AI (#701).
+  "list_farm_tasks",
+  "list_rain_gauges",
+  "record_pasture_reading",
+  "record_grazing",
+  "record_supplements_fed",
+  "record_rainfall",
+  "add_farm_task",
+  "mark_farm_task_done",
 ];
 
 /** Livestock: the Accounting › Livestock links (module "livestock"). */

@@ -1,3 +1,4 @@
+import { AI_TOOL_PLAIN_WORDS } from "@/lib/ai/tool-names";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import * as tokensRoute from "@/app/api/ai/tokens/route";
 import * as mcpRoute from "@/app/api/mcp/route";
@@ -101,7 +102,7 @@ describeWithDatabase("the AI's tools follow the organisation's modules (#576) an
     const organisation = toolAnswer(next.answer);
     expect(organisation.toolListVersion).not.toBe(before);
     expect(organisation).toMatchObject({ toolListUpToDate: false });
-    expect(organisation.toolsNow).toEqual(expect.arrayContaining([...FARMING_TOOLS.filter((name) => !["add_farm_note", "update_farm_note", "propose_pasture_cover_estimate", "suggest_bcs"].includes(name))]));
+    expect(organisation.toolsNow).toEqual(expect.arrayContaining([...FARMING_TOOLS.filter((name) => AI_TOOL_PLAIN_WORDS.find((tool) => tool.name === name)?.level === "read")]));
 
     const relisted = await post(token, "tools/list", {}, session);
     expect(toolNames(relisted.answer)).toContain("farm_notebook");
