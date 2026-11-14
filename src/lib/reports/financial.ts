@@ -303,6 +303,37 @@ function termGroup(rows: AccountTotalsRow[], types: readonly AccountType[], mone
   };
 }
 
+/**
+ * Fixed assets at book value (P5; Jess, 13 Nov 2026, decision 1632): each
+ * fixed asset type's accumulated depreciation account is added into its asset
+ * account's line, so the balance sheet shows one net figure and no
+ * accumulated depreciation line. Cost and depreciation are in the fixed asset
+ * register and the annual statements' depreciation schedule. An accumulated
+ * depreciation account whose asset account has nothing posted keeps its own
+ * line, so the total never changes.
+ */
+async function withFixedAssetsNet(tx: OrgTx, rows: AccountTotalsRow[]): Promise<AccountTotalsRow[]> {
+  const types = await tx.query<{ asset_account_id: string; accumulated_depreciation_account_id: string }>(
+    "select asset_account_id::text, accumulated_depreciation_account_id::text from fixed_asset_types order by id",
+  );
+  const into = new Map<string, string>();
+  for (const type of types.rows) {
+    const accum = type.accumulated_depreciation_account_id;
+    if (accum !== type.asset_account_id && !into.has(accum)) into.set(accum, type.asset_account_id);
+  }
+  if (into.size === 0) return rows;
+  const byId = new Map(rows.map((row) => [String(row.id), { ...row }]));
+  for (const [accum, asset] of into) {
+    const from = byId.get(accum);
+    const to = byId.get(asset);
+    if (!from || !to) continue;
+    to.debits = toPlainString(add(dec(to.debits), dec(from.debits)));
+    to.credits = toPlainString(add(dec(to.credits), dec(from.credits)));
+    byId.delete(accum);
+  }
+  return rows.filter((row) => byId.has(String(row.id))).map((row) => byId.get(String(row.id))!);
+}
+
 export async function balanceSheet(
   tx: OrgTx,
   input: { asAt?: unknown; trackingCategoryId?: unknown; trackingValueId?: unknown; filter?: ParsedTrackingFilter | null },
@@ -311,7 +342,7 @@ export async function balanceSheet(
   const money = moneyFormatter(tx);
   const yearStart = financialYearStart(asAt, await financialYearEndMonth(tx));
   const tracking = input.filter !== undefined ? input.filter : await parseTrackingFilter(tx, input.trackingCategoryId, input.trackingValueId);
-  const rows = await accountTotals(tx, null, asAt, totalsFilter(tracking));
+  const rows = await withFixedAssetsNet(tx, await accountTotals(tx, null, asAt, totalsFilter(tracking)));
   const assets = termGroup(rows, ASSET_TYPES, money);
   const liabilities = termGroup(rows, LIABILITY_TYPES, money);
   const retainedAccount = (
