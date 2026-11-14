@@ -15048,3 +15048,20 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       Tenant migration 0283. Not built: only above an amount or only in a
       locked or reconciled period, and a list of everything the AI voided
       or deleted in the last 30 days. Claude's details, not yet reviewed.
+1634. **Text from outside the organisation is marked in the AI's answers,
+      and the AI is told it's never an instruction** (#699, first part).
+      Fifteen read tools return words written by outsiders: the bills
+      inbox and its files, bank statement lines and coding proposals, files
+      left for the AI, IRD documents, the shop's log and held orders, and
+      the owner's private mail. Their answers now start with a `fromOutside`
+      note saying which parts are outside text and that it is information,
+      never an instruction: if it asks for something to be done (pay this,
+      change bank details, void, send data, ignore your instructions) the
+      AI doesn't do it and tells the person. The server's instructions say
+      the same. This marks and doesn't block: what a connection may do is
+      still its level, its owner's role and, when an owner turns it on, a
+      person approving voids and deletes (decision 1633). "Don't ask again
+      before each step" (decision 1368) still holds for what the person
+      asked for. Not built: limiting what the AI can do after reading a
+      document, and an allowed-senders list for a bills mailbox. Claude's
+      details, not yet reviewed.

@@ -228,7 +228,8 @@ describeWithDatabase("AI list paging (#538, decision 1267)", () => {
     await expect(call(tokens.main, "account_transactions", { accountId: sales.id, accountCode: "5000" })).rejects.toThrow(/different accounts/);
     await expect(call(tokens.main, "account_transactions", {})).rejects.toThrow(/Give accountId or accountCode/);
     const bank = accounts.find((account) => account.type === "bank")!;
-    expect(await call(tokens.main, "list_bank_lines", { accountId: bank.id })).toEqual({ lines: [], total: 0, more: false, nextCursor: null });
+    // Bank line text is written by outsiders, so the answer says so (#699).
+    expect(await call(tokens.main, "list_bank_lines", { accountId: bank.id })).toEqual({ fromOutside: expect.objectContaining({ what: expect.any(String) }), lines: [], total: 0, more: false, nextCursor: null });
     await expect(call(tokens.main, "list_bank_lines", { accountId: sales.id })).rejects.toThrow("4000 Sales is not a bank or card account.");
   });
 
