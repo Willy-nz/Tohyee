@@ -3,7 +3,7 @@ import { type AiTool, DATE, type JsonSchema, schema } from "@/lib/ai/tools";
 import { addNotebookEntry, listNotebook, NOTEBOOK_CATEGORIES, updateNotebookEntry } from "@/lib/ai-workspace/notebook";
 import { aiFileText, listAiFiles, READ_CHUNK } from "@/lib/ai-workspace/files";
 import { addDatasetRows, AGGREGATES, COLUMN_TYPES, GRAINS, listDatasets, OPERATORS, queryDataset, saveDataset } from "@/lib/ai-workspace/datasets";
-import { getAiDashboard, listAiDashboards, saveAiDashboard, TILE_KINDS } from "@/lib/ai-workspace/dashboards";
+import { getAiDashboard, listAiDashboards } from "@/lib/ai-workspace/dashboards";
 import { roleAtLeast } from "@/lib/auth/roles";
 import { todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -231,7 +231,7 @@ export const FARM_READ_TOOLS: AiTool[] = [
   {
     name: "list_ai_dashboards",
     title: "List dashboards",
-    description: "The older kind of dashboard over your tables. Reports people use are in Analytics (list_analytics_dashboards).",
+    description: "Older dashboards over your tables, from before reports were made in Analytics. Read-only: new reports are Analytics reports (create_analytics_dashboard), and people move these there.",
     level: "read",
     inputSchema: schema(PAGE),
     run: async (tx, args) => paged("dashboards", await listAiDashboards(tx), args),
@@ -598,43 +598,6 @@ export const FARM_WRITE_TOOLS: AiTool[] = [
     level: "draft",
     inputSchema: schema({ name: { type: "string" }, rows: { type: "array", maxItems: 2000, items: { type: "object" } }, replace: { type: "boolean" } }, ["name", "rows"]),
     run: (tx, args) => addDatasetRows(tx, { name: args.name, rows: args.rows, replace: args.replace }),
-  },
-  {
-    name: "save_ai_dashboard",
-    title: "Make or change a dashboard",
-    description:
-      "The older, plainer kind of dashboard, kept for ones already made. For anything new, build an Analytics report instead (create_analytics_dashboard): it has themes, formats, dates, slicers and pages, and your tables are there as tohyee_ai_<name>. This tool: lay out a dashboard of up to 12 tiles over your tables. Each tile: title, kind (column, bar, line, area, pie, donut, kpi, table), dataset, groupBy, measures, filters, sort, limit, width (1 half, 2 full), note. Charts need groupBy and a measure; a kpi needs a measure. Pass dashboardId to replace one. Every tile is checked by running it.",
-    level: "draft",
-    inputSchema: schema(
-      {
-        dashboardId: { type: "string" },
-        name: { type: "string", maxLength: 120 },
-        description: { type: "string", maxLength: 2000 },
-        tiles: {
-          type: "array",
-          minItems: 1,
-          maxItems: 12,
-          items: {
-            type: "object",
-            properties: {
-              title: { type: "string" },
-              kind: { type: "string", enum: [...TILE_KINDS] },
-              dataset: { type: "string" },
-              groupBy: GROUP_BY,
-              measures: MEASURES,
-              filters: FILTERS,
-              sort: SORT,
-              limit: { type: "integer", minimum: 1, maximum: 500 },
-              width: { type: "integer", enum: [1, 2] },
-              note: { type: "string", maxLength: 500 },
-            },
-            required: ["title", "kind", "dataset"],
-          },
-        },
-      },
-      ["name", "tiles"],
-    ),
-    run: (tx, args) => saveAiDashboard(tx, { id: args.dashboardId, name: args.name, description: args.description, tiles: args.tiles }),
   },
   {
     name: "suggest_livestock_movements",

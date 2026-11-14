@@ -3,6 +3,7 @@ import JSZip from "jszip";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import * as tokensRoute from "@/app/api/ai/tokens/route";
 import * as mcpRoute from "@/app/api/mcp/route";
+import { saveAiDashboard } from "@/lib/ai-workspace/dashboards";
 import { addAiFile } from "@/lib/ai-workspace/files";
 import type { SessionUser } from "@/lib/auth/sessions";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -145,14 +146,18 @@ describeWithDatabase("the AI's farm workspace", () => {
     const all = await call(tokens["owner-read"], "query_dataset", { name: "calvings", measures: [{ aggregate: "sum", field: "weight_kg", label: "kg" }] });
     expect(all.rows).toEqual([{ kg: "97.85" }]);
 
-    await expect(call(tokens["owner-drafts"], "save_ai_dashboard", { name: "Broken", tiles: [{ title: "x", kind: "column", dataset: "calvings", groupBy: ["colour"], measures: [{ aggregate: "count" }] }] })).rejects.toThrow(/Tile 1/);
-    const dashboard = await call(tokens["owner-drafts"], "save_ai_dashboard", {
-      name: "Calving",
-      tiles: [
-        { title: "Calves by month", kind: "column", dataset: "calvings", groupBy: [{ field: "calved_on", grain: "month" }], measures: [{ aggregate: "count", label: "calves" }], width: 2 },
-        { title: "Total weight", kind: "kpi", dataset: "calvings", measures: [{ aggregate: "sum", field: "weight_kg", label: "kg" }] },
-      ],
-    });
+    // AIW7 (decision 1628): the older dashboards can't be made by an AI any more; ones already there can still be read.
+    await expect(call(tokens["owner-drafts"], "save_ai_dashboard", { name: "Calving", tiles: [{ title: "Total weight", kind: "kpi", dataset: "calvings", measures: [{ aggregate: "sum", field: "weight_kg" }] }] })).rejects.toThrow();
+    const older = await asOwner((tx) =>
+      saveAiDashboard(tx, {
+        name: "Calving",
+        tiles: [
+          { title: "Calves by month", kind: "column", dataset: "calvings", groupBy: [{ field: "calved_on", grain: "month" }], measures: [{ aggregate: "count", label: "calves" }], width: 2 },
+          { title: "Total weight", kind: "kpi", dataset: "calvings", measures: [{ aggregate: "sum", field: "weight_kg", label: "kg" }] },
+        ],
+      }),
+    );
+    const dashboard = await call(tokens["owner-read"], "get_ai_dashboard", { dashboardId: older.id });
     expect((dashboard.results as Json[]).map((result) => result.rows)).toEqual([
       [
         { calved_on: "2025-08", calves: "2" },

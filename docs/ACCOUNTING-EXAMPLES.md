@@ -19374,9 +19374,11 @@ shown only to someone with payroll access. Nothing here posts to the books.
 - **AIW6** Queries total by up to three columns (dates by day, month or
   year), with filters. Sums are exact: calves of 32.5, 35.25 and 30.1 kg
   total **97.85**, not a floating-point near miss.
-- **AIW7** Dashboards have up to 12 tiles (column, bar, line, area, pie,
-  donut, number, table) over the AI's tables. Every tile is run when the
-  dashboard is saved, so a broken tile is refused.
+- **AIW7** The AI's reports are Analytics reports (decisions 1626-1628):
+  its tables are in Analytics as `tohyee_ai_<name>` and it builds over them
+  with create_analytics_dashboard. The older dashboards (up to 12 tiles over
+  the AI's tables) can still be read and moved to Analytics, but an AI can
+  no longer make or change one: save_ai_dashboard is gone.
 - **AIW8** Livestock movements the AI finds are suggestions, with the
   evidence. Nothing is recorded until a person accepts one; accepting
   records it like any movement, with the same checks, and it counts in the
