@@ -15115,3 +15115,18 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       screen actions now point at a tool (two were the notebook's, which
       already had tools); 197 farm actions still say "next". Claude's
       details, not yet reviewed.
+1638. **Three more farm read tools for the AI** (#702, first part).
+      farm_home gives the farm Home's cards in one answer (this week's
+      calendar, livestock on hand, pasture cover and growth, the fertiliser
+      plan, performance, the notebook, the season's cash and what needs
+      catching up); farm_calendar gives the calendar of the person the
+      connection acts as between two dates; farm_product_stock gives what's
+      on hand of each product in the chemical register. With
+      list_farm_tasks and list_rain_gauges (decision 1637) an AI at "Look
+      only" can answer "what's on this week?" and "what's due?". Calendar
+      items are often read from email, so farm_home and farm_calendar carry
+      the outside-text note (decision 1634). Not built: read tools for
+      effluent, health and safety, rotation plans, co-op shares, farm year
+      figures, livestock elections and tractor records; fertiliser and feed
+      on hand, which Tohyee doesn't count as stock; and the coverage test
+      for reads. Claude's details, not yet reviewed.

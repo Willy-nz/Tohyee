@@ -5,7 +5,7 @@ import { type AiAccessLevel, levelAllows } from "@/lib/ai/access-levels";
 import { ANALYTICS_READ_TOOLS, ANALYTICS_WRITE_TOOLS } from "@/lib/ai/analytics-tools";
 import { BANK_PROPOSAL_READ_TOOLS, BANK_PROPOSAL_WRITE_TOOLS } from "@/lib/ai/bank-proposal-tools";
 import { BANK_READ_TOOLS, BANK_WRITE_TOOLS } from "@/lib/ai/bank-tools";
-import { FARM_RECORD_READ_TOOLS, FARM_RECORD_WRITE_TOOLS } from "@/lib/ai/farm-record-tools";
+import { FARM_OVERVIEW_TOOLS, FARM_RECORD_READ_TOOLS, FARM_RECORD_WRITE_TOOLS } from "@/lib/ai/farm-record-tools";
 import { FARM_READ_TOOLS, FARM_WRITE_TOOLS } from "@/lib/ai/farm-tools";
 import { FULL_READ_TOOLS, FULL_WRITE_TOOLS } from "@/lib/ai/full-tools";
 import { MIXED_USE_READ_TOOLS, MIXED_USE_WRITE_TOOLS } from "@/lib/ai/mixed-use-tools";
@@ -26,6 +26,7 @@ export const AI_TOOLS: readonly AiTool[] = [
   ...BANK_PROPOSAL_READ_TOOLS,
   ...FARM_READ_TOOLS,
   ...FARM_RECORD_READ_TOOLS,
+  ...FARM_OVERVIEW_TOOLS,
   ...PHOTO_READ_TOOLS,
   ...FULL_READ_TOOLS,
   ...TAX_READ_TOOLS,

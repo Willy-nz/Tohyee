@@ -90,6 +90,9 @@ export const FARMING_TOOLS: readonly string[] = [
   // Field work recorded through the AI (#701).
   "list_farm_tasks",
   "list_rain_gauges",
+  "farm_home",
+  "farm_calendar",
+  "farm_product_stock",
   "record_pasture_reading",
   "record_grazing",
   "record_supplements_fed",

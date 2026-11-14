@@ -10,6 +10,9 @@ import { addGrazing, addReading, addSupplement } from "@/lib/farming/pasture";
 import { PASTURE_METHODS, SUPPLEMENT_UNITS } from "@/lib/farming/pasture-rules";
 import { addRainReading, listGauges } from "@/lib/farming/rainfall";
 import { addTask, listTasks, markTaskDone } from "@/lib/farming/tasks";
+import { farmCalendar } from "@/lib/farming/calendar";
+import { farmHome } from "@/lib/farming/home";
+import { productStock } from "@/lib/farming/treatments";
 
 /*
  * AI tools that record day-to-day field work (#701 step 1, decision 1637):
@@ -67,6 +70,38 @@ export const FARM_RECORD_READ_TOOLS: AiTool[] = [
     level: "read",
     inputSchema: schema({ farmId: FARM_ID, ...PAGE }),
     run: async (tx, args) => paged("gauges", await listGauges(tx, await farmFor(tx, args.farmId)), args),
+  },
+];
+
+/** What's on (#702): the farm Home's cards, the calendar and the chemical register's stock. */
+export const FARM_OVERVIEW_TOOLS: AiTool[] = [
+  {
+    name: "farm_home",
+    title: "What's happening on the farm",
+    description:
+      "The farm Home's cards in one answer: this week on the calendar, livestock on hand by class, pasture cover and growth for each farm, the fertiliser plan's progress, farm performance, the latest notebook entries, the season's cash, and what needs catching up (such as a farm walk that's out of date). A card is null when there's nothing to show. Tasks aren't here: use list_farm_tasks.",
+    level: "read",
+    inputSchema: schema({}),
+    run: (tx) => farmHome(tx),
+  },
+  {
+    name: "farm_calendar",
+    title: "Farm calendar",
+    description: "The calendar of the person this connection acts as (and what others shared with them) between two dates, at most a year: each item's day, time, title, farm and where it came from. Many items were read from emails.",
+    level: "read",
+    inputSchema: schema({ from: DATE, to: DATE, farmId: { type: "string", description: "One farm's items only." } }, ["from", "to"]),
+    run: async (tx, args) => {
+      const calendar = await farmCalendar(tx, { from: args.from, to: args.to, ...(args.farmId ? { farmId: args.farmId } : {}) });
+      return { items: calendar.items, needsChecking: calendar.needsChecking };
+    },
+  },
+  {
+    name: "farm_product_stock",
+    title: "Animal health and spray products on hand",
+    description: "What's on hand of each product in the chemical register (animal health products, sprays and the like), as Treatments › Stock shows: the last count, plus what came in, less what treatments and spray jobs used or was thrown out, with the history. Uses in a unit that can't be added (doses against litres) are listed, not taken off. Fertiliser and feed aren't counted here.",
+    level: "read",
+    inputSchema: schema({ farmId: FARM_ID }),
+    run: async (tx, args) => ({ products: await productStock(tx, { farmId: await farmFor(tx, args.farmId) }) }),
   },
 ];
 
