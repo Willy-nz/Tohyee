@@ -15004,3 +15004,15 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       migration 0027. Not built: other groups (Banking, Bills and
       invoices, Settings) and shorter per-level instructions. Claude's
       details, not yet reviewed.
+
+### Fixed assets net on the balance sheet (13 Nov 2026; decision 1632)
+
+1632. **No accumulated depreciation line.** Jess: "in the balance sheet we
+      shouldn't see depn. It should just be net." The balance sheet (one
+      column, compared, split by tracking, the annual statements and the
+      accountant pack) adds each fixed asset type's accumulated depreciation
+      account into its asset account's line, so fixed assets show at book
+      value (P5). Cost and depreciation are in the fixed asset register and
+      the depreciation schedule. The trial balance, ledger and account
+      transactions keep both accounts.
+

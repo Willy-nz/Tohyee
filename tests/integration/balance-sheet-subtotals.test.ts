@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import type { SessionUser } from "@/lib/auth/sessions";
 import type { OrgTx } from "@/lib/db/org-transaction";
+import { createFixedAssetType } from "@/lib/fixed-assets/service";
 import { postJournal } from "@/lib/ledger/journals";
 import { balanceSheet } from "@/lib/reports/financial";
 import { createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, key, startTestServer, type TestServer } from "../helpers/test-server";
@@ -54,5 +55,36 @@ describeWithDatabase("balance sheet current and non-current subtotals", () => {
     expect(bs.balanced).toBe(true);
     // The flat list is still there, current first, for anything that reads it.
     expect(bs.assets.sections.map((section) => section.key)).toEqual(["bank", "fixed_asset"]);
+  });
+
+  it("P5: a 2,000 computer less 400 accumulated depreciation shows as one line of 1,600", async () => {
+    await createTestOrganisation(owner, "bs-net-co");
+    const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation("bs-net-co", { userId: owner.id, email: owner.email }, work);
+    const journal = (postingDate: string, debit: string, credit: string, amount: string) =>
+      as((tx) =>
+        postJournal(tx, {
+          idempotencyKey: key("journal"),
+          postingDate,
+          reference: "P5",
+          lines: [
+            { accountCode: debit, debitAmount: amount, creditAmount: "0" },
+            { accountCode: credit, debitAmount: "0", creditAmount: amount },
+          ],
+        }),
+      );
+    await as((tx) =>
+      createFixedAssetType(tx, { idempotencyKey: key("type"), name: "Computers", assetAccountCode: "1620", accumulatedDepreciationAccountCode: "1630", depreciationExpenseAccountCode: "6300", method: "sl", rate: "20" }),
+    );
+    await journal("2026-05-01", "1000", "3000", "5000.00");
+    await journal("2026-05-05", "1620", "1000", "2000.00");
+    await journal("2026-05-31", "6300", "1630", "400.00");
+
+    const bs = await as((tx) => balanceSheet(tx, { asAt: "2026-05-31" }));
+    const fixed = bs.assets.nonCurrent.sections.find((section) => section.key === "fixed_asset");
+    expect(fixed?.lines.map((line) => [line.code, line.amount])).toEqual([["1620", "1600.00"]]);
+    expect(bs.assets.nonCurrent.total).toBe("1600.00");
+    expect(bs.assets.total).toBe("4600.00");
+    expect(bs.equity.total).toBe("4600.00");
+    expect(bs.balanced).toBe(true);
   });
 });

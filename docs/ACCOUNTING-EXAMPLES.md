@@ -4398,6 +4398,18 @@ period close", YE1-YE4).
   liabilities **1,700.00**; net assets **4,800.00**, equal to total equity
   (5,000.00 introduced less the 200.00 loss). Only the layout changes: the
   totals are the same as before.
+- **P5** Fixed assets at book value (Jess, 13 Nov 2026, decision 1632). A
+  fixed asset type's accumulated depreciation account is added into its asset
+  account's line on the balance sheet, so there's no accumulated depreciation
+  line. Owner puts 5,000.00 into the bank (3000) and buys a computer for
+  2,000.00 (1620; the Computers type's accumulated depreciation account is
+  1630), and 400.00 of depreciation is posted (6300 / 1630). At the end of the
+  month the fixed assets section has one line, 1620 **1,600.00**; total assets
+  **4,600.00**, equal to total equity (5,000.00 less the 400.00 loss). An
+  accumulated depreciation account whose asset account has nothing posted keeps
+  its own line. Cost and depreciation are in the fixed asset register and the
+  annual statements' depreciation schedule. The trial balance and ledger keep
+  both accounts.
 
 ### Statement of changes in equity and statement of cash flows
 
