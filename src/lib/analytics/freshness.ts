@@ -23,6 +23,12 @@ export type SourceFreshness = {
   refreshedAt: string | null;
   /** The latest attempt failed after the last good load: the data is the last good copy. */
   failedAt: string | null;
+  /**
+   * Why that attempt failed, as Load history has it (#694), cut to a line or
+   * two. Only for people who work in Tohyee: a report viewer (a client) is
+   * told that it failed, not the server's own words for why.
+   */
+  failedReason?: string | null;
   running: boolean;
   /** The latest date in the data the tiles go by (their date fields), when they have one. */
   dataThrough: string | null;
@@ -46,7 +52,17 @@ export function loadKeyOf(table: string): { tableName: string; sourceless: boole
   return { tableName: table, sourceless: false };
 }
 
-type RunFacts = { status: "running" | "ok" | "failed"; source_name: string; started_at: Date; finished_at: Date | null };
+type RunFacts = { status: "running" | "ok" | "failed"; source_name: string; started_at: Date; finished_at: Date | null; error: string | null };
+
+/** The most of a failure's reason shown on a report. */
+export const MAX_FAILED_REASON = 300;
+
+/** A failed load's reason as one short piece of text; null when none was recorded. */
+export function failedReasonText(error: string | null | undefined): string | null {
+  const text = (error ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  return text.length > MAX_FAILED_REASON ? `${text.slice(0, MAX_FAILED_REASON - 1).trimEnd()}…` : text;
+}
 
 /** Two loads further apart than this make a report's sources "refreshed at different times". */
 const MIXED_MS = 60 * 60 * 1000;
@@ -63,7 +79,7 @@ export async function reportLoadFacts(tx: OrgTx, dashboard: Dashboard): Promise<
   for (const [key, keyTables] of byKey) {
     const sourceless = loadKeyOf(keyTables[0]).sourceless;
     const runs = await tx.query<RunFacts>(
-      `select status, source_name, started_at, finished_at from analytics_load_runs
+      `select status, source_name, started_at, finished_at, error from analytics_load_runs
         where table_name = $1 ${sourceless ? "and source_id is null and shaped_table_id is null" : ""}
         order by started_at desc, analytics_load_runs.id desc limit 50`,
       [key],
@@ -77,6 +93,7 @@ export async function reportLoadFacts(tx: OrgTx, dashboard: Dashboard): Promise<
       tables: keyTables,
       refreshedAt: good?.finished_at ? new Date(good.finished_at).toISOString() : null,
       failedAt: latest?.status === "failed" && latest !== good ? new Date(latest.finished_at ?? latest.started_at).toISOString() : null,
+      failedReason: latest?.status === "failed" && latest !== good ? failedReasonText(latest.error) : null,
       running: latest?.status === "running",
     });
   }
@@ -112,6 +129,7 @@ export function combineFreshness(facts: Array<Omit<SourceFreshness, "dataThrough
   const sources = facts.map((fact) => {
     const dates = fact.tables.map((table) => through.get(table) ?? null).filter((value): value is string => value !== null);
     const source: SourceFreshness = { name: fact.name, tables: fact.tables, refreshedAt: fact.refreshedAt, failedAt: fact.failedAt, running: fact.running, dataThrough: dates.length ? dates.sort().at(-1)! : null };
+    if (fact.failedReason) source.failedReason = fact.failedReason;
     const from = fact.tables.map((table) => changing.get(table) ?? null).filter((value): value is string => value !== null).sort()[0];
     if (from) source.mayChangeFrom = from;
     return source;

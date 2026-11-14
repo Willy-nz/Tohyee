@@ -5,6 +5,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import * as foldersRoute from "@/app/api/admin/analytics-folders/route";
 import * as dashboardRoute from "@/app/api/analytics/dashboards/[dashboardId]/route";
 import * as freshnessRoute from "@/app/api/analytics/dashboards/[dashboardId]/freshness/route";
+import * as sharesRoute from "@/app/api/analytics/dashboards/[dashboardId]/shares/route";
 import * as dashboardsRoute from "@/app/api/analytics/dashboards/route";
 import * as queryRoute from "@/app/api/analytics/query/route";
 import * as measureRoute from "@/app/api/analytics/measures/[measureId]/route";
@@ -19,11 +20,13 @@ import { closeAnalytics } from "@/lib/analytics/engine";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { coreQuery } from "@/lib/db/transactions";
 import { todayIsoDate } from "@/lib/dates";
+import { listTopBarNotices } from "@/lib/notices/top-bar";
 import {
   apiRequest,
   createTestOrganisation,
   createTestUser,
   describeWithDatabase,
+  inOrganisation,
   params,
   sessionCookieFor,
   startTestServer,
@@ -579,9 +582,27 @@ describeWithDatabase("analytics dashboards", () => {
     expect(stale.refreshedAt).toBe(source.refreshedAt);
     expect(Date.parse(stale.failedAt)).toBeGreaterThanOrEqual(Date.parse(source.refreshedAt));
     expect(stale.dataThrough).toBe("2026-04-01");
+    // #694: people in the books are told why; a client the report is shared with is not.
+    expect(typeof stale.failedReason).toBe("string");
+    expect(stale.failedReason.length).toBeGreaterThan(0);
+    const client = await createTestUser("freshness-client@example.com");
+    await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'report_viewer')", [ORG, client.id]);
+    await sharesRoute.PUT(apiRequest(`/api/analytics/dashboards/${dashboardId}/shares`, { method: "PUT", cookie: ownerCookie, body: { organisationId: ORG, userIds: [client.id] } }), params({ dashboardId }));
+    const clientCookie = await sessionCookieFor(client);
+    const forClient = await body(await freshnessRoute.GET(apiRequest(`/api/analytics/dashboards/${dashboardId}/freshness?organisationId=${ORG}`, { cookie: clientCookie }), params({ dashboardId })));
+    expect(forClient.status).toBe(200);
+    expect(Date.parse(forClient.data.sources[0].failedAt)).not.toBeNaN();
+    expect(forClient.data.sources[0].failedReason ?? null).toBeNull();
+    // One failure is on the report only; two in a row tells owners and admins in the top bar.
+    const notices = (role: "owner" | "viewer") => inOrganisation(ORG, { userId: owner.id, email: owner.email }, (tx) => listTopBarNotices(tx, role));
+    expect((await notices("owner")).map((notice) => notice.id)).not.toContain("analytics-refresh-failing");
+    await loadRoute.POST(apiRequest(`/api/analytics/sources/${id}/load`, { method: "POST", cookie: ownerCookie, body: { organisationId: ORG } }), params({ sourceId: id }));
+    expect(await notices("owner")).toContainEqual({ id: "analytics-refresh-failing", message: "1 Analytics data source has failed to refresh twice in a row.", href: "/analytics/sources" });
+    expect((await notices("viewer")).map((notice) => notice.id)).not.toContain("analytics-refresh-failing");
     fs.writeFileSync(file, good);
     await loadRoute.POST(apiRequest(`/api/analytics/sources/${id}/load`, { method: "POST", cookie: ownerCookie, body: { organisationId: ORG } }), params({ sourceId: id }));
     expect((await freshness()).data.sources[0].failedAt).toBeNull();
+    expect((await notices("owner")).map((notice) => notice.id)).not.toContain("analytics-refresh-failing");
   });
 
   it("deletes a dashboard without touching the data", async () => {

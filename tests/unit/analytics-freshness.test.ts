@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { combineFreshness, dataThroughSql, loadKeyOf } from "@/lib/analytics/freshness";
+import { combineFreshness, dataThroughSql, failedReasonText, loadKeyOf, MAX_FAILED_REASON } from "@/lib/analytics/freshness";
 import { freshnessText } from "@/components/analytics/report-freshness";
 
 /** Report freshness (#387, decision 698). */
@@ -11,6 +11,23 @@ describe("report freshness", () => {
     expect(loadKeyOf("tohyee_invoices")).toEqual({ tableName: "tohyee_*", sourceless: true });
     expect(loadKeyOf("google_analytics_daily")).toEqual({ tableName: "google_analytics_*", sourceless: true });
     expect(loadKeyOf("sales")).toEqual({ tableName: "sales", sourceless: false });
+  });
+
+  it("says why a refresh failed, in a line, when the reader may be told (#694)", () => {
+    expect(failedReasonText(null)).toBeNull();
+    expect(failedReasonText("  \n ")).toBeNull();
+    expect(failedReasonText("The file\n  sales.csv   has no rows")).toBe("The file sales.csv has no rows");
+    const long = failedReasonText("x".repeat(500))!;
+    expect(long.length).toBe(MAX_FAILED_REASON);
+    expect(long.endsWith("…")).toBe(true);
+    const failed = { name: "Books and CRM", tables: ["tohyee_invoices"], refreshedAt: at("2026-11-12T15:02:00Z"), failedAt: at("2026-11-13T22:15:00Z"), running: false };
+    const withReason = combineFreshness([{ ...failed, failedReason: "The books' database didn't answer in time" }], new Map()).sources[0];
+    expect(withReason.failedReason).toBe("The books' database didn't answer in time");
+    expect(freshnessText(withReason)).toMatch(/the last refresh failed .* It may be out of date\. Why: The books' database didn't answer in time\.$/);
+    // Not told why (a report viewer, or no reason recorded): the line is as it was.
+    const without = combineFreshness([failed], new Map()).sources[0];
+    expect(without).not.toHaveProperty("failedReason");
+    expect(freshnessText(without)).toMatch(/It may be out of date\.$/);
   });
 
   it("gives each source its latest date and says when sources are from different times", () => {
