@@ -27,11 +27,12 @@ export const GET = route(async (request) => {
 });
 
 /**
- * POST { organisationId, name, accessLevel?, confirmFullAccess? }: makes a
+ * POST { organisationId, name, accessLevel?, confirmFullAccess?, endsInDays? }: makes a
  * key (accessLevel read, draft, post or full; read when left out). The key is
  * in this answer only. read, draft and post can be chosen by anyone and are
  * capped by the person's role whenever it's used; full needs the Owner role
- * and confirmFullAccess true (decision 488).
+ * and confirmFullAccess true (decision 488). endsInDays is 30, 90, 365 or
+ * null for no end date; left out, 90 for a key that can post (#695).
  */
 export const POST = route(async (request) => {
   const auth = await requireAuth(request);
@@ -43,6 +44,7 @@ export const POST = route(async (request) => {
     accessLevel: body.accessLevel,
     role: membership.role,
     confirmFullAccess: body.confirmFullAccess,
+    endsInDays: body.endsInDays,
   });
   return json(result, { status: 201 });
 });

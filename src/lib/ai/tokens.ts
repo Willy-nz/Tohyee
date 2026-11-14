@@ -6,13 +6,20 @@ import { ConflictError, ForbiddenError, NotFoundError } from "@/lib/errors";
 import { getMembership, type Membership } from "@/lib/organisations/registry";
 import { readServerSetting } from "@/lib/server-settings";
 import { requireId, requireString } from "@/lib/validation";
-import { type AiAccessLevel, effectiveAccessLevel, isAiAccessLevel } from "@/lib/ai/access-levels";
+import { AI_KEY_END_CHOICES, type AiAccessLevel, defaultKeyEndDays, effectiveAccessLevel, isAiAccessLevel } from "@/lib/ai/access-levels";
 import { aiTokenDisplayPrefix, AI_TOKEN_PREFIX, hashAiToken, newAiToken } from "@/lib/ai/token-format";
 import { ValidationError } from "@/lib/errors";
 import { redirectHost } from "@/lib/ai/oauth/format";
 
 /** At most this many keys that aren't revoked, per person per organisation (decision 341). */
 export const MAX_ACTIVE_AI_TOKENS = 10;
+/** A key that hasn't been used for this long stops working (#695, decision 1629), as a connection does after 60. */
+export const AI_KEY_UNUSED_DAYS = 90;
+/** People are told this many days before a key stops. */
+export const AI_KEY_WARNING_DAYS = 7;
+/** A key (on `ai_access_tokens t`) that still works by its dates: not past its end date, and used (or made) in the last 90 days. */
+const KEY_LIVE = `(t.expires_at is null or t.expires_at > now()) and coalesce(t.last_used_at, t.created_at) > now() - interval '${AI_KEY_UNUSED_DAYS} days'`;
+
 /** last_used_at is written at most this often per key. */
 const LAST_USED_EVERY_MS = 60_000;
 
@@ -31,8 +38,14 @@ export type AiAccessToken = {
   startsWith: string | null;
   /** For a connection: where it sends people back to after signing in (e.g. "claude.ai"). */
   appHost: string | null;
-  /** For a connection: it hasn't been used for 60 days, so it can't get new tokens (it has to sign in again). */
+  /** It has stopped by itself: a connection not used for 60 days (it has to sign in again), or a key past its end date or not used for 90 days. */
   expired: boolean;
+  /** For a key: when it ends, if it has an end date. */
+  endsAt: string | null;
+  /** For a key that will stop, or has: the moment, whichever of its end date and 90 days without use comes first. */
+  stopsAt: string | null;
+  /** Why a key stopped, or will: its end date, or not being used. */
+  stopReason: "end_date" | "unused" | null;
   /** What it may do (decision 346), before the owner's role caps it. */
   accessLevel: AiAccessLevel;
   createdAt: string;
@@ -47,6 +60,8 @@ type TokenRow = {
   token_prefix: string | null;
   redirect_uri: string | null;
   expired: boolean;
+  expires_at: string | null;
+  unused_at: string | null;
   access_level: AiAccessLevel;
   created_at: string;
   last_used_at: string | null;
@@ -54,10 +69,21 @@ type TokenRow = {
 };
 
 /** A connection has expired when it has no access token left and no unused refresh token that hasn't run out. */
-const TOKEN_COLUMNS = `ai_access_tokens.id::text, kind, name, token_prefix, redirect_uri, access_level, created_at, last_used_at, revoked_at,
-  (kind = 'connection' and not exists (
+const TOKEN_COLUMNS = `ai_access_tokens.id::text, kind, name, token_prefix, redirect_uri, access_level, created_at, last_used_at, revoked_at, expires_at,
+  case when kind = 'key' then coalesce(last_used_at, created_at) + interval '${AI_KEY_UNUSED_DAYS} days' end as unused_at,
+  ((kind = 'connection' and not exists (
      select 1 from oauth_tokens o where o.connection_id = ai_access_tokens.id and o.expires_at > now() and (o.kind = 'access' or o.used_at is null)
-   )) as expired`;
+   )) or (kind = 'key' and (coalesce(expires_at <= now(), false) or coalesce(last_used_at, created_at) <= now() - interval '${AI_KEY_UNUSED_DAYS} days'))) as expired`;
+
+const iso = (value: string | Date | null): string | null => (value === null ? null : new Date(value).toISOString());
+
+/** When a key stops and why: the earlier of its end date and 90 days after it was last used. */
+function stopOf(row: TokenRow): Pick<AiAccessToken, "stopsAt" | "stopReason"> {
+  if (row.kind !== "key" || !row.unused_at) return { stopsAt: null, stopReason: null };
+  const unused = new Date(row.unused_at).getTime();
+  const end = row.expires_at ? new Date(row.expires_at).getTime() : null;
+  return end !== null && end <= unused ? { stopsAt: new Date(end).toISOString(), stopReason: "end_date" } : { stopsAt: new Date(unused).toISOString(), stopReason: "unused" };
+}
 
 function toToken(row: TokenRow): AiAccessToken {
   return {
@@ -66,7 +92,9 @@ function toToken(row: TokenRow): AiAccessToken {
     name: row.name,
     startsWith: row.token_prefix ? `${AI_TOKEN_PREFIX}${row.token_prefix}` : null,
     appHost: row.redirect_uri ? redirectHost(row.redirect_uri) : null,
-    expired: row.kind === "connection" && row.expired,
+    expired: row.expired,
+    endsAt: iso(row.expires_at),
+    ...stopOf(row),
     accessLevel: row.access_level,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
@@ -92,7 +120,7 @@ export async function listAiTokens(auth: AuthContext, organisationId: string): P
 export async function createAiToken(
   auth: AuthContext,
   organisationId: string,
-  input: { name: unknown; accessLevel?: unknown; role: Role; confirmFullAccess?: unknown },
+  input: { name: unknown; accessLevel?: unknown; role: Role; confirmFullAccess?: unknown; endsInDays?: unknown },
 ): Promise<{ token: string; key: AiAccessToken }> {
   const name = requireString(input.name, "Name", { maxLength: 100 });
   const accessLevel = input.accessLevel == null || input.accessLevel === "" ? "read" : input.accessLevel;
@@ -106,13 +134,17 @@ export async function createAiToken(
       throw new ValidationError("Read the warning about Full access keys and tick the box to confirm before making one.");
     }
   }
+  // An end date (#695): 30, 90 or 365 days, or null for none; left out, 90 days for a key that can post.
+  const endsInDays = input.endsInDays === undefined || input.endsInDays === "" ? defaultKeyEndDays(accessLevel) : input.endsInDays;
+  if (!(AI_KEY_END_CHOICES as readonly unknown[]).includes(endsInDays)) throw new ValidationError("endsInDays must be 30, 90, 365 or null for no end date.");
   const token = newAiToken();
   const key = await withCoreTransaction(async (client) => {
     // Serialise per person and organisation so the limit holds.
     await client.query("select pg_advisory_xact_lock(hashtext($1))", [`ai-tokens:${organisationId}:${auth.user.id}`]);
     const active = await client.query<{ count: string }>(
       `select count(*)::text as count from ai_access_tokens
-        where organisation_id = $1 and user_id = $2 and revoked_at is null and kind = 'key'`,
+        where organisation_id = $1 and user_id = $2 and revoked_at is null and kind = 'key'
+          and (expires_at is null or expires_at > now()) and coalesce(last_used_at, created_at) > now() - interval '${AI_KEY_UNUSED_DAYS} days'`,
       [organisationId, auth.user.id],
     );
     if (Number(active.rows[0].count) >= MAX_ACTIVE_AI_TOKENS) {
@@ -121,17 +153,17 @@ export async function createAiToken(
       );
     }
     const inserted = await client.query<TokenRow>(
-      `insert into ai_access_tokens (user_id, organisation_id, name, token_hash, token_prefix, created_by_email, access_level)
-       values ($1, $2, $3, $4, $5, $6, $7)
+      `insert into ai_access_tokens (user_id, organisation_id, name, token_hash, token_prefix, created_by_email, access_level, expires_at)
+       values ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(days => $8::int))
        returning ${TOKEN_COLUMNS}`,
-      [auth.user.id, organisationId, name, hashAiToken(token), aiTokenDisplayPrefix(token), auth.user.email, accessLevel],
+      [auth.user.id, organisationId, name, hashAiToken(token), aiTokenDisplayPrefix(token), auth.user.email, accessLevel, endsInDays],
     );
     const row = inserted.rows[0];
     await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, {
       eventType: "ai_access_token.created",
       entityType: "organisation",
       entityId: organisationId,
-      details: { tokenId: row.id, name, accessLevel, startsWith: `${AI_TOKEN_PREFIX}${row.token_prefix}` },
+      details: { tokenId: row.id, name, accessLevel, endsInDays, startsWith: `${AI_TOKEN_PREFIX}${row.token_prefix}` },
     });
     return toToken(row);
   });
@@ -189,14 +221,15 @@ export function aiKeyVia(identity: Pick<AiTokenIdentity, "tokenName"> & { kind?:
 }
 
 /**
- * Looks a key up (by its hash). It works only while it isn't revoked, its
+ * Looks a key up (by its hash). It works only while it isn't revoked, isn't
+ * past its end date and has been used in the last 90 days (#695), its
  * owner's login is active, and they're still a member of the organisation
  * (viewer or higher, with their current role). Anything else is null, and
  * callers answer every refusal the same way. The organisation being ready is
  * checked when its transaction opens.
  */
 export async function authenticateAiToken(token: string): Promise<AiTokenIdentity | null> {
-  return grantIdentity("t.token_hash = $1 and t.kind = 'key'", [hashAiToken(token)]);
+  return grantIdentity(`t.token_hash = $1 and t.kind = 'key' and ${KEY_LIVE}`, [hashAiToken(token)]);
 }
 
 /** The row a key or a connection's token leads to, and the person it acts as. */
@@ -276,4 +309,24 @@ export async function revokeUserAiKeys(client: DbClient, userId: string): Promis
   // Connections are rows above, so they end too; a code handed out but not yet swapped for tokens stops as well (decision 820).
   await client.query("update oauth_authorization_codes set used_at = now() where user_id = $1 and used_at is null", [userId]);
   return (revoked.rowCount ?? 0) + (apps.rowCount ?? 0);
+}
+
+/**
+ * The signed-in person's keys for this organisation that stop within a week
+ * (#695): by their end date, or because they haven't been used. For the top
+ * bar, so nobody's AI stops without warning.
+ */
+export async function aiKeysStoppingSoon(organisationId: string, userId: string): Promise<Array<{ name: string; stopsAt: string; reason: "end_date" | "unused" }>> {
+  const found = await coreQuery<TokenRow>(
+    `select ${TOKEN_COLUMNS} from ai_access_tokens
+      where organisation_id = $1 and user_id = $2 and kind = 'key' and revoked_at is null
+        and least(coalesce(expires_at, 'infinity'), coalesce(last_used_at, created_at) + interval '${AI_KEY_UNUSED_DAYS} days') > now()
+        and least(coalesce(expires_at, 'infinity'), coalesce(last_used_at, created_at) + interval '${AI_KEY_UNUSED_DAYS} days') <= now() + interval '${AI_KEY_WARNING_DAYS} days'
+      order by ai_access_tokens.id`,
+    [organisationId, userId],
+  );
+  return found.rows.flatMap((row) => {
+    const stop = stopOf(row);
+    return stop.stopsAt && stop.stopReason ? [{ name: row.name, stopsAt: stop.stopsAt, reason: stop.stopReason }] : [];
+  });
 }

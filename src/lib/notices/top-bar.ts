@@ -1,3 +1,5 @@
+import { businessTimeZone } from "@/lib/dates";
+import { aiKeysStoppingSoon } from "@/lib/ai/tokens";
 import { type Role, roleAtLeast } from "@/lib/auth/roles";
 import { waitingHandover } from "@/lib/organisations/handover";
 import { listFailedCollections } from "@/lib/payments/gocardless";
@@ -21,7 +23,24 @@ export async function listTopBarNotices(tx: OrgTx, role: Role | null = null): Pr
     : [];
   // Time-limited access ending within 3 days (decision 1471): admins see everyone's, a member their own.
   const accessNotices = await accessEndingNotices(tx, role);
-  return [...handoverNotice, ...accessNotices, ...(await accountingNotices(tx)), ...(await analyticsNotices(tx, role))];
+  return [...handoverNotice, ...accessNotices, ...(await aiKeyNotices(tx)), ...(await accountingNotices(tx)), ...(await analyticsNotices(tx, role))];
+}
+
+
+/** The person's own AI keys that stop within a week (#695, decision 1629), so an AI doesn't just stop working. */
+async function aiKeyNotices(tx: OrgTx): Promise<TopBarNotice[]> {
+  if (!tx.actor.userId) return [];
+  const keys = await aiKeysStoppingSoon(tx.organisationId, tx.actor.userId);
+  if (keys.length === 0) return [];
+  const KEY_DATE = new Intl.DateTimeFormat("en-NZ", { day: "numeric", month: "short", year: "numeric", timeZone: businessTimeZone() });
+  return keys.map((key, index) => ({
+    id: `ai-key-stopping-${index + 1}`,
+    message:
+      key.reason === "end_date"
+        ? `Your AI key "${key.name}" ends on ${KEY_DATE.format(new Date(key.stopsAt))}. Make a new one if you still use it.`
+        : `Your AI key "${key.name}" hasn't been used for a while and stops on ${KEY_DATE.format(new Date(key.stopsAt))} unless it's used.`,
+    href: "/operations/ai",
+  }));
 }
 
 /**

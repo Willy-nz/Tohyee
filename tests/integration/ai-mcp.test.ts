@@ -7,6 +7,7 @@ import { AI_TOOLS } from "@/lib/ai/catalogue";
 import { reportTableProblems } from "@/lib/ai/report-table";
 import { moduleHidesTool, toolGroupOf, type ToolModules } from "@/lib/ai/tool-modules";
 import { hashAiToken } from "@/lib/ai/token-format";
+import { listTopBarNotices } from "@/lib/notices/top-bar";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { listBankAccounts } from "@/lib/bank/accounts";
 import { importStatementFile } from "@/lib/bank/imports";
@@ -678,6 +679,55 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
       noContext,
     );
     expect(okVersion.status).toBe(200);
+  });
+
+  it("#695: a key can have an end date, stops when unused for 90 days, and its owner is warned a week before", async () => {
+    const make = async (body: Record<string, unknown>) => {
+      const response = await tokensRoute.POST(apiRequest("/api/ai/tokens", { method: "POST", cookie: viewerCookie, body: { organisationId: ORG, ...body } }), noContext);
+      return { status: response.status, body: (await response.json()) as { token: string; key: Json; error?: Json } };
+    };
+    const ping = async (token: string) => (await mcpRoute.POST(mcpRequest({ jsonrpc: "2.0", id: 1, method: "ping" }, { token }), noContext)).status;
+    const days = (iso: unknown) => Math.round((Date.parse(String(iso)) - Date.now()) / 86_400_000);
+    const list = async () => ((await (await tokensRoute.GET(apiRequest(`/api/ai/tokens?organisationId=${ORG}`, { cookie: viewerCookie }), noContext)).json()) as { keys: Json[] }).keys;
+    const notices = () => inOrganisation(ORG, { userId: viewer.id, email: viewer.email }, (tx) => listTopBarNotices(tx, "viewer"));
+    const set = (name: string, sql: string) => coreQuery(`update ai_access_tokens set ${sql} where name = $1 and user_id = $2`, [name, viewer.id]);
+
+    // Left out: no end date for a key that only looks, 90 days for one that can post.
+    const looking = await make({ name: "Looks" });
+    expect(looking.body.key).toMatchObject({ endsAt: null, stopReason: "unused", expired: false });
+    expect(days(looking.body.key.stopsAt)).toBe(90);
+    const posting = await make({ name: "Posts", accessLevel: "post" });
+    expect(days(posting.body.key.endsAt)).toBe(90);
+    expect(posting.body.key.stopReason).toBe("end_date");
+    const month = await make({ name: "A month", endsInDays: 30 });
+    expect(days(month.body.key.endsAt)).toBe(30);
+    expect((await make({ name: "For good", accessLevel: "post", endsInDays: null })).body.key.endsAt).toBeNull();
+    expect((await make({ name: "Odd", endsInDays: 45 })).status).toBe(400);
+    expect(await ping(month.body.token)).toBe(200);
+    expect((await notices()).filter((notice) => notice.id.startsWith("ai-key-stopping"))).toEqual([]);
+
+    // Five days from its end date: its owner is told, and nobody else.
+    await set("A month", "expires_at = now() + interval '5 days'");
+    const warned = (await notices()).filter((notice) => notice.id.startsWith("ai-key-stopping"));
+    expect(warned).toHaveLength(1);
+    expect(warned[0]).toMatchObject({ href: "/operations/ai", message: expect.stringContaining('Your AI key "A month" ends on') });
+    expect((await inOrganisation(ORG, { userId: owner.id, email: owner.email }, (tx) => listTopBarNotices(tx, "owner"))).filter((notice) => notice.id.startsWith("ai-key-stopping"))).toEqual([]);
+
+    // Past its end date it's refused like any unknown key, and shows as ended.
+    await set("A month", "expires_at = now() - interval '1 minute'");
+    expect(await ping(month.body.token)).toBe(401);
+    expect((await list()).find((key) => key.name === "A month")).toMatchObject({ expired: true, stopReason: "end_date" });
+
+    // Not used for 90 days: warned in the last week, then stopped. Using it in time keeps it going.
+    await set("Looks", "created_at = now() - interval '85 days', last_used_at = null");
+    expect((await notices()).some((notice) => notice.message.includes('"Looks" hasn\'t been used for a while'))).toBe(true);
+    expect(await ping(looking.body.token)).toBe(200);
+    expect((await notices()).filter((notice) => notice.id.startsWith("ai-key-stopping"))).toEqual([]);
+    await set("Looks", "last_used_at = now() - interval '91 days'");
+    expect(await ping(looking.body.token)).toBe(401);
+    expect((await list()).find((key) => key.name === "Looks")).toMatchObject({ expired: true, stopReason: "unused" });
+    // A stopped key doesn't count towards the ten.
+    expect((await coreQuery<{ last_used_at: string }>("select last_used_at from ai_access_tokens where name = 'Looks' and user_id = $1", [viewer.id])).rows).toHaveLength(1);
   });
 });
 
