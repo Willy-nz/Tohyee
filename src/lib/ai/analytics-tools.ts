@@ -144,6 +144,7 @@ function tableSource(name: string, sources: Map<string, string>, shaped: Map<str
   if (META_TABLES.some((table) => table.table === name)) return "Meta (Facebook and Instagram)";
   if (name.startsWith("tohyee_farm_")) return "Tohyee farm records";
   if (name.startsWith("tohyee_crm_")) return "Tohyee CRM";
+  if (name.startsWith("tohyee_ai_")) return "A table an AI connection made (save_dataset); copied with the books";
   if (name.startsWith("tohyee_")) return "Tohyee books";
   if (sources.has(name)) return sources.get(name)!;
   if (shaped.has(name)) return shaped.get(name)!;

@@ -14928,3 +14928,21 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       underneath). Reports already made from a template are unchanged. Not
       built: a picture of the report for the AI, and a "Tidy up" panel for
       people. Claude's details, not yet reviewed.
+1626. **Analytics reports are the one place for dashboards; the AI's own
+      tables are copied into Analytics** (#693, first part). Each table an
+      AI connection makes with save_dataset is copied with the books as
+      `tohyee_ai_<name>`, row for row, so a report over it is an Analytics
+      report with themes, dates and History, and refreshes when the books
+      do. Text, dates and Yes/No go over as they are. A number column goes
+      over as DECIMAL(28,6) when every value fits that exactly; a column
+      with a seventh decimal place or more than 22 digits goes over as its
+      exact text instead, so nothing is ever rounded and one odd number
+      can't stop the copy of the books. A table whose name is longer than
+      53 characters is left out (an Analytics table name has 63). They are
+      copied whether or not Accounting is on. Who can read them is
+      unchanged: a viewer or higher already reads the AI's tables, and
+      Analytics tables need the same. The AI is now told to build an
+      Analytics report when asked for a dashboard, and save_ai_dashboard is
+      described as the older kind, kept for ones already made. Not built
+      yet: "Move to Analytics" for an existing AI dashboard, and then
+      taking save_ai_dashboard away. Claude's details, not yet reviewed.
