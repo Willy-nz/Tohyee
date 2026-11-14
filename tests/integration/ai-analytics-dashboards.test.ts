@@ -402,4 +402,43 @@ describeWithDatabase("the AI's Analytics reports", () => {
     expect(dashboard.tiles.some((tile) => tile.id === tileId)).toBe(false);
     expect((await decide("remove")).status).toBe(404);
   });
+  it("#690: the AI sets a report's theme, pages and slicers, and takes a tile off; History can put it back", async () => {
+    const guide = await call(tokens["viewer-read"], "analytics_format_guide");
+    expect((guide.themes as Json[]).map((theme) => theme.id)).toEqual(expect.arrayContaining(["tohyee", "harbour", "contrast"]));
+
+    const made = await call(tokens["owner-drafts"], "create_analytics_dashboard", {
+      name: "Two pages",
+      theme: "harbour",
+      pages: [{ id: "overview", name: "Overview" }, { id: "detail", name: "Detail", background: "tinted" }],
+      slicers: [{ table: "sales", field: "region", label: "Region", style: "dropdown" }],
+      tiles: [SALES_BY_REGION, { ...ORDERS, id: "orders" }, { ...SALES_BY_MONTH, page: "detail" }],
+    });
+    const id = String((made.dashboard as Json).id);
+    let read = await call(tokens["viewer-read"], "get_analytics_dashboard", { dashboardId: id });
+    expect(read).toMatchObject({ theme: "harbour", slicers: [{ table: "sales", field: "region", label: "Region", style: "dropdown" }] });
+    expect((read.dashboard as Json).pages).toEqual([{ id: "overview", name: "Overview" }, { id: "detail", name: "Detail" }]);
+    expect((read.tiles as Json[]).find((tile) => tile.id === "sales-by-month")).toMatchObject({ page: "detail" });
+
+    // Wrong ones are refused, and nothing is saved.
+    await expect(call(tokens["owner-drafts"], "update_analytics_dashboard", { dashboardId: id, theme: "neon" })).rejects.toThrow(/Nothing was saved/);
+    await expect(call(tokens["owner-drafts"], "update_analytics_dashboard", { dashboardId: id, slicers: [{ table: "sales", field: "colour" }] })).rejects.toThrow(/no column colour/);
+    await expect(call(tokens["owner-drafts"], "update_analytics_dashboard", { dashboardId: id, removeTiles: ["nope"] })).rejects.toThrow(/no tile nope/);
+    await expect(call(tokens["owner-drafts"], "update_analytics_dashboard", { dashboardId: id, removeTiles: ["sales-by-region", "orders", "sales-by-month"] })).rejects.toThrow(/leave the report empty/);
+    expect(((await call(tokens["viewer-read"], "get_analytics_dashboard", { dashboardId: id })).dashboard as Json).version).toBe(1);
+
+    // One change: back to Tohyee's look, one page, no slicers, and a tile off.
+    await call(tokens["owner-drafts"], "update_analytics_dashboard", { dashboardId: id, theme: "tohyee", pages: [{ id: "overview", name: "Overview" }], slicers: [], removeTiles: ["orders"] });
+    read = await call(tokens["viewer-read"], "get_analytics_dashboard", { dashboardId: id });
+    expect(read).toMatchObject({ theme: "tohyee", slicers: [] });
+    expect((read.tiles as Json[]).map((tile) => tile.id)).toEqual(["sales-by-region", "sales-by-month"]);
+    // The tile that was on the removed page is on the first page now.
+    expect((read.tiles as Json[]).find((tile) => tile.id === "sales-by-month")).not.toHaveProperty("page");
+
+    // A person puts the version before back: the tile, pages, slicer and theme return.
+    const restored = await historyRoute.POST(apiRequest(`/api/analytics/dashboards/${id}/history`, { method: "POST", cookie: ownerCookie, body: { organisationId: ORG, version: 1 } }), params({ dashboardId: id }));
+    expect(restored.status).toBe(200);
+    read = await call(tokens["viewer-read"], "get_analytics_dashboard", { dashboardId: id });
+    expect(read).toMatchObject({ theme: "harbour" });
+    expect((read.tiles as Json[]).map((tile) => tile.id)).toEqual(["sales-by-region", "orders", "sales-by-month"]);
+  });
 });

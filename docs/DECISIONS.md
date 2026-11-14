@@ -14853,3 +14853,22 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       following the Analytics report's dates, splitting a long report over
       slides at its page breaks, and adding several at once. Claude's
       details, not yet reviewed.
+
+### The AI sets a report's theme, pages and slicers, and takes tiles off (14 Nov 2026; decision 1621)
+
+1621. **Report settings through the AI (#690).** Every AI-built report had
+      the default theme, one page called "Page 1" and no slicers, and a tile
+      the AI replaced stayed on the report. `create_analytics_dashboard` and
+      `update_analytics_dashboard` (Make drafts, bookkeepers and up, as
+      before) now take `theme` (a built-in id or a saved theme as
+      `custom:<id>`; analytics_format_guide lists them), `pages` and
+      `slicers`, each replacing what the report has and checked exactly as
+      the editor's are; a page whose id stays keeps the filters, background
+      picture and drill-through a person set on it, and tiles on a removed
+      page move to the first. `update_analytics_dashboard` also takes
+      `removeTiles`. This changes decision 1412's "people take tiles off":
+      every save is in the report's History (decision 1414), so a person
+      puts a removed tile back from there, the same safety net as for a
+      changed one. Still for people only: deleting a report, sharing, and
+      images (an image's file goes with its tile, so History couldn't bring
+      it back; the AI is refused). Claude's details, not yet reviewed.

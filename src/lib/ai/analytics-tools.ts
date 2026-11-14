@@ -27,7 +27,10 @@ import { TILE_HEIGHTS, TILE_WIDTHS } from "@/lib/analytics/layout";
 import { measureFromSaved } from "@/lib/analytics/measure-library";
 import { META_TABLES } from "@/lib/analytics/meta-reports";
 import { type AnalyticsModel, loadModel } from "@/lib/analytics/model";
-import { reportPages, tilePage } from "@/lib/analytics/pages";
+import { MAX_PAGES, PAGE_WIDTHS, reportPages, tilePage } from "@/lib/analytics/pages";
+import { SLICER_STYLES } from "@/lib/analytics/slicers";
+import { listThemes } from "@/lib/analytics/themes";
+import { BUILT_IN_IDS, BUILT_IN_THEMES, CUSTOM_PREFIX } from "@/lib/charts/report-themes";
 import { parameterValues } from "@/lib/analytics/parameters";
 import type { DashboardFilters, QueryDates, QueryResult } from "@/lib/analytics/query";
 import { QUICK_KINDS } from "@/lib/analytics/quick-calcs";
@@ -618,6 +621,62 @@ const TILE: JsonSchema = {
   properties: { id: { ...TILE_ID, description: "Optional: your own id for the tile, to refer to it later." }, ...TILE_PROPERTIES },
   required: ["title", "visual"],
 };
+/** A report's look and controls the AI can set (#690), each replacing what the report has. */
+const REPORT_THEME: JsonSchema = { type: "string", description: 'A theme from analytics_format_guide: a built-in id (tohyee, harbour, kowhai, bush, bright, contrast) or a saved one as "custom:<id>". "tohyee" is the default look.' };
+const REPORT_SLICERS: JsonSchema = {
+  type: "array",
+  maxItems: 6,
+  description: "The report's slicers (the filters a reader can change), replacing the ones it has. Each filters every tile whose table has the column.",
+  items: {
+    type: "object",
+    properties: {
+      table: FIELD("A table from list_analytics_tables."),
+      field: FIELD("The column readers choose values of."),
+      label: { type: "string", maxLength: 60, description: "Default the column's name." },
+      style: { type: "string", enum: [...SLICER_STYLES], description: "Text: list, dropdown, single or search. Numbers: range. Dates: dates or relative. Default list." },
+      pages: { type: "array", items: { type: "string" }, description: "Only on these pages (page ids); default every page." },
+    },
+    required: ["table", "field"],
+  },
+};
+const REPORT_PAGES: JsonSchema = {
+  type: "array",
+  minItems: 1,
+  maxItems: MAX_PAGES,
+  description: "The report's pages in order, replacing the ones it has (a page left out is removed, and its tiles move to the first page). A page keeps its own filters and background picture when its id stays the same. Put a tile on a page with the tile's page.",
+  items: {
+    type: "object",
+    properties: {
+      id: { type: "string", pattern: "^[a-z0-9-]{1,40}$", description: "Your own short id, e.g. sales. Keep an existing page's id to keep the page." },
+      name: { type: "string", maxLength: 40 },
+      width: { type: "string", enum: [...PAGE_WIDTHS] },
+      background: { type: "string", description: '"tinted", or a colour as #rrggbb.' },
+      hidden: { type: "boolean", description: "Not in the page tabs: reached by a button or drill-through." },
+    },
+    required: ["id", "name"],
+  },
+};
+
+/** The settings a create or update asks for (#690), on top of the report's own; null when nothing is asked. */
+function settingsAsked(current: DashboardSettings | null, args: Record<string, unknown>): Record<string, unknown> | null {
+  const dates = datesInput(args.dates);
+  if (!dates && args.theme === undefined && args.slicers === undefined && args.pages === undefined) return null;
+  const next: Record<string, unknown> = { ...(current ?? { slicers: [] }), ...(dates ?? {}) };
+  if (args.theme !== undefined) next.theme = args.theme === null || args.theme === "tohyee" ? undefined : args.theme;
+  if (args.slicers !== undefined) next.slicers = args.slicers;
+  if (args.pages !== undefined) {
+    if (!Array.isArray(args.pages)) throw new ValidationError("pages is a list of pages. Nothing was saved.");
+    // A page that stays (the same id) keeps what only people set on it: its filters, picture and drill-through.
+    const before = new Map((current?.pages ?? []).map((page) => [page.id, page]));
+    next.pages = args.pages.map((entry) => {
+      const asked = (entry ?? {}) as Record<string, unknown>;
+      const kept = typeof asked.id === "string" ? before.get(asked.id) : undefined;
+      return { ...(kept ? { filters: kept.filters, picture: kept.picture, drillThrough: kept.drillThrough } : {}), ...asked };
+    });
+  }
+  return next;
+}
+
 const REPORT_DATES: JsonSchema = {
   type: "object",
   description: "The report's dates: { preset } (they move with today) or { from, to }. Default all time.",
@@ -756,7 +815,8 @@ export const ANALYTICS_READ_TOOLS: AiTool[] = [
       const rows = boundedLimit(args.rows, 20, 200);
       return {
         dashboard: dashboardSummary(dashboard),
-        slicers: dashboard.settings.slicers.map((slicer) => ({ table: slicer.table, field: slicer.field, label: slicer.label })),
+        theme: dashboard.settings.theme ?? "tohyee",
+        slicers: dashboard.settings.slicers.map((slicer) => ({ table: slicer.table, field: slicer.field, label: slicer.label, ...(slicer.style ? { style: slicer.style } : {}), ...(slicer.pages ? { pages: slicer.pages } : {}) })),
         // When each source was last refreshed, and whether a refresh failed or is running (decision 698).
         freshness: facts.freshness,
         tiles: runs.map((entry) => ({ ...tileOut(entry.tile), ...(entry.result ? { figures: figures(entry.result, rows) } : {}), ...(entry.error ? { error: entry.error } : {}) })),
@@ -769,10 +829,15 @@ export const ANALYTICS_READ_TOOLS: AiTool[] = [
 async function templateFacts(run: OrgRunner) {
   const facts = await run(async (tx) => {
     await requireAnalytics(tx);
-    return { organisationId: tx.organisationId, hidden: await hiddenFarmTables(tx), model: await loadModel(tx), dates: await dateContext(tx) };
+    return { organisationId: tx.organisationId, hidden: await hiddenFarmTables(tx), model: await loadModel(tx), dates: await dateContext(tx), themes: await listThemes(tx) };
   });
   const tables = (await describeTables(facts.organisationId, facts.model)).filter((table) => !facts.hidden?.has(table.name));
-  return { tables, today: facts.dates.today };
+  // The looks a report can take (#690): Tohyee's own, then the organisation's saved ones.
+  const themes = [
+    ...BUILT_IN_IDS.map((id) => ({ id: id as string, name: BUILT_IN_THEMES[id].name, kind: "built in" })),
+    ...facts.themes.map((saved) => ({ id: `${CUSTOM_PREFIX}${saved.id}`, name: saved.theme.name, kind: "saved by this organisation" })),
+  ];
+  return { tables, today: facts.dates.today, themes };
 }
 
 ANALYTICS_READ_TOOLS.push(
@@ -785,9 +850,12 @@ ANALYTICS_READ_TOOLS.push(
     inputSchema: schema({}),
     async runSteps(run, _args, context) {
       requireTablesAllowed(context);
-      const { tables, today } = await templateFacts(run);
+      const { tables, today, themes } = await templateFacts(run);
       return {
         layout: LAYOUT_ADVICE,
+        themes,
+        themesNote: "Set a report's theme with theme on create_analytics_dashboard or update_analytics_dashboard. One theme a report: it colours every chart on it.",
+        reportControls: "pages (tabs, or slides when presented) and slicers (filters a reader changes) are set on create and update too. Two or three short pages read better than one long one; add a slicer for the one or two things a reader will want to narrow by.",
         format: FORMAT_SCHEMA.properties,
         examples: FORMAT_EXAMPLES,
         widths: [...TILE_WIDTHS],
@@ -845,14 +913,16 @@ export const ANALYTICS_WRITE_TOOLS: AiTool[] = [
         name: { type: "string", maxLength: 100 },
         description: { type: "string", maxLength: 500 },
         dates: REPORT_DATES,
+        theme: REPORT_THEME,
+        pages: REPORT_PAGES,
+        slicers: REPORT_SLICERS,
         tiles: { type: "array", minItems: 1, maxItems: 40, items: TILE },
       },
       ["name", "tiles"],
     ),
     async runSteps(run, args, context) {
       requireEditor(context);
-      const dates = datesInput(args.dates) ?? { preset: null, from: null, to: null };
-      const settings = { ...dates, slicers: [] };
+      const settings = settingsAsked(null, args) ?? { preset: null, from: null, to: null, slicers: [] };
       const tiles = Array.isArray(args.tiles) ? args.tiles : [];
       if (tiles.length === 0) throw new ValidationError("Give the report at least one tile.");
       const checked = await checkAndRun(run, { settings, tiles }, () => true);
@@ -895,7 +965,7 @@ export const ANALYTICS_WRITE_TOOLS: AiTool[] = [
     name: "update_analytics_dashboard",
     title: "Change an Analytics report",
     description:
-      "Changes a report: its name, description or dates; adds tiles (at a position); changes tiles by id (only the fields you send; query replaces the whole question); and puts tiles in a new order. Tiles you add or change are run first: if one doesn't work, nothing is saved. Read it with get_analytics_dashboard first and pass its version as expectedVersion, so you don't save over someone else's change. People take tiles off, and change sharing, images, slicers and pages, in Tohyee.",
+      "Changes a report: its name, description or dates; adds tiles (at a position); changes tiles by id (only the fields you send; query replaces the whole question); puts tiles in a new order; takes tiles off (removeTiles); and sets its theme, pages and slicers. Tiles you add or change are run first: if one doesn't work, nothing is saved. Read it with get_analytics_dashboard first and pass its version as expectedVersion, so you don't save over someone else's change. People delete reports and change sharing and images in Tohyee.",
     level: "draft",
     inputSchema: schema(
       {
@@ -915,6 +985,10 @@ export const ANALYTICS_WRITE_TOOLS: AiTool[] = [
           items: { type: "object", properties: { tileId: TILE_ID, ...TILE_PROPERTIES }, required: ["tileId"], description: "The fields to change on one tile; null clears format, dates or height." },
         },
         order: { type: "array", maxItems: 40, items: TILE_ID, description: "Tile ids in the order you want; tiles you leave out follow them in their current order." },
+        removeTiles: { type: "array", maxItems: 40, items: TILE_ID, description: "Tiles to take off the report. A person can put them back from the report's History." },
+        theme: REPORT_THEME,
+        pages: REPORT_PAGES,
+        slicers: REPORT_SLICERS,
       },
       ["dashboardId"],
     ),
@@ -930,6 +1004,19 @@ export const ANALYTICS_WRITE_TOOLS: AiTool[] = [
       const ids = new Set(current.tiles.map((tile) => tile.id));
       let tiles: Array<Record<string, unknown>> = current.tiles.map((tile) => ({ ...tile }));
       const touched = new Set<string>();
+      // Taking tiles off (#690): the report's History keeps them, so a person can put them back.
+      const removing = Array.isArray(args.removeTiles) ? args.removeTiles.map(String) : [];
+      for (const id of removing) {
+        const tile = tiles.find((entry) => entry.id === id);
+        if (!tile) throw new ValidationError(`removeTiles: there's no tile ${id} on this report (get_analytics_dashboard lists them). Nothing was saved.`);
+        // An image's file goes with its tile, so History couldn't bring it back.
+        if (tile.visual === "image") throw new ValidationError(`removeTiles: ${String(tile.title)} is an image, which people remove in Tohyee. Nothing was saved.`);
+      }
+      if (removing.length) {
+        tiles = tiles.filter((tile) => !removing.includes(String(tile.id)));
+        for (const id of removing) ids.delete(id);
+        if (tiles.length === 0 && !(Array.isArray(args.addTiles) && args.addTiles.length)) throw new ValidationError("removeTiles: that would leave the report empty. People delete reports in Tohyee. Nothing was saved.");
+      }
       for (const [index, raw] of (Array.isArray(args.changeTiles) ? args.changeTiles : []).entries()) {
         const change = (raw ?? {}) as Record<string, unknown>;
         const at = tiles.findIndex((tile) => tile.id === change.tileId);
@@ -961,15 +1048,15 @@ export const ANALYTICS_WRITE_TOOLS: AiTool[] = [
         if (new Set(wanted).size !== wanted.length) throw new ValidationError("order: name each tile once. Nothing was saved.");
         tiles = [...wanted.map((id) => tiles.find((tile) => tile.id === id)!), ...tiles.filter((tile) => !wanted.includes(String(tile.id)))];
       }
-      const dates = datesInput(args.dates);
-      const settings = dates ? { ...current.settings, ...dates } : current.settings;
+      const asked = settingsAsked(current.settings, args);
+      const settings = asked ?? current.settings;
       const checked = await checkAndRun(run, { settings, tiles }, (tile) => touched.has(String(tile.id)));
       const dashboard = await run((tx) =>
         updateDashboard(tx, current.id, {
           expectedVersion: current.version,
           ...(args.name !== undefined ? { name: args.name } : {}),
           ...(args.description !== undefined ? { description: args.description } : {}),
-          ...(dates ? { settings: checked.settings } : {}),
+          ...(asked ? { settings: checked.settings } : {}),
           tiles: checked.tiles,
         }),
       );
