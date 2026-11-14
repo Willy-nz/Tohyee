@@ -1,3 +1,4 @@
+import { countWaitingAiActions } from "@/lib/ai/action-approvals";
 import { businessTimeZone } from "@/lib/dates";
 import { aiKeysStoppingSoon } from "@/lib/ai/tokens";
 import { type Role, roleAtLeast } from "@/lib/auth/roles";
@@ -23,9 +24,17 @@ export async function listTopBarNotices(tx: OrgTx, role: Role | null = null): Pr
     : [];
   // Time-limited access ending within 3 days (decision 1471): admins see everyone's, a member their own.
   const accessNotices = await accessEndingNotices(tx, role);
-  return [...handoverNotice, ...accessNotices, ...(await aiKeyNotices(tx)), ...(await accountingNotices(tx)), ...(await analyticsNotices(tx, role))];
+  return [...handoverNotice, ...accessNotices, ...(await aiKeyNotices(tx)), ...(await aiActionNotices(tx, role)), ...(await accountingNotices(tx)), ...(await analyticsNotices(tx, role))];
 }
 
+
+/** What the AI is waiting for a person to approve (#697, decision 1633): for bookkeepers and up, who can. */
+async function aiActionNotices(tx: OrgTx, role: Role | null): Promise<TopBarNotice[]> {
+  if (!role || !roleAtLeast(role, "bookkeeper")) return [];
+  const waiting = await countWaitingAiActions(tx);
+  if (waiting === 0) return [];
+  return [{ id: "ai-actions-waiting", message: waiting === 1 ? "Your AI is waiting for a person to approve 1 change." : `Your AI is waiting for a person to approve ${waiting} changes.`, href: "/operations/ai" }];
+}
 
 /** The person's own AI keys that stop within a week (#695, decision 1629), so an AI doesn't just stop working. */
 async function aiKeyNotices(tx: OrgTx): Promise<TopBarNotice[]> {

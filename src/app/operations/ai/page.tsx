@@ -8,6 +8,7 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
+import { AiApprovals } from "./approvals";
 import {
   AI_ACCESS_LEVEL_HELP,
   AI_ACCESS_LEVEL_LABELS,
@@ -506,6 +507,7 @@ export default function AiPage() {
         {(organisationId) => (
           <>
             <AiConnect key={organisationId} organisationId={organisationId} />
+            <AiApprovals key={`approvals-${organisationId}`} organisationId={organisationId} />
             <JournalVoidLimit key={`void-${organisationId}`} organisationId={organisationId} />
           </>
         )}
