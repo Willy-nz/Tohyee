@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildTemplate, lastTwelveMonths, TEMPLATES } from "@/lib/analytics/templates";
 import { parseTileQuery, type ColumnInfo } from "@/lib/analytics/query";
 import { parseChartFormat } from "@/lib/analytics/chart-format";
+import { designNotes } from "@/lib/analytics/design-notes";
 import { GA_REPORTS } from "@/lib/analytics/google-analytics-reports";
 import { GSC_TABLES, gscTableColumns } from "@/lib/analytics/search-console-reports";
 import { META_TABLES, metaTableColumns } from "@/lib/analytics/meta-reports";
@@ -43,6 +44,11 @@ describe("report templates (#337)", () => {
       expect(tile.id).toMatch(/^[a-z0-9-]{1,40}$/);
     }
     expect(new Set(built.tiles.map((tile) => tile.id)).size).toBe(built.tiles.length);
+  });
+
+  it.each(TEMPLATES.map((template) => template.id))("the %s template has no design notes as built (#691)", (id) => {
+    const built = buildTemplate(id, BOOKS, "2026-10-20")!;
+    expect(designNotes(built.tiles, built.settings.pages)).toEqual([]);
   });
 
   it("is offered only when its tables are loaded", () => {

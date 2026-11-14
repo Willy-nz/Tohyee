@@ -1,3 +1,4 @@
+import { designNotes as makeDesignNotes } from "@/lib/analytics/design-notes";
 import { boundedLimit, CURSOR, limitInput, pageByPosition } from "@/lib/ai/limits";
 import { type AiTool, DATE, type JsonSchema, schema, type ToolContext } from "@/lib/ai/tools";
 import { roleAtLeast } from "@/lib/auth/roles";
@@ -323,12 +324,22 @@ async function checkAndRun(
 }
 
 /** What the AI is told after a save: the report, each checked tile's first rows, and anything worth a second look. */
+/** What a person would notice on looking at the report (#691): the AI can't see it, so it's told. */
+function notesFor(dashboard: Dashboard, runs: Run[], page?: string) {
+  const tiles = page ? dashboard.tiles.filter((tile) => tilePage(tile, dashboard.settings.pages) === page) : dashboard.tiles;
+  const pages = page ? reportPages(dashboard.settings.pages).filter((entry) => entry.id === page) : dashboard.settings.pages;
+  const results = new Map(runs.flatMap((entry) => (entry.result ? [[entry.tile.id, entry.result] as const] : [])));
+  const designNotes = makeDesignNotes(tiles, pages, results);
+  return designNotes.length ? { designNotes } : {};
+}
+
 function saved(dashboard: Dashboard, runs: Run[]) {
   const warnings = runs.filter((entry) => entry.result && (entry.result.pivot ? entry.result.pivot.rows.length === 0 : entry.result.rows.length === 0)).map((entry) => `${entry.tile.title}: no rows in these dates or filters.`);
   return {
     dashboard: dashboardSummary(dashboard),
     checkedTiles: runs.map((entry) => ({ id: entry.tile.id, title: entry.tile.title, ...(entry.result ? { preview: figures(entry.result, 5) } : {}) })),
     ...(warnings.length ? { warnings } : {}),
+    ...notesFor(dashboard, runs),
     note: "Saved. People see it under Analytics › Reports. The change is in the report's History, marked as made through the AI, where a person can put an earlier version back.",
   };
 }
@@ -820,6 +831,7 @@ export const ANALYTICS_READ_TOOLS: AiTool[] = [
         // When each source was last refreshed, and whether a refresh failed or is running (decision 698).
         freshness: facts.freshness,
         tiles: runs.map((entry) => ({ ...tileOut(entry.tile), ...(entry.result ? { figures: figures(entry.result, rows) } : {}), ...(entry.error ? { error: entry.error } : {}) })),
+        ...notesFor(dashboard, runs, typeof args.page === "string" && args.page ? args.page : undefined),
       };
     },
   }),
@@ -906,7 +918,7 @@ export const ANALYTICS_WRITE_TOOLS: AiTool[] = [
     name: "create_analytics_dashboard",
     title: "Make an Analytics report",
     description:
-      "Makes a new report under Analytics › Reports with up to 40 tiles, using the same chart kinds, measures, filters, dates and formats as the Analytics editor. Every tile is run first: if one doesn't work, nothing is saved and you're told which tile and why. Use list_analytics_tables first, and run_analytics_query to try questions.",
+      "Makes a new report under Analytics › Reports with up to 40 tiles, using the same chart kinds, measures, filters, dates and formats as the Analytics editor. Every tile is run first: if one doesn't work, nothing is saved and you're told which tile and why. You can't see the report, so the answer's designNotes say what a person would notice (a key figure with nothing to compare, too many slices, a cramped chart), each with a fix: put them right with update_analytics_dashboard. Use list_analytics_tables first, and run_analytics_query to try questions.",
     level: "draft",
     inputSchema: schema(
       {

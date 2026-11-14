@@ -148,11 +148,23 @@ export function buildTemplate(id: TemplateId, tables: TableInfo[], today: string
       tile(title, "kpi", "quarter", question(invoices, [measure], { filters: [approved], dateField: "invoice_date", sparkline: true }), format ? { format } : {});
     tiles.push(kpi("Sales", { ...sales, compare: "previous_period" }));
     tiles.push(kpi("Invoices", { ...count, compare: "previous_period" }, { series: [{ number: { suffix: "invoices" } }] }));
-    tiles.push(kpi("Customers invoiced", { label: "Customers", aggregate: "count_distinct", field: "contact" }, { series: [{ number: { suffix: "customers" } }] }));
+    tiles.push(kpi("Customers invoiced", { label: "Customers", aggregate: "count_distinct", field: "contact", compare: "previous_period" }, { series: [{ number: { suffix: "customers" } }] }));
+    // The average leads the card (#691): its sales and invoice count are worked out inside it, not shown above it.
     tiles.push(
-      tile("Average invoice", "kpi", "quarter", question(invoices, [sales, count, { label: "Average invoice", aggregate: "formula", formula: "[Sales (excl. GST)] / [Invoices]" }], { filters: [approved], dateField: "invoice_date" }), {
-        format: { series: [{}, {}, { number: { style: "currency" } }] },
-      }),
+      kpi(
+        "Average invoice",
+        {
+          label: "Average invoice",
+          aggregate: "formula",
+          formula: "[Sales] / [Invoices]",
+          inputs: [
+            { name: "Sales", aggregate: "sum", field: "net" },
+            { name: "Invoices", aggregate: "count" },
+          ],
+          compare: "previous_period",
+        },
+        { series: [{ number: { style: "currency" } }] },
+      ),
     );
     tiles.push(
       tile("Sales and invoices by month", "combo", "two-thirds", question(invoices, [sales, count], { groupBy: { field: "invoice_date", grain: "month" }, filters: [approved], dateField: "invoice_date" }), {
@@ -172,8 +184,8 @@ export function buildTemplate(id: TemplateId, tables: TableInfo[], today: string
     const amount: Measure = { label: "Amount", aggregate: "sum", field: "amount" };
     tiles.push(tile("Open pipeline", "kpi", "quarter", question(opportunities, [amount], { filters: [open] })));
     tiles.push(tile("Open opportunities", "kpi", "quarter", question(opportunities, [{ label: "Opportunities", aggregate: "count" }], { filters: [open] }), { format: { series: [{ number: { suffix: "open" } }] } }));
-    tiles.push(tile("Won", "kpi", "quarter", question(opportunities, [amount], { filters: [{ field: "outcome", op: "eq", value: "won" }], dateField: "expected_close" })));
-    tiles.push(tile("Lost", "kpi", "quarter", question(opportunities, [amount], { filters: [{ field: "outcome", op: "eq", value: "lost" }], dateField: "expected_close" })));
+    tiles.push(tile("Won", "kpi", "quarter", question(opportunities, [{ ...amount, compare: "previous_period" }], { filters: [{ field: "outcome", op: "eq", value: "won" }], dateField: "expected_close" })));
+    tiles.push(tile("Lost", "kpi", "quarter", question(opportunities, [{ ...amount, compare: "previous_period" }], { filters: [{ field: "outcome", op: "eq", value: "lost" }], dateField: "expected_close" })));
     tiles.push(tile("Open pipeline by stage", "column", "half", question(opportunities, [amount, { label: "Opportunities", aggregate: "count" }], { groupBy: { field: "stage" }, filters: [open] }), {
       format: { series: [{}, { number: { style: "plain" } }] },
     }));
@@ -216,7 +228,7 @@ export function buildTemplate(id: TemplateId, tables: TableInfo[], today: string
     tiles.push(tile("Sessions", "kpi", "quarter", question(daily, [{ ...sessions, compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: plain("sessions") }));
     tiles.push(tile("Page views", "kpi", "quarter", question(daily, [{ label: "Page views", aggregate: "sum", field: "page_views", compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: plain("views") }));
     tiles.push(
-      tile("Engagement rate", "kpi", "quarter", question(daily, [{ label: "Engagement rate", aggregate: "formula", formula: "[Engaged sessions] / [Sessions]" }, { label: "Engaged sessions", aggregate: "sum", field: "engaged_sessions" }, sessions], { dateField: "date" }), {
+      tile("Engagement rate", "kpi", "quarter", question(daily, [{ label: "Engagement rate", aggregate: "formula", formula: "[Engaged sessions] / [Sessions]", compare: "previous_period" }, { label: "Engaged sessions", aggregate: "sum", field: "engaged_sessions" }, sessions], { dateField: "date" }), {
         // The key figure shows the first value; the other two are what it's worked out from.
         format: { series: [{ number: { style: "percent", decimals: 1 } }, {}, {}] },
       }),
@@ -273,8 +285,8 @@ export function buildTemplate(id: TemplateId, tables: TableInfo[], today: string
     }));
     tiles.push(tile("Clicks", "kpi", "quarter", question(daily, [{ ...clicks, compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: whole("clicks") }));
     tiles.push(tile("Impressions", "kpi", "quarter", question(daily, [{ ...impressions, compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: whole("impressions") }));
-    tiles.push(tile("Click rate", "kpi", "quarter", question(daily, [clickRate], { dateField: "date" }), { format: { series: [{ number: { style: "percent", decimals: 1 } }] } }));
-    tiles.push(tile("Average position", "kpi", "quarter", question(daily, [position], { dateField: "date" }), {
+    tiles.push(tile("Click rate", "kpi", "quarter", question(daily, [{ ...clickRate, compare: "previous_period" }], { dateField: "date" }), { format: { series: [{ number: { style: "percent", decimals: 1 } }] } }));
+    tiles.push(tile("Average position", "kpi", "quarter", question(daily, [{ ...position, compare: "previous_period" }], { dateField: "date" }), {
       format: { series: [{ number: { style: "plain", decimals: 1 } }], kpi: { downIsGood: true } },
     }));
     tiles.push(
@@ -347,7 +359,7 @@ export function buildTemplate(id: TemplateId, tables: TableInfo[], today: string
       tiles.push(tile("Ad spend", "kpi", "third", question("meta_ads_daily", [{ ...spend, compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: { ...money, kpi: { downIsGood: true } } }));
       tiles.push(tile("Ad clicks", "kpi", "third", question("meta_ads_daily", [{ ...sum("Clicks", "clicks"), compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: whole() }));
       tiles.push(
-        tile("Cost per click", "kpi", "third", question("meta_ads_daily", [{ label: "Cost per click", aggregate: "formula", formula: "[Spend] / [Clicks]", inputs: [{ name: "Spend", aggregate: "sum", field: "spend" }, { name: "Clicks", aggregate: "sum", field: "clicks" }] }], { dateField: "date" }), {
+        tile("Cost per click", "kpi", "third", question("meta_ads_daily", [{ label: "Cost per click", aggregate: "formula", formula: "[Spend] / [Clicks]", compare: "previous_period", inputs: [{ name: "Spend", aggregate: "sum", field: "spend" }, { name: "Clicks", aggregate: "sum", field: "clicks" }] }], { dateField: "date" }), {
           format: { ...money, kpi: { downIsGood: true } },
         }),
       );

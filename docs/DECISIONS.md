@@ -14907,3 +14907,24 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       decimals. Also recorded: Jess confirmed decision 1620's rule that a
       client sees a published report on a shared page and never a draft.
       Claude's details, not yet reviewed.
+1625. **The AI is told what a person would notice on a report it can't
+      see: design notes** (#691, first part). create_analytics_dashboard,
+      update_analytics_dashboard and get_analytics_dashboard return
+      `designNotes` when something would look wrong: a key figure with
+      nothing to compare it with, a row of key figures where some have a
+      comparison and some don't, a pie or donut with more than 6 slices,
+      more than 20 bars, a line with fewer than 3 points, one bar more than
+      ten times the usual one, a chart with more than 4 groups in a
+      quarter-width tile, and more than 8 tiles on a page with no text.
+      Each has a fix in the tile's own settings; at most 12 are returned.
+      They are advice: nothing is refused. Notes that need the figures are
+      given only for tiles that were run, so nothing is claimed about a
+      chart whose answer isn't known. A balance (cash in bank, what's owed)
+      isn't expected to carry a comparison. The built-in templates were
+      changed so each has no notes: Customers invoiced, Won, Lost,
+      Engagement rate, Click rate, Average position and Cost per click now
+      compare with the previous period, and Average invoice leads its card
+      with the average (it used to lead with total sales, with the average
+      underneath). Reports already made from a template are unchanged. Not
+      built: a picture of the report for the AI, and a "Tidy up" panel for
+      people. Claude's details, not yet reviewed.
