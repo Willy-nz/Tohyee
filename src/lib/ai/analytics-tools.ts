@@ -71,7 +71,7 @@ import { ForbiddenError, HttpError, ValidationError } from "@/lib/errors";
 
 const REPORT_VIEWER_REFUSED = "A report viewer sees only the reports shared with them, so tables and questions aren't available to this connection.";
 
-const VISUALS = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey", "filledmap", "pointmap", "shape", "button"] as const;
+const VISUALS = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey", "filledmap", "pointmap", "shape", "button", "report"] as const;
 const AGGREGATES = ["sum", "avg", "min", "max", "count", "count_distinct", "formula"] as const;
 const GRAINS = ["day", "week", "month", "quarter", "year", "fquarter", "fyear"] as const;
 const TILE_ID: JsonSchema = { type: "string", pattern: "^[a-z0-9-]{1,40}$", description: "A tile's id: lower-case letters, digits and -." };
@@ -105,6 +105,7 @@ const CHART_NEEDS: Record<string, string> = {
   pointmap: "groupBy; latitude and longitude measures, a third sizes points",
   shape: "shape: { kind: rectangle, rounded, ellipse or line }",
   button: "button: { label, action } (reset filters, or a page or bookmark of the report)",
+  report: "report: { id } of a custom report from list_custom_reports (an accounting report in statement style; a published one is the only kind report viewers can see); no query",
 };
 
 /** How to build a tile, once on the first page of list_analytics_tables. */
@@ -610,6 +611,7 @@ const TILE_PROPERTIES: Record<string, JsonSchema> = {
   page: { type: "string", description: "The report page it's on (get_analytics_dashboard lists them); default the first." },
   shape: { type: "object" },
   button: { type: "object" },
+  report: { type: "object", description: "For visual report: the custom report to show.", properties: { id: { type: "string", description: "From list_custom_reports." } }, required: ["id"] },
 };
 const TILE: JsonSchema = {
   type: "object",

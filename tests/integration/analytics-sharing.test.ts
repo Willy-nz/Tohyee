@@ -10,6 +10,7 @@ import * as dashboardRoute from "@/app/api/analytics/dashboards/[dashboardId]/ro
 import * as sharesRoute from "@/app/api/analytics/dashboards/[dashboardId]/shares/route";
 import * as imagesRoute from "@/app/api/analytics/dashboards/[dashboardId]/images/route";
 import * as imageRoute from "@/app/api/analytics/dashboards/[dashboardId]/images/[imageId]/route";
+import * as placedReportRoute from "@/app/api/analytics/dashboards/[dashboardId]/reports/[tileId]/route";
 import * as dashboardsRoute from "@/app/api/analytics/dashboards/route";
 import * as queryRoute from "@/app/api/analytics/query/route";
 import * as loadRoute from "@/app/api/analytics/sources/[sourceId]/load/route";
@@ -20,6 +21,7 @@ import * as membersRoute from "@/app/api/organisations/[organisationId]/members/
 import * as reportExportRoute from "@/app/api/reports/export/route";
 import * as settingsRoute from "@/app/api/organisations/[organisationId]/settings/route";
 import { closeAnalytics } from "@/lib/analytics/engine";
+import { createCustomReport, publishCustomReport, setCustomReportArchived } from "@/lib/reports/custom";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { coreQuery } from "@/lib/db/transactions";
 import {
@@ -498,6 +500,52 @@ describeWithDatabase("analytics dashboard sharing", () => {
     expect(stolen.data.error).toMatch(/background picture isn't one of this report's/);
     expect((await body(await settings([{ id: "page-1", name: "Page 1" }]))).status).toBe(200);
     expect((await getImage(sharedId, backdrop, ownerCookie)).status).toBe(404);
+  });
+
+  it("#710: an accounting report sits on a page; a client sees a published one, never a draft; an archived one says it's gone", async () => {
+    const as = <T>(work: Parameters<typeof inOrganisation<T>>[2]) => inOrganisation(ORG, { userId: owner.id, email: owner.email }, work);
+    const draft = (await as((tx) => createCustomReport(tx, { idempotencyKey: "placed-report-draft-1", base: "profit_and_loss", periodEnd: "2026-06-30", start: "standard" }))).report;
+    const published = (await as((tx) => publishCustomReport(tx, draft.id, { idempotencyKey: "placed-report-publish-1" }))).report;
+    const current = (await body(await dashboardRoute.GET(apiRequest(`/api/analytics/dashboards/${sharedId}?organisationId=${ORG}`, { cookie: ownerCookie }), params({ dashboardId: sharedId })))).data.dashboard;
+    const patch = (tiles: unknown[]) =>
+      dashboardRoute.PATCH(apiRequest(`/api/analytics/dashboards/${sharedId}`, { method: "PATCH", cookie: ownerCookie, body: { organisationId: ORG, tiles } }), params({ dashboardId: sharedId }));
+    const read = (tileId: string, cookie: string) =>
+      placedReportRoute.GET(apiRequest(`/api/analytics/dashboards/${sharedId}/reports/${tileId}?organisationId=${ORG}`, { cookie }), params({ dashboardId: sharedId, tileId }));
+
+    // A report that isn't in Reports can't be placed.
+    const unknown = await body(await patch([...current.tiles, { id: "pl", title: "Profit and loss", visual: "report", report: { id: "999999" } }]));
+    expect(unknown.status).toBe(400);
+    expect(unknown.data.error).toMatch(/isn't in Reports any more/);
+
+    const saved = await body(await patch([...current.tiles, { id: "pl-draft", title: "Profit and loss (draft)", visual: "report", report: { id: draft.id } }, { id: "pl-final", title: "Profit and loss", visual: "report", width: "half", report: { id: published.id } }]));
+    expect(saved.status).toBe(200);
+    expect(saved.data.dashboard.tiles.slice(-2)).toEqual([
+      { id: "pl-draft", title: "Profit and loss (draft)", visual: "report", width: "full", query: null, report: { id: draft.id } },
+      { id: "pl-final", title: "Profit and loss", visual: "report", width: "half", query: null, report: { id: published.id } },
+    ]);
+
+    // Someone in the books sees both, with figures.
+    const ownDraft = await body(await read("pl-draft", ownerCookie));
+    expect(ownDraft.status).toBe(200);
+    expect(ownDraft.data.report).toMatchObject({ id: draft.id, kind: "draft", base: "profit_and_loss" });
+    expect(ownDraft.data.figures.blocks[0].rows.map((row: { label: string }) => row.label)).toContain("Net profit");
+    // The client sees the published copy, and is refused the draft.
+    const clientFinal = await body(await read("pl-final", clientCookie));
+    expect(clientFinal.status).toBe(200);
+    expect(clientFinal.data.report).toMatchObject({ id: published.id, kind: "published", publishedAt: expect.any(String) });
+    const clientDraft = await body(await read("pl-draft", clientCookie));
+    expect(clientDraft.status).toBe(403);
+    expect(clientDraft.data.error).toMatch(/draft report/);
+    // Not a tile of this report, or not a report tile.
+    expect((await read("nope", ownerCookie)).status).toBe(404);
+    expect((await read("regions", ownerCookie)).status).toBe(404);
+
+    // Archived in Reports: the tile says so, and the page still saves with it there.
+    await as((tx) => setCustomReportArchived(tx, published.id, true));
+    expect((await body(await read("pl-final", ownerCookie))).data).toEqual({ gone: true });
+    expect((await body(await patch(saved.data.dashboard.tiles))).status).toBe(200);
+    // Back to how it was for the tests after this one.
+    expect((await body(await patch(current.tiles))).status).toBe(200);
   });
 
   it("stops showing a dashboard once it's unshared", async () => {
