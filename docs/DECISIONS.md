@@ -14946,3 +14946,19 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       described as the older kind, kept for ones already made. Not built
       yet: "Move to Analytics" for an existing AI dashboard, and then
       taking save_ai_dashboard away. Claude's details, not yet reviewed.
+1627. **"Move to Analytics" for the AI's older dashboards** (#693, second
+      part). On AI workspace › Dashboards a bookkeeper or higher can move a
+      dashboard: an Analytics report is made with the same name and
+      description and each tile's title, chart, grouping, values, filters,
+      order, top-N and width, over the same table (`tohyee_ai_<name>`,
+      decision 1626); a tile's note becomes its subtitle. A tile Analytics
+      can't show the same way is left behind and named with the reason (a
+      plain list of rows, a third grouping, a sort by a second value, a
+      table not yet copied), never guessed at. The old dashboard is
+      archived only when every tile moved, so the report is in one place;
+      if any stayed behind it is kept, and moving again makes a second
+      Analytics report. The new report has no dates (all time), as the old
+      one had none. The AI's tables have no money type, so amounts show as
+      plain numbers until someone sets a format. Not built: taking
+      save_ai_dashboard away from AI connections, which waits until
+      organisations have moved theirs. Claude's details, not yet reviewed.

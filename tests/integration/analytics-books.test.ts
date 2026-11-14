@@ -2,10 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
+import * as moveRoute from "@/app/api/ai-workspace/dashboards/[dashboardId]/move/route";
 import * as booksRoute from "@/app/api/analytics/books/route";
 import * as analyticsRoute from "@/app/api/analytics/route";
 import * as sourcesRoute from "@/app/api/analytics/sources/route";
 import { runTile } from "@/lib/analytics/dashboards";
+import { listAiDashboards, saveAiDashboard } from "@/lib/ai-workspace/dashboards";
 import { addDatasetRows, archiveDataset, saveDataset } from "@/lib/ai-workspace/datasets";
 import { readBooks } from "@/lib/analytics/books";
 import { builtInMeasures, measureFromSaved } from "@/lib/analytics/measure-library";
@@ -404,6 +406,32 @@ describeWithDatabase("analytics: the books and CRM", () => {
     const total = await runTile(ORG, { table: "tohyee_ai_herd_tests", groupBy: null, measures: [{ label: "Milk solids", aggregate: "sum", field: "milk_solids" }], filters: [] });
     expect(total.rows[0].m0).toBe("3.955000");
     expect((await queryAnalytics(ORG, "select count(*)::int as n from information_schema.tables where table_name like 'tohyee_ai_%'"))[0].n).toBe(1);
+
+    // Move to Analytics (decision 1627): the same tiles over the same table; what can't move is named and the old one stays.
+    const kpi = { title: "Milk solids", kind: "kpi", dataset: "herd_tests", measures: [{ aggregate: "sum", field: "milk_solids" }], note: "All cows" };
+    const byCow = { title: "By cow", kind: "bar", dataset: "herd_tests", groupBy: ["cow"], measures: [{ aggregate: "sum", field: "milk_solids", label: "solids" }], filters: [{ field: "in_milk", op: "ne", value: null }], sort: { by: "solids", direction: "desc" }, limit: 5, width: 2 };
+    const listing = { title: "Every test", kind: "table", dataset: "herd_tests" };
+    const mixed = await as((tx) => saveAiDashboard(tx, { name: "Herd tests", description: "From the herd test files", tiles: [kpi, byCow, listing] }));
+    const tidy = await as((tx) => saveAiDashboard(tx, { name: "Herd totals", tiles: [kpi] }));
+    const move = async (id: string, user = cookie) => {
+      const response = await moveRoute.POST(apiRequest(`/api/ai-workspace/dashboards/${id}/move`, { method: "POST", cookie: user, body: { organisationId: ORG } }), { params: Promise.resolve({ dashboardId: id }) });
+      return { status: response.status, data: (await response.json()) as { dashboard: { id: string; name: string; description: string; tiles: Array<Record<string, unknown>> }; left: Array<{ title: string; why: string }>; archived: boolean } };
+    };
+    expect((await move(mixed.id, await sessionCookieFor(viewer))).status).toBe(403);
+    const first = await move(mixed.id);
+    expect(first.status).toBe(201);
+    expect(first.data).toMatchObject({ archived: false, left: [{ title: "Every test", why: expect.stringContaining("lists the table's rows") }], dashboard: { name: "Herd tests", description: "From the herd test files" } });
+    expect(first.data.dashboard.tiles).toMatchObject([
+      { title: "Milk solids", visual: "kpi", width: "quarter", format: { card: { subtitle: "All cows" } }, query: { table: "tohyee_ai_herd_tests", groupBy: null, measures: [{ label: "Milk solids", aggregate: "sum", field: "milk_solids" }] } },
+      { title: "By cow", visual: "bar", width: "full", query: { groupBy: { field: "cow" }, measures: [{ label: "solids" }], filters: [{ field: "in_milk", op: "not_blank" }], sort: { by: "value", direction: "desc" }, limit: 5 } },
+    ]);
+    // The moved tile gives the figures the old one did.
+    const movedBars = await runTile(ORG, first.data.dashboard.tiles[1].query as Parameters<typeof runTile>[1]);
+    expect(movedBars.rows).toEqual([{ category: "Bluebell", m0: "2.105000" }, { category: "Daisy", m0: "1.850000" }]);
+    expect((await as((tx) => listAiDashboards(tx))).map((entry) => entry.name)).toEqual(["Herd tests", "Herd totals"]);
+    // Every tile moved: the old one is archived, so the report is in one place.
+    expect((await move(tidy.id)).data).toMatchObject({ archived: true, left: [] });
+    expect((await as((tx) => listAiDashboards(tx))).map((entry) => entry.name)).toEqual(["Herd tests"]);
 
     await as((tx) => archiveDataset(tx, "herd_tests"));
     await refresh();
