@@ -3,7 +3,7 @@ import type { SessionUser } from "@/lib/auth/sessions";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { postJournal } from "@/lib/ledger/journals";
 import { createCustomReport } from "@/lib/reports/custom";
-import { saveAnnualDocument } from "@/lib/reports/annual-document";
+import { deleteAnnualDraft, listAnnualDrafts, saveAnnualDocument, saveAnnualDraftNotes } from "@/lib/reports/annual-document";
 import { buildFinancialStatements, type FinancialStatements, financialStatementsPdf, saveStatementNotes } from "@/lib/reports/financial-statements";
 import { setLayoutDefault } from "@/lib/reports/report-layouts";
 import { createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, key, startTestServer, type TestServer } from "../helpers/test-server";
@@ -257,7 +257,70 @@ describeWithDatabase("annual financial statements report", () => {
     const pdf = await run((tx) => financialStatementsPdf(tx, { yearEnd: "2027-03-31" }, new Date("2027-04-20T00:00:00Z")));
     expect(pdf.bytes.length).toBeGreaterThan(1000);
     // Back to the defaults for the tests after.
-    await run((tx) => tx.query("delete from annual_statement_documents"));
+    await run((tx) => tx.query("delete from annual_statement_drafts"));
+  });
+
+  it("FS16-FS18: more than one draft set a year, each with its own words and notes; one final", async () => {
+    const before = await build();
+    expect(before.document).toMatchObject({ saved: false, id: null, title: "Financial statements 2027" });
+    const save = (input: { status: "draft" | "final"; draftId?: string | null; asNew?: boolean; title?: string; coverNote: string }) =>
+      run((tx) =>
+        saveAnnualDocument(tx, {
+          yearEnd: "2027-03-31",
+          status: input.status,
+          draftId: input.draftId ?? undefined,
+          asNew: input.asNew,
+          title: input.title,
+          texts: { ...before.document.texts, coverNote: input.coverNote },
+          name: before.name,
+        }),
+      );
+    const first = await save({ status: "draft", coverNote: "For the bank" });
+    expect(first).toMatchObject({ saved: true, title: "Financial statements 2027", status: "draft" });
+    // Save as a new draft keeps the first as it was.
+    const second = await save({ status: "draft", draftId: first.id, asNew: true, coverNote: "For IRD" });
+    expect(second.title).toBe("Copy of Financial statements 2027");
+    expect(second.id).not.toBe(first.id);
+    // A third with no set chosen gets the next free title.
+    const third = await save({ status: "draft", coverNote: "Third" });
+    expect(third.title).toBe("Financial statements 2027 (2)");
+    const renamed = await save({ status: "draft", draftId: third.id, title: "For the accountant", coverNote: "Third" });
+    expect(renamed.title).toBe("For the accountant");
+    await expect(save({ status: "draft", draftId: third.id, title: "For the accountant", coverNote: "x" })).resolves.toBeTruthy();
+    await expect(save({ status: "draft", draftId: second.id, title: "For the accountant", coverNote: "x" })).rejects.toThrow("already called");
+
+    // Each set has its own words; with none chosen, the latest change shows.
+    const one = await run((tx) => buildFinancialStatements(tx, { draftId: first.id }, new Date("2027-04-20T00:00:00Z")));
+    expect(one.yearEnd).toBe("2027-03-31");
+    expect(one.document.texts.coverNote).toBe("For the bank");
+    expect((await build()).document.title).toBe("For the accountant");
+    await expect(run((tx) => buildFinancialStatements(tx, { yearEnd: "2026-03-31", draftId: first.id }))).rejects.toThrow("another year end");
+
+    // Notes: a set's own notes replace the organisation's, for that set only.
+    await run((tx) => saveAnnualDraftNotes(tx, { draftId: second.id, notes: [{ title: "Just this set", body: "Only here." }] }));
+    const withNotes = await run((tx) => buildFinancialStatements(tx, { draftId: second.id }));
+    expect(withNotes.notes).toMatchObject({ saved: true, own: true, notes: [{ title: "Just this set", body: "Only here." }] });
+    const without = await run((tx) => buildFinancialStatements(tx, { draftId: first.id }));
+    expect(without.notes.own).toBeUndefined();
+    // A copy takes the notes of the set it came from.
+    const copy = await save({ status: "draft", draftId: second.id, asNew: true, coverNote: "copy" });
+    expect(copy.notes).toEqual([{ title: "Just this set", body: "Only here." }]);
+
+    // Only one final a year; the final shows when no set is chosen.
+    await save({ status: "final", draftId: first.id, coverNote: "For the bank" });
+    await expect(save({ status: "final", draftId: second.id, coverNote: "For IRD" })).rejects.toThrow("already the final set");
+    expect((await build()).document).toMatchObject({ id: first.id, status: "final" });
+
+    // Drafts and finals are listed; a draft can be deleted, a final can't.
+    const drafts = await run((tx) => listAnnualDrafts(tx, { status: "draft" }));
+    expect(drafts.map((entry) => entry.title).sort()).toEqual(["Copy of Copy of Financial statements 2027", "Copy of Financial statements 2027", "For the accountant"]);
+    expect((await run((tx) => listAnnualDrafts(tx, { status: "final" }))).map((entry) => entry.id)).toEqual([first.id]);
+    await expect(run((tx) => deleteAnnualDraft(tx, first.id))).rejects.toThrow("is final");
+    await run((tx) => deleteAnnualDraft(tx, third.id!));
+    expect(await run((tx) => listAnnualDrafts(tx, { status: "draft" }))).toHaveLength(2);
+    const pdf = await run((tx) => financialStatementsPdf(tx, { yearEnd: "2027-03-31", draftId: second.id }, new Date("2027-04-20T00:00:00Z")));
+    expect(Buffer.from(pdf.bytes.slice(0, 4)).toString()).toBe("%PDF");
+    await run((tx) => tx.query("delete from annual_statement_drafts"));
   });
 
   it("FS7: saved notes are the report's notes", async () => {

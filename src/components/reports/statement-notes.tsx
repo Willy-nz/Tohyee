@@ -8,7 +8,18 @@ import { api, errorMessage } from "@/lib/client/api";
 import type { StatementNote, StatementNotes } from "@/lib/reports/financial-statements";
 
 /** The notes to the financial statements, edited where they're shown (FS2, FS7). Bookkeepers edit; others read. */
-export function NotesEditor({ organisationId, loaded, onSaved }: { organisationId: string; loaded: StatementNotes; onSaved?: () => void }) {
+/** `saveTo` saves somewhere other than the organisation's notes: a saved set of the annual statements keeps its own (FS18). */
+export function NotesEditor({
+  organisationId,
+  loaded,
+  onSaved,
+  saveTo,
+}: {
+  organisationId: string;
+  loaded: StatementNotes;
+  onSaved?: () => void;
+  saveTo?: (notes: StatementNote[]) => Promise<StatementNotes>;
+}) {
   const { can } = useWorkspace();
   const [notes, setNotes] = useState<StatementNote[]>(loaded.notes);
   const [saved, setSaved] = useState(loaded.saved);
@@ -21,7 +32,7 @@ export function NotesEditor({ organisationId, loaded, onSaved }: { organisationI
     setError(null);
     setMessage(null);
     try {
-      const result = await api<StatementNotes>("/api/reports/financial-statement-notes", { method: "PUT", body: { organisationId, notes: list } });
+      const result = saveTo ? await saveTo(list) : await api<StatementNotes>("/api/reports/financial-statement-notes", { method: "PUT", body: { organisationId, notes: list } });
       setNotes(result.notes);
       setSaved(result.saved);
       setMessage(result.saved ? "Notes saved." : "Back to the drafts.");

@@ -840,6 +840,8 @@ export const SCREEN_COVERAGE: Record<string, ScreenCoverage> = {
   "PUT /api/report-favourites": {"person": "A person's own screen preferences."},
   "PUT /api/report-layouts": {"next": "accounting"},
   "PUT /api/reports/annual-statements": {"next": "accounting"},
+  "PUT /api/reports/annual-statements/drafts/[draftId]": {"next": "accounting"},
+  "DELETE /api/reports/annual-statements/drafts/[draftId]": {"next": "accounting"},
   "POST /api/reports/export": {"next": "accounting"},
   "PUT /api/reports/financial-statement-notes": {"next": "accounting"},
   "POST /api/reports/financial-statements/signing": {"next": "accounting"},

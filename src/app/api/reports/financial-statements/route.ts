@@ -13,14 +13,14 @@ function asciiFileName(name: string): string {
 /**
  * GET: the year-end financial statements for the year ending `yearEnd`, as
  * one PDF (FS1-FS3): in the organisation's report format, or (`kind=statements`)
- * the special purpose statements the Annual financial statements report shows (FS4).
+ * the special purpose statements the Annual financial statements report shows (FS4), with a saved set's words when `draftId` is given (FS16).
  * Viewers and above.
  */
 export const GET = route(async (request) => {
   const params = searchParams(request);
   const pdf = await withOrganisation(request, params.get("organisationId"), "viewer", (tx) =>
     params.get("kind") === "statements"
-      ? financialStatementsPdf(tx, { yearEnd: params.get("yearEnd") })
+      ? financialStatementsPdf(tx, { yearEnd: params.get("yearEnd"), draftId: params.get("draftId") ?? undefined })
       : yearEndReportPdf(tx, { yearEnd: params.get("yearEnd") }),
   );
   return new Response(new Uint8Array(pdf.bytes), {

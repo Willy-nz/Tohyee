@@ -15,10 +15,10 @@ import { Badge, Button, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import type { DepreciationSchedule, ScheduleAmounts } from "@/lib/fixed-assets/schedule";
-import type { AnnualTexts } from "@/lib/reports/annual-document";
+import type { AnnualDocument, AnnualDraftSummary, AnnualTexts } from "@/lib/reports/annual-document";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import { accountTransactionsHref } from "@/lib/reports/drilldown";
-import type { AnnualPage, FinancialStatement, FinancialStatements, StatementLine } from "@/lib/reports/financial-statements";
+import type { AnnualPage, FinancialStatement, FinancialStatements, StatementLine, StatementNotes } from "@/lib/reports/financial-statements";
 import { statementValue } from "@/lib/reports/statement-format";
 
 /** The end of the last financial year that has finished, for a year ending in `endMonth`. */
@@ -211,7 +211,12 @@ export function AnnualStatementsReport({ organisationId }: { organisationId: str
   const [chosen, setChosen] = useState<string | null>(params.get("yearEnd"));
   const yearEnd = chosen ?? fallback;
   const [typed, setTyped] = useState(yearEnd);
-  const report = useApiData<FinancialStatements>("/api/reports/annual-statements", { organisationId, yearEnd });
+  // Which saved set of words to show (FS16); null: the year's final set, else its latest draft.
+  const [setId, setSetId] = useState<string | null>(params.get("draft"));
+  const report = useApiData<FinancialStatements>("/api/reports/annual-statements", { organisationId, yearEnd, ...(setId ? { draftId: setId } : {}) });
+  const sets = useApiData<{ drafts: AnnualDraftSummary[] }>("/api/reports/annual-statements/drafts", { organisationId, v: report.data?.document.id ?? "" });
+  const yearSets = (sets.data?.drafts ?? []).filter((entry) => entry.yearEnd === yearEnd);
+  const [title, setTitle] = useState("");
   const plLayout = useReportLayout(organisationId, "profit_and_loss");
   const bsLayout = useReportLayout(organisationId, "balance_sheet");
   const cfLayout = useReportLayout(organisationId, "cash_flows");
@@ -223,7 +228,8 @@ export function AnnualStatementsReport({ organisationId }: { organisationId: str
   const [message, setMessage] = useState<string | null>(null);
   const data = report.data;
   const editing = draft !== null;
-  const pdf = `/api/reports/financial-statements?organisationId=${encodeURIComponent(organisationId)}&yearEnd=${encodeURIComponent(yearEnd)}&kind=statements`;
+  const shownId = data?.document.id ?? null;
+  const pdf = `/api/reports/financial-statements?organisationId=${encodeURIComponent(organisationId)}&yearEnd=${encodeURIComponent(yearEnd)}&kind=statements${shownId ? `&draftId=${encodeURIComponent(shownId)}` : ""}`;
   const layoutFor = (statement: FinancialStatement) => (statement.base === "profit_and_loss" ? plLayout : statement.base === "balance_sheet" ? bsLayout : statement.base === "cash_flows" ? cfLayout : statement.base === "changes_in_equity" ? ceLayout : null);
   const pages = data?.pages ?? [];
   const page = pages[Math.min(pageIndex, Math.max(0, pages.length - 1))];
@@ -236,15 +242,25 @@ export function AnnualStatementsReport({ organisationId }: { organisationId: str
       fallbackTitle
     );
 
-  async function save(status: "draft" | "final") {
+  async function save(status: "draft" | "final", asNew = false) {
     if (!draft || !data) return;
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      await api("/api/reports/annual-statements", { method: "PUT", body: { organisationId, yearEnd: data.yearEnd, status, texts: draft } });
+      const saved = await api<AnnualDocument>("/api/reports/annual-statements", {
+        method: "PUT",
+        body: { organisationId, yearEnd: data.yearEnd, status, texts: draft, draftId: data.document.id, asNew, title: asNew ? "" : title },
+      });
       setDraft(null);
-      setMessage(status === "draft" ? "Saved as a draft. Every page says DRAFT until you save it as final." : "Saved as final.");
+      setSetId(saved.id);
+      setMessage(
+        asNew
+          ? `Saved as a new draft, "${saved.title}". It's in Reports › Drafts beside the others.`
+          : status === "draft"
+            ? `Saved "${saved.title}" as a draft. Every page says DRAFT until you save it as final. It's in Reports › Drafts.`
+            : `Saved "${saved.title}" as final.`,
+      );
       report.reload();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -362,7 +378,23 @@ export function AnnualStatementsReport({ organisationId }: { organisationId: str
             <p>{data.period}</p>
           </header>
           {editing ? (
-            <NotesEditor key={`${data.yearEnd}-${data.notes.saved}`} organisationId={organisationId} loaded={data.notes} onSaved={report.reload} />
+            <NotesEditor
+              key={`${data.yearEnd}-${data.document.id ?? "none"}-${data.notes.saved}`}
+              organisationId={organisationId}
+              loaded={data.notes}
+              onSaved={report.reload}
+              saveTo={
+                data.document.id
+                  ? async (notes) => {
+                      const result = await api<{ saved: boolean; notes: StatementNotes["notes"] | null }>(`/api/reports/annual-statements/drafts/${data.document.id}`, {
+                        method: "PUT",
+                        body: { organisationId, notes },
+                      });
+                      return result.notes ? { saved: true, notes: result.notes, own: true } : { saved: false, notes: [] };
+                    }
+                  : undefined
+              }
+            />
           ) : (
             <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
               {data.notes.saved ? null : <Notice tone="warning">These notes are drafts. Fill in the parts in [square brackets] and have them checked.</Notice>}
@@ -420,19 +452,46 @@ export function AnnualStatementsReport({ organisationId }: { organisationId: str
           onClick={() => {
             setDraft(null);
             setPageIndex(0);
+            setSetId(null);
             setChosen(typed || fallback);
           }}
           disabled={report.loading || editing}
         >
           Update
         </Button>
+        {yearSets.length > 0 ? (
+          <Field label="Set" hint="Saved sets for this year">
+            <select
+              value={data?.document.id ?? ""}
+              disabled={editing}
+              onChange={(event) => {
+                setPageIndex(0);
+                setSetId(event.target.value || null);
+              }}
+            >
+              {data && !data.document.id ? <option value="">Not saved yet</option> : null}
+              {yearSets.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.title}
+                  {entry.status === "final" ? " (final)" : ""}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
         <div className={ui.reportToolbarEnd}>
           <InfoTip label="About this report">
             Special purpose statements, with last year beside this year, one page at a time. The statements of financial performance and position follow your default profit and
             loss and balance sheet layouts, if you&apos;ve set them. Click an amount to see what makes it up. The PDF has the same pages.
           </InfoTip>
           {data && can("bookkeeper") && !editing ? (
-            <Button variant="secondary" onClick={() => setDraft(structuredClone(data.document.texts))}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setTitle(data.document.title);
+                setDraft(structuredClone(data.document.texts));
+              }}
+            >
               Edit
             </Button>
           ) : null}
@@ -444,6 +503,11 @@ export function AnnualStatementsReport({ organisationId }: { organisationId: str
               <Button variant="secondary" disabled={busy} onClick={() => void save("draft")}>
                 Save as draft
               </Button>
+              {data?.document.id ? (
+                <Button variant="secondary" disabled={busy} onClick={() => void save("draft", true)}>
+                  Save as a new draft
+                </Button>
+              ) : null}
               <Button disabled={busy} onClick={() => void save("final")}>
                 {busy ? "Saving…" : "Save as final"}
               </Button>
@@ -468,7 +532,11 @@ export function AnnualStatementsReport({ organisationId }: { organisationId: str
         <>
           {editing ? (
             <Notice tone="info">
-              Editing. Change any words on any page, then save. The notes save with their own button.{" "}
+              <Field label="Name of this set" hint="How it shows in Reports › Drafts">
+                <input value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} />
+              </Field>
+              Editing. Change any words on any page, then save. <strong>Save as a new draft</strong> keeps this set as it was and saves your changes as another. The notes save with
+              their own button{data.document.id ? ", into this set" : ""}.{" "}
               <label style={{ whiteSpace: "nowrap" }}>
                 <input type="checkbox" checked={texts.compilation} onChange={(event) => change({ compilation: event.target.checked })} /> Include the compilation report
               </label>
@@ -491,6 +559,7 @@ export function AnnualStatementsReport({ organisationId }: { organisationId: str
             <Button variant="secondary" size="small" disabled={pageIndex >= pages.length - 1} onClick={() => go(pageIndex + 1)}>
               Next
             </Button>
+            {data.document.saved ? <span className={ui.muted}>{data.document.title}</span> : null}
             {data.document.status === "draft" ? <Badge tone="amber">DRAFT</Badge> : <Badge tone="green">Final</Badge>}
           </div>
           <div className={ui.annualPage}>{pageBody()}</div>

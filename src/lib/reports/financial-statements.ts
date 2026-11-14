@@ -19,7 +19,7 @@ import { requireArray, requireString } from "@/lib/validation";
 import { fixedAssetRegister } from "@/lib/fixed-assets/register";
 import { type DepreciationSchedule, depreciationSchedule } from "@/lib/fixed-assets/schedule";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { type AnnualDocument, getAnnualDocument } from "@/lib/reports/annual-document";
+import { type AnnualDocument, annualDraftYearEnd, getAnnualDocument } from "@/lib/reports/annual-document";
 
 export { statementAmount, statementValue };
 
@@ -36,7 +36,8 @@ export { statementAmount, statementValue };
  */
 
 export type StatementNote = { title: string; body: string };
-export type StatementNotes = { saved: boolean; notes: StatementNote[] };
+/** `own` is true when they're a set's own notes (FS18), not the organisation's. */
+export type StatementNotes = { saved: boolean; notes: StatementNote[]; own?: boolean };
 
 /** Draft notes for a special purpose report (FS2): placeholders in [square brackets] are for the preparer to fill in or confirm. */
 export async function draftNotes(tx: OrgTx): Promise<StatementNote[]> {
@@ -415,9 +416,10 @@ function equityLines(figures: EquityFigures, yearEnd: string, priorEnd: string):
 }
 
 /** The year's statements (FS1, FS4-FS7): the standard lines, or the default layouts for financial performance and position (decision 1560). */
-export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unknown }, now = new Date()): Promise<FinancialStatements> {
+export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd?: unknown; draftId?: unknown }, now = new Date()): Promise<FinancialStatements> {
   const yearEndMonth = await financialYearEndMonth(tx);
-  const yearEnd = parseIsoDate(input.yearEnd, "The year end");
+  const hasDraft = input.draftId !== undefined && input.draftId !== null && input.draftId !== "";
+  const yearEnd = parseIsoDate(hasDraft && !input.yearEnd ? await annualDraftYearEnd(tx, input.draftId) : input.yearEnd, "The year end");
   if (financialYearEnd(yearEnd, yearEndMonth) !== yearEnd) throw new ValidationError("That isn't a financial year end.");
   const yearStart = financialYearStart(yearEnd, yearEndMonth);
   const priorEnd = addDays(yearStart, -1);
@@ -439,7 +441,9 @@ export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unkn
     from: priorStart,
     to: priorEnd,
   });
-  const notes = await getStatementNotes(tx);
+  // A set's own notes replace the organisation's (FS18).
+  const document = await getAnnualDocument(tx, { yearEnd, name: organisation.displayName, draftId: hasDraft ? input.draftId : undefined });
+  const notes: StatementNotes = document.notes ? { saved: true, notes: document.notes, own: true } : await getStatementNotes(tx);
   // This year and last year in each default layout.
   const layout = (base: FinancialReportBase) =>
     runDefaultLayout(
@@ -648,7 +652,6 @@ export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unkn
     ? { ...cashFlowsStandard, layout: { reportId: cfLayout.report.id, title: cfLayout.report.title }, ...cashFlowLines(cfLayout.figures, yearEnd, priorEnd) }
     : cashFlowsStandard;
 
-  const document = await getAnnualDocument(tx, { yearEnd, name: organisation.displayName });
   const titles = document.texts.titles;
   const statements = [performance, position, equity, cashFlows].map((statement) => (titles[statement.key] ? { ...statement, title: titles[statement.key] } : statement));
   const register = await fixedAssetRegister(tx, { asOf: yearEnd });
@@ -681,7 +684,7 @@ export async function buildFinancialStatements(tx: OrgTx, input: { yearEnd: unkn
 export type FinancialStatementsPdf = { fileName: string; bytes: Uint8Array };
 
 /** The year's financial statements as one PDF (FS1-FS3), made from what the report shows (FS4). */
-export async function financialStatementsPdf(tx: OrgTx, input: { yearEnd: unknown }, now = new Date()): Promise<FinancialStatementsPdf> {
+export async function financialStatementsPdf(tx: OrgTx, input: { yearEnd?: unknown; draftId?: unknown }, now = new Date()): Promise<FinancialStatementsPdf> {
   const report = await buildFinancialStatements(tx, input, now);
   const { name, notes } = report;
   const yearEnd = report.yearEnd;
