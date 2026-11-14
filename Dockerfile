@@ -2,7 +2,7 @@
 # .github/workflows/release-server-bundle.yml when a v* tag is pushed.
 # The database is PostgreSQL, run separately (see deploy/windows).
 
-FROM node:22-bookworm-slim AS build
+FROM node:25-bookworm-slim AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
@@ -10,7 +10,7 @@ RUN npm ci
 COPY . .
 RUN npm run build && node scripts/build-admin.mjs
 
-FROM node:22-bookworm-slim AS cloudflared
+FROM node:25-bookworm-slim AS cloudflared
 # cloudflared runs the Cloudflare Tunnel for remote access (Server > Remote access).
 # Pinned, and checked against the SHA-256 of that release's file.
 ARG CLOUDFLARED_VERSION=2026.9.3
@@ -18,7 +18,7 @@ ARG CLOUDFLARED_SHA256=77e26d8d900e0b8469f416239d14b5f296525fdf79fee6f511ef55609
 ADD https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64 /cloudflared
 RUN echo "${CLOUDFLARED_SHA256}  /cloudflared" | sha256sum -c - && chmod 0755 /cloudflared
 
-FROM node:22-bookworm-slim
+FROM node:25-bookworm-slim
 # pg_dump and pg_restore for backups, from PostgreSQL's own apt repository:
 # they must be at least the database server's version (17 in docker-compose).
 RUN apt-get update \
