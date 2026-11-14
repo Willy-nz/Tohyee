@@ -10,7 +10,7 @@ import { checkDashboardImages } from "@/lib/analytics/images";
 import { customThemeId, parseThemeChoice, type ReportTheme } from "@/lib/charts/report-themes";
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
 import { TILE_HEIGHTS, TILE_WIDTHS, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
-import { pageForSaving, parsePages, reportPages, type ReportPage, tilePage } from "@/lib/analytics/pages";
+import { pageForSaving, pagePictureIds, parsePages, reportPages, type ReportPage, tilePage } from "@/lib/analytics/pages";
 import { isRangeStyle, parseSlicerExtras, slicerValueFields, type SlicerSetting } from "@/lib/analytics/slicers";
 import { parseBookmarks, type Bookmark } from "@/lib/analytics/bookmarks";
 import { parsePageFilters, parseTileDates, type TileDates } from "@/lib/analytics/report-filters";
@@ -564,7 +564,7 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
   const tiles = carryCommentary([], parseTiles(input.tiles ?? [], tables, settings.pages, settings.bookmarks));
   checkParameters(settings, tiles);
   // An image is uploaded to a report that's already saved.
-  if (tiles.some((tile) => tile.visual === "image")) throw new ValidationError("Save the report first, then add images to it.");
+  if (tiles.some((tile) => tile.visual === "image") || pagePictureIds(settings.pages).length) throw new ValidationError("Save the report first, then add images to it.");
   const result = await tx.query<{ id: string }>(
     `insert into analytics_dashboards (name, description, settings, tiles, created_by_email, updated_by_email)
      values ($1, $2, $3::jsonb, $4::jsonb, $5, $5) returning id::text`,
@@ -645,7 +645,7 @@ export async function updateDashboard(
   const tiles = input.tiles === undefined || options.commentary === "as_given" ? parsed : carryCommentary(current.tiles, parsed, Boolean(tx.actor.via));
   if (input.tiles !== undefined || input.settings !== undefined) checkParameters(settings, tiles);
   // Images must be this report's own; ones no tile uses any more are removed (decision 684).
-  if (input.tiles !== undefined) await checkDashboardImages(tx, current.id, tiles);
+  if (input.tiles !== undefined || input.settings !== undefined) await checkDashboardImages(tx, current.id, tiles, pagePictureIds(settings.pages));
   const updated = await tx.query(
     `update analytics_dashboards set name = $2, description = $3, settings = $4::jsonb, tiles = $5::jsonb,
             updated_by_email = $6, updated_at = now(), version = version + 1 where id = $1 and version = $7`,

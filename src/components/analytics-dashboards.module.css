@@ -492,3 +492,14 @@
 @media (max-width: 600px) {
   .historyItem { flex-direction:column; }
 }
+
+/* Present (#707): the report full screen, one page a slide. The page's own chrome is hidden; a small bar steps through. */
+.presentRoot:focus, .presenting:focus { outline: none; }
+.presenting { position: fixed; inset: 0; z-index: 1000; overflow: auto; padding: 28px 40px 72px; background: var(--page, var(--background)); }
+.presenting [data-present="hide"] { display: none !important; }
+.presenting .header { margin-bottom: 8px; }
+.slideName { margin: 0 0 12px; color: var(--text-muted); font-size: var(--text-lg); font-weight: 600; }
+.slideBar { position: fixed; right: 20px; bottom: 16px; z-index: 1001; display: flex; gap: 8px; align-items: center; padding: 6px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); box-shadow: 0 2px 10px rgb(0 0 0 / 12%); font-size: var(--text-sm); opacity: 0.35; transition: opacity 0.15s; }
+.slideBar:hover, .slideBar:focus-within { opacity: 1; }
+@media print { .slideBar { display: none; } }
+.presenting .grid { min-height: calc(100vh - 170px); align-content: start; }
