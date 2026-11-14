@@ -71,7 +71,7 @@
     "mailparser": "^3.12.4",
     "smtp-server": "^3.21.1",
     "tsx": "^4.23.15",
-    "typescript": "^5",
+    "typescript": "^7",
     "unpdf": "^1.8.1",
     "vitest": "^4.1.12"
   },
