@@ -10,7 +10,7 @@ import { checkDashboardImages } from "@/lib/analytics/images";
 import { customThemeId, parseThemeChoice, type ReportTheme } from "@/lib/charts/report-themes";
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
 import { TILE_HEIGHTS, TILE_WIDTHS, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
-import { pageForSaving, parsePages, reportPages, type ReportPage } from "@/lib/analytics/pages";
+import { pageForSaving, parsePages, reportPages, type ReportPage, tilePage } from "@/lib/analytics/pages";
 import { isRangeStyle, parseSlicerExtras, slicerValueFields, type SlicerSetting } from "@/lib/analytics/slicers";
 import { parseBookmarks, type Bookmark } from "@/lib/analytics/bookmarks";
 import { parsePageFilters, parseTileDates, type TileDates } from "@/lib/analytics/report-filters";
@@ -55,6 +55,25 @@ export type { TileHeight, TileWidth } from "@/lib/analytics/layout";
 /** A chart or table, or a non-data item: text (with values), an image, a shape or a button (#376 phase 2). */
 export type TileVisual = Visual | ItemVisual;
 
+/**
+ * Commentary the connected AI wrote in a text tile (#706, decision 1618):
+ * "suggested" until a person accepts it, as report commentary is (decision
+ * 446). Only the server sets it: the AI's tool writes it, a person's Accept
+ * changes it, and an ordinary save carries it over unchanged.
+ */
+export type TileCommentary = {
+  status: "suggested" | "accepted";
+  /** How it came, e.g. AI key "Claude". */
+  via: string;
+  /** The person whose AI wrote it. */
+  byEmail: string;
+  writtenAt: string;
+  /** The report's dates when it was written (null: all time). */
+  about: { from: string | null; to: string | null };
+  acceptedByEmail?: string;
+  acceptedAt?: string;
+};
+
 export type Tile = {
   id: string;
   title: string;
@@ -68,6 +87,8 @@ export type Tile = {
   text?: string;
   /** "rich": the notes use bold, italic, links, lists and {Value} (decision 683); left out, plain text as before. */
   textFormat?: "rich";
+  /** A text tile the AI wrote as commentary (#706). */
+  commentary?: TileCommentary;
   image?: ImageItem;
   shape?: ShapeItem;
   button?: ButtonItem;
@@ -180,6 +201,50 @@ const COLUMNS = "id::text, name, description, settings, tiles, version, created_
  * Who's looking: a report viewer (decision 360) sees only the dashboards
  * shared with them; everyone else in the organisation sees them all.
  */
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A stored commentary mark, or nothing when it isn't one (it's dropped, never refused: only the server writes it). */
+function parseCommentary(input: unknown): TileCommentary | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const raw = input as Record<string, unknown>;
+  const words = (value: unknown, most: number) => (typeof value === "string" && value.length > 0 && value.length <= most ? value : null);
+  const day = (value: unknown) => (typeof value === "string" && ISO_DAY.test(value) ? value : null);
+  const via = words(raw.via, 200);
+  const byEmail = words(raw.byEmail, 320);
+  const writtenAt = words(raw.writtenAt, 40);
+  if ((raw.status !== "suggested" && raw.status !== "accepted") || !via || !byEmail || !writtenAt) return undefined;
+  const about = raw.about && typeof raw.about === "object" ? (raw.about as Record<string, unknown>) : {};
+  const acceptedByEmail = words(raw.acceptedByEmail, 320);
+  const acceptedAt = words(raw.acceptedAt, 40);
+  return {
+    status: raw.status,
+    via,
+    byEmail,
+    writtenAt,
+    about: { from: day(about.from), to: day(about.to) },
+    ...(raw.status === "accepted" && acceptedByEmail && acceptedAt ? { acceptedByEmail, acceptedAt } : {}),
+  };
+}
+
+/**
+ * An ordinary save can't make, accept or relabel commentary (#706): each
+ * tile keeps the mark the saved report has for it, whatever was sent, and a
+ * tile that had none gets none.
+ */
+function carryCommentary(current: Tile[], next: Tile[], throughAi = false): Tile[] {
+  const before = new Map(current.flatMap((tile) => (tile.commentary ? [[tile.id, tile] as const] : [])));
+  return next.map((tile) => {
+    const rest: Tile = { ...tile };
+    delete rest.commentary;
+    const was = tile.visual === "text" ? before.get(tile.id) : undefined;
+    if (!was?.commentary) return rest;
+    // Words an AI changes after a person accepted them need checking again.
+    const reworded = throughAi && was.commentary.status === "accepted" && (was.text ?? "") !== (tile.text ?? "");
+    const mark = was.commentary;
+    return { ...rest, commentary: reworded ? { status: "suggested", via: mark.via, byEmail: mark.byEmail, writtenAt: mark.writtenAt, about: mark.about } : mark };
+  });
+}
+
 export type DashboardReader = { userId: string | null; reportViewer: boolean };
 
 const EVERYONE: DashboardReader = { userId: null, reportViewer: false };
@@ -206,7 +271,9 @@ export async function getDashboard(tx: OrgTx, id: string, reader: DashboardReade
     const shared = await tx.query("select 1 from analytics_dashboard_shares where dashboard_id = $1 and user_id = $2", [dashboardId, reader.userId ?? ""]);
     if (shared.rows.length === 0) throw new NotFoundError("That dashboard wasn't found.");
   }
-  const dashboard = toDashboard(result.rows[0], await dateContext(tx));
+  const read = toDashboard(result.rows[0], await dateContext(tx));
+  // A report viewer (a client) sees commentary only once a person has accepted it (#706).
+  const dashboard = reader.reportViewer ? { ...read, tiles: read.tiles.filter((tile) => tile.commentary?.status !== "suggested") } : read;
   const custom = customThemeId(dashboard.settings.theme);
   return custom ? { ...dashboard, customTheme: await findTheme(tx, custom) } : dashboard;
 }
@@ -401,7 +468,8 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>, pages?: R
       } catch (error) {
         throw new ValidationError(`${title}: ${error instanceof Error ? error.message : String(error)}`);
       }
-      return { id, title, visual, width, query, ...(text ? { text } : {}), ...(rich ? { textFormat: "rich" as const } : {}), ...(format ? { format } : {}) };
+      const commentary = parseCommentary(tile.commentary);
+      return { id, title, visual, width, query, ...(text ? { text } : {}), ...(rich ? { textFormat: "rich" as const } : {}), ...(format ? { format } : {}), ...(commentary ? { commentary } : {}) };
     }
     if (visual === "image" || visual === "shape" || visual === "button") {
       let format: ChartFormat | undefined;
@@ -492,7 +560,8 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
   const name = parseName(input.name);
   const settings = parseSettings(input.settings, tables);
   await checkTheme(tx, settings);
-  const tiles = parseTiles(input.tiles ?? [], tables, settings.pages, settings.bookmarks);
+  // A new report has no commentary: the AI adds it to a saved report with its own tool (#706).
+  const tiles = carryCommentary([], parseTiles(input.tiles ?? [], tables, settings.pages, settings.bookmarks));
   checkParameters(settings, tiles);
   // An image is uploaded to a report that's already saved.
   if (tiles.some((tile) => tile.visual === "image")) throw new ValidationError("Save the report first, then add images to it.");
@@ -555,7 +624,13 @@ function parseExpectedVersion(input: unknown): number | null {
  * check is in the update itself, so two saves at the same moment can't both
  * win. Without it the save replaces what's there, as before.
  */
-export async function updateDashboard(tx: OrgTx, id: string, input: Record<string, unknown>, options: { change?: string } = {}): Promise<Dashboard> {
+export async function updateDashboard(
+  tx: OrgTx,
+  id: string,
+  input: Record<string, unknown>,
+  /** `commentary: "as_given"` is for the server's own commentary changes (the AI's tool, Accept, a version put back); anything else carries the saved marks over. */
+  options: { change?: string; commentary?: "as_given" } = {},
+): Promise<Dashboard> {
   await requireAnalytics(tx);
   const expectedVersion = parseExpectedVersion(input.expectedVersion);
   const current = await getDashboard(tx, id);
@@ -566,7 +641,8 @@ export async function updateDashboard(tx: OrgTx, id: string, input: Record<strin
   const settings = input.settings === undefined ? current.settings : parseSettings(input.settings, tables);
   if (input.settings !== undefined && settings.theme !== current.settings.theme) await checkTheme(tx, settings);
   // Tiles are checked against the tables as they are now only when they're changed.
-  const tiles = input.tiles === undefined ? current.tiles : parseTiles(input.tiles, tables, settings.pages, settings.bookmarks);
+  const parsed = input.tiles === undefined ? current.tiles : parseTiles(input.tiles, tables, settings.pages, settings.bookmarks);
+  const tiles = input.tiles === undefined || options.commentary === "as_given" ? parsed : carryCommentary(current.tiles, parsed, Boolean(tx.actor.via));
   if (input.tiles !== undefined || input.settings !== undefined) checkParameters(settings, tiles);
   // Images must be this report's own; ones no tile uses any more are removed (decision 684).
   if (input.tiles !== undefined) await checkDashboardImages(tx, current.id, tiles);
@@ -613,7 +689,82 @@ export async function restoreDashboardVersion(tx: OrgTx, id: string, input: Reco
     tx,
     current.id,
     { expectedVersion: input.expectedVersion, name: old.name, description: old.description, settings: old.settings, tiles: old.tiles },
-    { change: `Put back version ${version}` },
+    // A version's commentary marks were the server's own, so they come back as they were.
+    { change: `Put back version ${version}`, commentary: "as_given" },
+  );
+}
+
+export const MAX_COMMENTARY_TILES = 12;
+
+/**
+ * Adds commentary the connected AI wrote (#706): a text tile marked
+ * "suggested", placed after the tile it's about (or at the end of a page).
+ * `via` is how the AI is connected, e.g. AI key "Claude".
+ */
+export async function suggestCommentary(
+  tx: OrgTx,
+  id: string,
+  input: { text: unknown; title?: unknown; aboutTileId?: unknown; page?: unknown; width?: unknown; expectedVersion?: unknown },
+  via: string,
+): Promise<{ dashboard: Dashboard; tileId: string }> {
+  await requireAnalytics(tx);
+  const current = await getDashboard(tx, id);
+  if (typeof input.text !== "string" || !input.text.trim()) throw new ValidationError("Write the commentary.");
+  if (current.tiles.filter((tile) => tile.commentary).length >= MAX_COMMENTARY_TILES) {
+    throw new ValidationError(`A report can have up to ${MAX_COMMENTARY_TILES} commentary boxes. A person can remove one in Tohyee first.`);
+  }
+  const about = input.aboutTileId == null || input.aboutTileId === "" ? null : current.tiles.find((tile) => tile.id === input.aboutTileId);
+  if (about === undefined) throw new ValidationError("aboutTileId isn't a tile of this report.");
+  const pages = reportPages(current.settings.pages);
+  const page = about ? tilePage(about, current.settings.pages) : typeof input.page === "string" && input.page ? input.page : pages[0].id;
+  if (!pages.some((entry) => entry.id === page)) throw new ValidationError("That page isn't in this report.");
+  const tileId = `commentary-${randomUUID().slice(0, 8)}`;
+  const tile = {
+    id: tileId,
+    title: typeof input.title === "string" && input.title.trim() ? input.title.trim() : about ? `Commentary: ${about.title}` : "Commentary",
+    visual: "text",
+    width: TILE_WIDTHS.includes(input.width as TileWidth) ? input.width : about && about.width !== "full" ? about.width : "full",
+    text: input.text,
+    textFormat: "rich",
+    ...(page !== pages[0].id ? { page } : {}),
+    commentary: {
+      status: "suggested",
+      via,
+      byEmail: tx.actor.email,
+      writtenAt: new Date().toISOString(),
+      about: { from: current.settings.from, to: current.settings.to },
+    } satisfies TileCommentary,
+  };
+  const at = about ? current.tiles.indexOf(about) + 1 : current.tiles.length;
+  const tiles: unknown[] = [...current.tiles.slice(0, at), tile, ...current.tiles.slice(at)];
+  const dashboard = await updateDashboard(
+    tx,
+    current.id,
+    { expectedVersion: input.expectedVersion, tiles },
+    { change: about ? `Suggested commentary on ${about.title}` : "Suggested commentary", commentary: "as_given" },
+  );
+  return { dashboard, tileId };
+}
+
+/** A person accepts the AI's commentary (it then shows to report viewers too), or removes it (#706). */
+export async function decideCommentary(tx: OrgTx, id: string, tileId: string, input: { action?: unknown; expectedVersion?: unknown }): Promise<Dashboard> {
+  await requireAnalytics(tx);
+  if (input.action !== "accept" && input.action !== "remove") throw new ValidationError("Choose Accept or Remove.");
+  const current = await getDashboard(tx, id);
+  const tile = current.tiles.find((entry) => entry.id === tileId);
+  if (!tile?.commentary) throw new NotFoundError("That commentary isn't in this report any more.");
+  if (input.action === "accept" && tile.commentary.status === "accepted") return current;
+  const tiles =
+    input.action === "remove"
+      ? current.tiles.filter((entry) => entry.id !== tileId)
+      : current.tiles.map((entry) =>
+          entry.id === tileId ? { ...entry, commentary: { ...tile.commentary!, status: "accepted" as const, acceptedByEmail: tx.actor.email, acceptedAt: new Date().toISOString() } } : entry,
+        );
+  return updateDashboard(
+    tx,
+    current.id,
+    { expectedVersion: input.expectedVersion, tiles },
+    { change: `${input.action === "accept" ? "Accepted" : "Removed"} the AI's commentary ${tile.title}`, commentary: "as_given" },
   );
 }
 

@@ -5,6 +5,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import * as foldersRoute from "@/app/api/admin/analytics-folders/route";
 import * as tokensRoute from "@/app/api/ai/tokens/route";
 import * as dashboardRoute from "@/app/api/analytics/dashboards/[dashboardId]/route";
+import * as commentaryRoute from "@/app/api/analytics/dashboards/[dashboardId]/commentary/[tileId]/route";
 import * as historyRoute from "@/app/api/analytics/dashboards/[dashboardId]/history/route";
 import * as loadRoute from "@/app/api/analytics/sources/[sourceId]/load/route";
 import * as sourcesRoute from "@/app/api/analytics/sources/route";
@@ -344,5 +345,61 @@ describeWithDatabase("the AI's Analytics reports", () => {
     const made = await call(tokens["owner-drafts"], "create_analytics_dashboard", { name: "Formatted", tiles: [share] });
     const read = await call(tokens["viewer-read"], "get_analytics_dashboard", { dashboardId: String((made.dashboard as Json).id) });
     expect((read.tiles as Json[])[0]).toMatchObject({ format: { series: [{ number: { style: "percent", decimals: 1 } }], card: { subtitle: "Orders from Otago as a share of all orders" } } });
+  });
+
+  it("#706: the AI suggests commentary; a person accepts or removes it; a save can't forge it; an AI rewording needs checking again", async () => {
+    const made = await call(tokens["owner-drafts"], "create_analytics_dashboard", { name: "With commentary", dates: { from: "2026-01-01", to: "2026-12-31" }, tiles: [SALES_BY_REGION, ORDERS] });
+    const id = String((made.dashboard as Json).id);
+    // A look-only key can't; and it has to be about a tile of this report.
+    await expect(call(tokens["viewer-read"], "suggest_analytics_commentary", { dashboardId: id, text: "Otago leads." })).rejects.toThrow();
+    await expect(call(tokens["owner-drafts"], "suggest_analytics_commentary", { dashboardId: id, text: "Otago leads.", aboutTileId: "nope" })).rejects.toThrow(/isn't a tile of this report/);
+
+    const suggested = await call(tokens["owner-drafts"], "suggest_analytics_commentary", { dashboardId: id, text: "**Otago** makes nearly all the sales.", aboutTileId: "sales-by-region" });
+    const tileId = String(suggested.tileId);
+    const read = async (token: string) => (await call(token, "get_analytics_dashboard", { dashboardId: id })).tiles as Json[];
+    const tiles = await read(tokens["owner-drafts"]);
+    // Straight after the tile it's about, marked as suggested, with the report's dates.
+    expect(tiles.map((tile) => tile.id)).toEqual(["sales-by-region", tileId, expect.any(String)]);
+    const fromRoute = async () => {
+      const response = await dashboardRoute.GET(apiRequest(`/api/analytics/dashboards/${id}?organisationId=${ORG}`, { cookie: ownerCookie }), params({ dashboardId: id }));
+      return ((await response.json()) as { dashboard: { version: number; tiles: Json[] } }).dashboard;
+    };
+    let dashboard = await fromRoute();
+    expect(dashboard.tiles.find((tile) => tile.id === tileId)).toMatchObject({
+      title: "Commentary: Sales by region",
+      visual: "text",
+      text: "**Otago** makes nearly all the sales.",
+      commentary: { status: "suggested", byEmail: owner.email, about: { from: "2026-01-01", to: "2026-12-31" }, via: expect.stringContaining("AI key") },
+    });
+
+    // An ordinary save can't mark it accepted, or make commentary out of another text tile.
+    const forged = dashboard.tiles.map((tile) => (tile.id === tileId ? { ...tile, commentary: { ...(tile.commentary as Json), status: "accepted", acceptedByEmail: "x@example.com", acceptedAt: "2026-01-01T00:00:00Z" } } : tile));
+    forged.push({ id: "note", title: "Note", visual: "text", width: "half", text: "Mine", commentary: { status: "accepted", via: "AI", byEmail: "x@example.com", writtenAt: "2026-01-01T00:00:00Z", about: {} } });
+    const patched = await dashboardRoute.PATCH(apiRequest(`/api/analytics/dashboards/${id}`, { method: "PATCH", cookie: ownerCookie, body: { organisationId: ORG, tiles: forged, expectedVersion: dashboard.version } }), params({ dashboardId: id }));
+    expect(patched.status).toBe(200);
+    dashboard = await fromRoute();
+    expect((dashboard.tiles.find((tile) => tile.id === tileId)!.commentary as Json).status).toBe("suggested");
+    expect(dashboard.tiles.find((tile) => tile.id === "note")).not.toHaveProperty("commentary");
+
+    // A person accepts it; it says who and when.
+    const decide = (action: string, cookie = ownerCookie) =>
+      commentaryRoute.POST(apiRequest(`/api/analytics/dashboards/${id}/commentary/${tileId}`, { method: "POST", cookie, body: { organisationId: ORG, action, expectedVersion: dashboard.version } }), params({ dashboardId: id, tileId }));
+    const accepted = await decide("accept");
+    expect(accepted.status).toBe(200);
+    dashboard = await fromRoute();
+    expect(dashboard.tiles.find((tile) => tile.id === tileId)!.commentary).toMatchObject({ status: "accepted", acceptedByEmail: owner.email, acceptedAt: expect.any(String) });
+
+    // The AI rewording accepted commentary puts it back to suggested.
+    await call(tokens["owner-drafts"], "update_analytics_dashboard", { dashboardId: id, changeTiles: [{ tileId, text: "Otago makes all of it." }] });
+    dashboard = await fromRoute();
+    const reworded = dashboard.tiles.find((tile) => tile.id === tileId)!;
+    expect(reworded.commentary).toMatchObject({ status: "suggested" });
+    expect(reworded.commentary).not.toHaveProperty("acceptedByEmail");
+
+    // Remove takes the box off; doing it again says it's gone.
+    expect((await decide("remove")).status).toBe(200);
+    dashboard = await fromRoute();
+    expect(dashboard.tiles.some((tile) => tile.id === tileId)).toBe(false);
+    expect((await decide("remove")).status).toBe(404);
   });
 });

@@ -66,6 +66,7 @@ export const SCREEN_COVERAGE: Record<string, ScreenCoverage> = {
   "DELETE /api/analytics/connections/[connectionId]": {"next": "analytics"},
   "POST /api/analytics/connections": {"next": "analytics"},
   "POST /api/analytics/connections/test": {"person": "Connecting or disconnecting another service needs the person's own sign-in or secret."},
+  "POST /api/analytics/dashboards/[dashboardId]/commentary/[tileId]": {"person": "A person checks the AI's commentary before it counts: accepting or removing it isn't for the AI."},
   "POST /api/analytics/dashboards/[dashboardId]/history": {"next": "analytics"},
   "POST /api/analytics/dashboards/[dashboardId]/images": {"next": "analytics"},
   "PATCH /api/analytics/dashboards/[dashboardId]": {"next": "analytics"},
