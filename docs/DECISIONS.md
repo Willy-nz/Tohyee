@@ -14882,3 +14882,16 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       top-bar notice that leads to Data sources; one failure alone is often
       a passing fault and stays on the report. Not built: a "Try again"
       link on the report, and an email. Claude's details, not yet reviewed.
+1623. **A report with no formatting looks tidier: no cents on big headline
+      figures, and a quiet pin button** (#692, first part). A key figure in
+      money that has no number format of its own shows no cents from 1,000
+      up ("$91,195", not "$91,195.00"), with the figure to the cent in its
+      tooltip; the change and the figure it's compared with are written the
+      same way. Under 1,000 keeps its cents, and a tile that sets decimals
+      or the short form is left exactly as it was. This is how the figure is
+      shown only: the answer, exports and the AI still get every cent.
+      "Pin to page" on each tile is now a small "⋯" button with the same
+      menu, and "Nothing to compare with" is one short line. Still to do
+      from #692: comparison and sparkline by default, ratios as percent,
+      rounded formula answers, donut labels, the dates bar. Claude's
+      details, not yet reviewed.
