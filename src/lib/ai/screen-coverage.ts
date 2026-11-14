@@ -58,6 +58,8 @@ export const SCREEN_COVERAGE: Record<string, ScreenCoverage> = {
   "DELETE /api/ai-workspace/datasets/[name]": {"next": "accounting"},
   "DELETE /api/ai-workspace/files/[fileId]": {"next": "accounting"},
   "POST /api/ai-workspace/files": {"next": "accounting"},
+  "PUT /api/ai/action-approval-settings": {"person": "AI keys and AI settings are set by a person, never by an AI."},
+  "POST /api/ai/action-requests/[requestId]/decide": {"person": "A person approves or declines what the AI asked for; the AI can't approve itself."},
   "PUT /api/ai/journal-void-settings": {"person": "AI keys and AI settings are set by a person, never by an AI."},
   "POST /api/ai/tokens/[tokenId]/revoke": {"person": "AI keys and AI settings are set by a person, never by an AI."},
   "POST /api/ai/tokens": {"person": "AI keys and AI settings are set by a person, never by an AI."},

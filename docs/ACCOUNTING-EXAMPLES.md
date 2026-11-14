@@ -22662,3 +22662,35 @@ all 30 sold as bobby calves.
 - **Bull calves:** none left, and the bobby calf sale isn't in b: nothing.
 - LV6, LV11, LV23 and LV29 come out the same as before: none has bought
   stock and deaths together.
+
+## AI: a person approves voids, deletes and roll-backs (AIH1-AIH6; built by Claude 14 Nov 2026 for #697, neither Xero nor NetSuite has an equivalent, the details are Claude's, not yet reviewed)
+
+At Full access an AI voids, deletes, removes and rolls back in two calls: the
+first shows what it acts on, the second (with the hash from the first) does
+it. An owner can have a person approve the second step.
+
+Made-up invoice: INV-0042 to Aroha Made-up, 100.00, approved.
+
+- **AIH1** Off (as every organisation starts): the AI previews INV-0042,
+  calls again with the hash, and the invoice is **voided**. Nothing changes
+  from before.
+- **AIH2** An owner turns on "A person approves the AI's voids, deletes and
+  roll-backs". The AI previews INV-0042 and calls again with the hash. The
+  invoice stays **approved**. The AI is told it is waiting for a person, and
+  the AI page shows "Void an invoice" with the same preview (INV-0042,
+  100.00, approved), who asked and through which key. Asking again is the
+  same request, not a second one. Bookkeepers and up see a notice in the top
+  bar.
+- **AIH3** A bookkeeper clicks Approve. The invoice is **voided** on the date
+  the AI gave, by the bookkeeper (the history shows them, through the AI
+  key, approved in Tohyee). The AI, asking again, is told it was approved and
+  gets the tool's own answer. A viewer can't approve or decline.
+- **AIH4** Declined: INV-0042 stays **approved**, and the AI, asking again, is
+  told it was declined and not to ask again unless the person says so.
+- **AIH5** Someone voids INV-0042 on the screen before the request is
+  approved. Approving then does nothing: the tool's own check sees it has
+  changed, the request shows "Couldn't be done", and nothing is posted.
+- **AIH6** Previews, and everything that isn't a void, delete, removal or
+  roll-back, go ahead as always. An AI discarding its own unposted draft
+  journal has no second step and isn't held. Turning the setting off puts
+  AIH1 back; a request already waiting can still be approved or declined.

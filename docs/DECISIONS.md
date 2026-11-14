@@ -15028,3 +15028,23 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       annual_statement_drafts and copies each year's saved words into it.
       Claude's details (titles, Copy of, one final a year), not yet reviewed.
 
+1633. **An owner can have a person approve the AI's voids, deletes and
+      roll-backs** (#697; worked examples AIH1-AIH6). Off by default, so
+      nothing changes unless an owner turns it on (AI page). With it on,
+      the second call of any destructive tool (the 41 that confirm with a
+      confirmHash or previewHash: voids, deletes, removals, archives,
+      disposals, undos, roll-backs, exclusions, the lock date, recoding and
+      correcting) does nothing and leaves a request with the preview the AI
+      saw. A bookkeeper or higher approves or declines it on the AI page;
+      a tool whose screen needs an owner or admin needs one to approve.
+      Approving runs the same tool with the AI's arguments and idempotency
+      key, as the approver, noted as through the AI key and approved in
+      Tohyee. If the record changed in between, the tool's own check
+      refuses and the request shows "Couldn't be done". The same call
+      asked again gets the request's answer (waiting, approved with the
+      result, or declined) for a day, not a new request. A request stuck
+      "running" for 5 minutes (the server stopped) can be decided again.
+      Bookkeepers and up get a top-bar notice while anything waits.
+      Tenant migration 0283. Not built: only above an amount or only in a
+      locked or reconciled period, and a list of everything the AI voided
+      or deleted in the last 30 days. Claude's details, not yet reviewed.

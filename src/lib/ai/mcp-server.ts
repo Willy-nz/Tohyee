@@ -1,3 +1,5 @@
+import { holdForApproval } from "@/lib/ai/action-approval-run";
+import { runAiTool } from "@/lib/ai/run-tool";
 import { AI_TOOL_SCOPE_HELP, AI_TOOL_SCOPE_LABELS, outsideScopeMessage, scopeAllows } from "@/lib/ai/tool-scopes";
 import packageJson from "../../../package.json";
 import { AI_ACCESS_LEVEL_AI_WORDS, AI_ACCESS_LEVEL_LABELS, levelAllows, roleNeededFor } from "@/lib/ai/access-levels";
@@ -10,9 +12,7 @@ import { moduleHidesTool, toolGroupStatuses, type ToolModules } from "@/lib/ai/t
 import { ToolFileAnswer } from "@/lib/ai/tools";
 import { aiKeyVia, type AiTokenIdentity } from "@/lib/ai/tokens";
 import { type Role, roleAtLeast } from "@/lib/auth/roles";
-import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { HttpError } from "@/lib/errors";
-import { loadMemberNames } from "@/lib/people/names";
 
 function text(value: string, isError = false): CallToolResult {
   return isError ? { content: [{ type: "text", text: value }], isError: true } : { content: [{ type: "text", text: value }] };
@@ -115,7 +115,6 @@ export function mcpServerFor(
         return text(moduleHidesTool(tool.name, modules) ?? (scope && !scopeAllows(scope, tool.name) ? outsideScopeMessage(scope, tool.name) : `This key can't use ${name}.`), true);
       }
       try {
-        const people = await loadMemberNames(organisation.id);
         const actor = { userId: identity.user.id, email: identity.user.email, via: aiKeyVia(identity), role: identity.membership.role };
         const context = {
           role: identity.membership.role,
@@ -127,11 +126,11 @@ export function mcpServerFor(
           organisation,
           actor,
         };
-        const readOnly = tool.readOnly ?? tool.level === "read";
+        // A person approves the AI's voids, deletes and roll-backs when the organisation says so (#697, decision 1633).
+        const held = await holdForApproval(tool, organisation, actor, context, args, { tokenId: identity.tokenId, via: aiKeyVia(identity) });
+        if (held) return text(JSON.stringify(held));
         // A tool that works in steps (a durable batch, #547) commits each step on its own.
-        const result = tool.runSteps
-          ? await tool.runSteps((work) => withOrganisationTransaction(organisation, actor, work, { people, readOnly }), args, context)
-          : await withOrganisationTransaction(organisation, actor, (tx) => tool.run(tx, args, context), { people, readOnly });
+        const result = await runAiTool(tool, organisation, actor, context, args);
         const answer = result instanceof ToolFileAnswer ? result.answer : result;
         const json = boundedJson(answer);
         if (json === null) {
