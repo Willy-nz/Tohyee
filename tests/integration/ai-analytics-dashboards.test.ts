@@ -441,4 +441,26 @@ describeWithDatabase("the AI's Analytics reports", () => {
     expect(read).toMatchObject({ theme: "harbour" });
     expect((read.tiles as Json[]).map((tile) => tile.id)).toEqual(["sales-by-region", "orders", "sales-by-month"]);
   });
+
+  it("#691: the AI is told what a person would notice: design notes come with a save and a read, and go when fixed", async () => {
+    const lonely = { id: "orders", title: "Orders", visual: "kpi", width: "quarter", query: { table: "sales", measures: [{ label: "Orders", aggregate: "count" }], dateField: "order_date" } };
+    const cramped = { ...SALES_BY_MONTH, id: "cramped", width: "quarter" };
+    const made = await call(tokens["owner-drafts"], "create_analytics_dashboard", { name: "Needs a tidy", dates: { from: "2026-01-01", to: "2026-12-31" }, tiles: [lonely, cramped] });
+    const id = (made.dashboard as Json).id as string;
+    // The small chart has only a few columns in these dates, so it isn't cramped: the notes go by what's drawn.
+    expect((made.designNotes as Json[]).map((note) => note.tileId)).toEqual(["orders"]);
+    expect((made.designNotes as Json[])[0]).toMatchObject({ title: "Orders", note: expect.stringContaining("nothing to compare"), fix: expect.stringContaining("previous_period") });
+    let read = await call(tokens["viewer-read"], "get_analytics_dashboard", { dashboardId: id });
+    expect(read.designNotes).toHaveLength(1);
+
+    // Fixed as the notes say: nothing left to mention.
+    const fixed = await call(tokens["owner-drafts"], "update_analytics_dashboard", {
+      dashboardId: id,
+      expectedVersion: (made.dashboard as Json).version,
+      changeTiles: [{ tileId: "orders", query: { ...lonely.query, measures: [{ label: "Orders", aggregate: "count", compare: "previous_period" }], sparkline: true } }],
+    });
+    expect(fixed).not.toHaveProperty("designNotes");
+    read = await call(tokens["viewer-read"], "get_analytics_dashboard", { dashboardId: id });
+    expect(read).not.toHaveProperty("designNotes");
+  });
 });
