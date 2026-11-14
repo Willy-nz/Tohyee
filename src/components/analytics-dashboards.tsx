@@ -1120,6 +1120,18 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
               ) : (
                 <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} asSaved={savedQueries.get(tile.id) === JSON.stringify(tile.query)} onAction={runButtonAction} {...interactionFor(tile)} />
               )}
+              {tile.commentary ? (
+                <CommentaryNote
+                  organisationId={organisationId}
+                  dashboard={dashboard}
+                  tile={tile}
+                  canDecide={canEdit && !editing}
+                  onChanged={(fresh) => {
+                    setSaved(fresh);
+                    setHistory(null);
+                  }}
+                />
+              ) : null}
             </section>
             );
           })}
@@ -1167,10 +1179,71 @@ function tileClass(tile: Tile): string {
   return [
     styles.tile,
     WIDTH_CLASSES[tile.width] ?? styles.half,
-    tile.visual === "text" ? styles.textTile : "",
+    tile.visual === "text" && !tile.commentary ? styles.textTile : "",
+    tile.commentary ? styles.commentaryTile : "",
     card?.background === "tinted" ? styles.tinted : card?.background === "none" ? styles.bare : "",
     card?.border === false ? styles.borderless : "",
   ].filter(Boolean).join(" ");
+}
+
+/**
+ * Under a commentary box the connected AI wrote (#706): who suggested it and
+ * that it isn't checked, with Accept and Remove for people who can change the
+ * report; once accepted, who accepted it. It also says when the report's
+ * dates have moved on from the ones it was written about.
+ */
+function CommentaryNote({ organisationId, dashboard, tile, canDecide, onChanged }: { organisationId: string; dashboard: Dashboard; tile: Tile; canDecide: boolean; onChanged: (dashboard: Dashboard) => void }) {
+  const mark = tile.commentary!;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const via = mark.via.replace(/"/g, "");
+  const datesMoved = (mark.about.from ?? null) !== (dashboard.settings.from ?? null) || (mark.about.to ?? null) !== (dashboard.settings.to ?? null);
+  const aboutText = mark.about.from && mark.about.to ? `${formatDate(mark.about.from)} to ${formatDate(mark.about.to)}` : mark.about.to ? `up to ${formatDate(mark.about.to)}` : mark.about.from ? `from ${formatDate(mark.about.from)}` : "all dates";
+  async function decide(action: "accept" | "remove") {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api<{ dashboard: Dashboard }>(`/api/analytics/dashboards/${dashboard.id}/commentary/${encodeURIComponent(tile.id)}`, {
+        method: "POST",
+        body: { organisationId, action, expectedVersion: dashboard.version },
+      });
+      onChanged(result.dashboard);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className={`${styles.commentaryNote} ${mark.status === "suggested" ? styles.commentarySuggested : ""}`} data-print={mark.status === "suggested" ? "hide" : undefined}>
+      <p>
+        {mark.status === "suggested" ? (
+          <>
+            <strong>Suggested by the AI, not checked.</strong> From {mark.byEmail}&apos;s {via}, {formatDateTime(mark.writtenAt)}.
+          </>
+        ) : (
+          <>
+            Written by the AI ({via}); accepted by {mark.acceptedByEmail ?? "a person"}
+            {mark.acceptedAt ? `, ${formatDate(mark.acceptedAt.slice(0, 10))}` : ""}.
+          </>
+        )}{" "}
+        {datesMoved ? <span>It was written about {aboutText}; the report now shows other dates.</span> : null}
+      </p>
+      {canDecide ? (
+        <div className={styles.commentaryActions}>
+          {mark.status === "suggested" ? (
+            <Button size="small" disabled={busy} onClick={() => void decide("accept")}>
+              Accept
+            </Button>
+          ) : null}
+          <Button size="small" variant="secondary" disabled={busy} onClick={() => void decide("remove")}>
+            Remove
+          </Button>
+        </div>
+      ) : null}
+      {error ? <Notice tone="error">{error}</Notice> : null}
+    </div>
+  );
 }
 
 type ReportViewer = { userId: string; email: string; displayName: string; isActive: boolean };

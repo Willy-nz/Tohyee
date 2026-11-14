@@ -117,6 +117,7 @@ export const ANALYTICS_TOOLS: readonly string[] = [
   "create_analytics_dashboard",
   "create_analytics_dashboard_from_template",
   "update_analytics_dashboard",
+  "suggest_analytics_commentary",
   "refresh_analytics_sources",
 ];
 

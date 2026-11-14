@@ -6,6 +6,7 @@ import { buildTemplate, TEMPLATES } from "@/lib/analytics/templates";
 import {
   checkDashboardDraft,
   createDashboard,
+  suggestCommentary,
   type Dashboard,
   type DashboardReader,
   type DashboardSettings,
@@ -855,6 +856,37 @@ export const ANALYTICS_WRITE_TOOLS: AiTool[] = [
       const checked = await checkAndRun(run, { settings, tiles }, () => true);
       const dashboard = await run((tx) => createDashboard(tx, { name: args.name, description: args.description, settings, tiles: checked.tiles }));
       return saved(dashboard, checked.runs);
+    },
+  }),
+  stepped({
+    name: "suggest_analytics_commentary",
+    title: "Add commentary to an Analytics report",
+    description:
+      "Adds a commentary box to a report: a few plain sentences on what the figures show, beside the tile they're about (aboutTileId) or at the end of a page. It's shown as suggested by the AI, not checked, until a person accepts or removes it in Tohyee; report viewers see it only once accepted. Read the report with get_analytics_dashboard first and write only what its figures support, with the figures and dates you used. Bold, lists and links work (**bold**, - item).",
+    level: "draft",
+    inputSchema: schema(
+      {
+        dashboardId: { type: "string" },
+        text: { type: "string", maxLength: 4000, description: "The commentary: 2 to 5 short sentences, or a short list." },
+        aboutTileId: { ...TILE_ID, description: "The tile it's about: the box goes straight after it, on its page. Leave out for the whole page." },
+        title: { type: "string", maxLength: 100, description: "Default \"Commentary: \" and the tile's title." },
+        page: { type: "string", description: "With no aboutTileId: the page it goes at the end of; default the first." },
+        width: { type: "string", enum: [...TILE_WIDTHS], description: "Default the tile's own width, or full." },
+        expectedVersion: { type: "integer", minimum: 1, description: "The version you read; the save is refused if someone has saved since." },
+      },
+      ["dashboardId", "text"],
+    ),
+    async runSteps(run, args, context) {
+      requireEditor(context);
+      if (typeof args.text === "string" && args.text.length > 4000) throw new ValidationError("Commentary can be up to 4,000 characters. Nothing was saved.");
+      const result = await run((tx) =>
+        suggestCommentary(tx, String(args.dashboardId ?? ""), { text: args.text, title: args.title, aboutTileId: args.aboutTileId, page: args.page, width: args.width, expectedVersion: args.expectedVersion }, tx.actor.via ?? "the AI"),
+      );
+      return {
+        dashboard: dashboardSummary(result.dashboard),
+        tileId: result.tileId,
+        note: "Added as suggested by the AI, not checked. A person accepts or removes it on the report in Tohyee; until then report viewers don't see it. To change the words, a person edits the box, or remove it and suggest again.",
+      };
     },
   }),
   stepped({
