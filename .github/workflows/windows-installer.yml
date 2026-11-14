@@ -36,18 +36,18 @@ jobs:
         shell: pwsh
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7.0.0
+        uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm
 
       - name: Setup .NET (builds the Tohyee server app)
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
@@ -78,7 +78,7 @@ jobs:
 
       - name: Keep the pictures
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tray-screenshots
           path: dist/windows/tray-screenshots
@@ -87,7 +87,7 @@ jobs:
         run: ./installer/windows/test-install.ps1
 
       - name: Keep the installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: TohyeeSetup
           path: |
@@ -106,7 +106,7 @@ jobs:
     continue-on-error: true
     steps:
       - name: Get the pictures
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tray-screenshots
           path: shots
@@ -139,7 +139,7 @@ jobs:
       contents: write
     steps:
       - name: Get the installer
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: TohyeeSetup
           path: dist/windows
