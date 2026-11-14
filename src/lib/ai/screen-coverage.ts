@@ -54,6 +54,7 @@ export const SCREEN_COVERAGE: Record<string, ScreenCoverage> = {
   "DELETE /api/admin/users/[userId]/two-step": {"person": "Server settings are for server admins on the server computer."},
   "POST /api/admin/users": {"person": "Server settings are for server admins on the server computer."},
   "DELETE /api/ai-workspace/dashboards/[dashboardId]": {"next": "accounting"},
+  "POST /api/ai-workspace/dashboards/[dashboardId]/move": {"person": "A one-off tidy-up a person does on the AI workspace screen; an AI makes the same report itself with create_analytics_dashboard."},
   "DELETE /api/ai-workspace/datasets/[name]": {"next": "accounting"},
   "DELETE /api/ai-workspace/files/[fileId]": {"next": "accounting"},
   "POST /api/ai-workspace/files": {"next": "accounting"},

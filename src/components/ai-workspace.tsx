@@ -221,11 +221,32 @@ function Dashboard({ organisationId, id }: { organisationId: string; id: string 
   );
 }
 
+type Moved = { dashboard: { id: string; name: string }; left: Array<{ title: string; why: string }>; archived: boolean };
+
 function Dashboards({ organisationId }: { organisationId: string }) {
   const list = useApiData<{ dashboards: AiDashboard[] }>("/api/ai-workspace/dashboards", { organisationId });
+  const { can } = useWorkspace();
   const [chosen, setChosen] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [moved, setMoved] = useState<Moved | null>(null);
   const dashboards = list.data?.dashboards ?? [];
   const current = chosen ?? dashboards[0]?.id ?? null;
+  // Reports live in Analytics now (#693): this makes the same tiles there, over the same tables.
+  async function move(id: string) {
+    setBusy(true);
+    setError(null);
+    setMoved(null);
+    try {
+      setMoved(await api<Moved>(`/api/ai-workspace/dashboards/${id}/move`, { method: "POST", body: { organisationId } }));
+      setChosen(null);
+      list.reload();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <>
       <Card
@@ -245,8 +266,34 @@ function Dashboards({ organisationId }: { organisationId: string }) {
         }
       >
         {list.error ? <Notice tone="error">{list.error}</Notice> : null}
-        {list.data && dashboards.length === 0 ? <Empty>No dashboards yet. Ask your AI to make one.</Empty> : null}
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        {moved ? (
+          <Notice tone={moved.left.length ? "warning" : "success"}>
+            <a href={`/analytics/dashboards/${moved.dashboard.id}`}>{moved.dashboard.name}</a> is now an Analytics report.{" "}
+            {moved.archived
+              ? "The old dashboard has been archived."
+              : `The old dashboard is still here, because ${moved.left.length === 1 ? "one tile" : `${moved.left.length} tiles`} couldn't move:`}
+            {moved.left.length ? (
+              <ul>
+                {moved.left.map((entry, index) => (
+                  <li key={index}>
+                    {entry.title}: {entry.why}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </Notice>
+        ) : null}
+        {list.data && dashboards.length === 0 ? <Empty>{moved ? "No dashboards left here." : "No dashboards yet. New reports are made in Analytics."}</Empty> : null}
         {dashboards.length === 1 ? <h3 className={ui.cardTitle}>{dashboards[0].name}</h3> : null}
+        {current && can("bookkeeper") ? (
+          <p>
+            <Button variant="secondary" size="small" onClick={() => void move(current)} disabled={busy}>
+              {busy ? "Moving…" : "Move to Analytics"}
+            </Button>{" "}
+            <span className={ui.muted}>Makes an Analytics report with the same tiles, where it can have a theme, dates and a history.</span>
+          </p>
+        ) : null}
       </Card>
       {current ? <Dashboard key={current} organisationId={organisationId} id={current} /> : null}
     </>
