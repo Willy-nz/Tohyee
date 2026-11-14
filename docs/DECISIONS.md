@@ -14814,3 +14814,22 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       have changed, and asking the AI again from the box. Claude's details,
       not yet reviewed.
 
+### Presenting an Analytics report, and pictures behind a page (14 Nov 2026; decision 1619)
+
+1619. **Present, and a background picture for a page (#707).** Jess: "We
+      should be able to look at the analytics like a PowerPoint slide", and
+      asked about background pictures. **Present** on a report shows it full
+      screen (or filling the window where the browser won't), one page a
+      slide, in tab order without hidden pages: Right, Space or Page Down
+      for the next, Left or Page Up back, Home and End, Esc to leave, and a
+      small bar with the page count. Editing controls, the dates bar, the
+      freshness line and Pin to page are hidden; clicks and drill-down still
+      work. A page can have a **background picture**: one of the report's
+      own uploaded images (same limits and access as image tiles), covering
+      the page, with a fade from 0 to 90 towards the page colour so tiles
+      stay readable (50 to start). It's kept with the page's settings; a
+      picture no page or tile uses is removed on save, as before. No
+      migration. Not built yet: slide-sized pages that never scroll, title
+      slides, exporting the slides as a PDF or PowerPoint file, and the AI
+      choosing pictures. Claude's details, not yet reviewed.
+

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addPage, movePage, openingPage, parsePages, removePage, reportPages, tilePage, tilesOnPage, withPage } from "@/lib/analytics/pages";
+import { addPage, movePage, openingPage, pagePictureIds, parsePages, removePage, reportPages, tilePage, tilesOnPage, withPage } from "@/lib/analytics/pages";
 
 type T = { id: string; page?: string };
 
@@ -9,6 +9,17 @@ describe("report pages (#376 phase 3, decision 753)", () => {
     expect(tilePage({}, undefined)).toBe("page-1");
     expect(parsePages(undefined)).toBeUndefined();
     expect(parsePages([{ id: "page-1", name: "Page 1" }])).toBeUndefined();
+  });
+
+  it("keeps a page's background picture and its fade (#707)", () => {
+    const pages = parsePages([{ id: "page-1", name: "Page 1", picture: { id: "12", dim: 50, junk: true } }, { id: "b", name: "B", picture: { id: "7" } }, { id: "c", name: "C", picture: { id: "9", dim: 0 } }]);
+    expect(pages).toEqual([{ id: "page-1", name: "Page 1", picture: { id: "12", dim: 50 } }, { id: "b", name: "B", picture: { id: "7" } }, { id: "c", name: "C", picture: { id: "9" } }]);
+    expect(pagePictureIds(pages)).toEqual(["12", "7", "9"]);
+    expect(pagePictureIds(undefined)).toEqual([]);
+    // One page with only a picture is still a page worth keeping.
+    expect(parsePages([{ id: "page-1", name: "Page 1", picture: { id: "3" } }])).toEqual([{ id: "page-1", name: "Page 1", picture: { id: "3" } }]);
+    expect(() => parsePages([{ id: "a", name: "A", picture: { id: "../x" } }])).toThrow("upload the background picture again");
+    expect(() => parsePages([{ id: "a", name: "A", picture: { id: "3", dim: 95 } }])).toThrow("0 to 90");
   });
 
   it("checks pages: names, widths, backgrounds, hidden pages and how many", () => {

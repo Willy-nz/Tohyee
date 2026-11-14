@@ -482,6 +482,22 @@ describeWithDatabase("analytics dashboard sharing", () => {
     // Saving without the image tile removes the image.
     expect((await body(await patch(sharedId, [tile("regions"), pivotTile]))).status).toBe(200);
     expect((await getImage(sharedId, imageId, ownerCookie)).status).toBe(404);
+
+    // #707: a page's background picture is one of the report's images. It's kept through a save of just the tiles,
+    // the client can see it on the shared report, another report's can't be used, and it goes when the page drops it.
+    const settings = (pages: unknown[]) =>
+      dashboardRoute.PATCH(apiRequest(`/api/analytics/dashboards/${sharedId}`, { method: "PATCH", cookie: ownerCookie, body: { organisationId: ORG, settings: { slicers: [], pages } } }), params({ dashboardId: sharedId }));
+    const backdrop = String((await body(await upload(sharedId, ownerCookie, "hills.png", png))).data.image.id);
+    const withPicture = await body(await settings([{ id: "page-1", name: "Page 1", picture: { id: backdrop, dim: 50 } }]));
+    expect(withPicture.status).toBe(200);
+    expect(withPicture.data.dashboard.settings.pages).toEqual([{ id: "page-1", name: "Page 1", picture: { id: backdrop, dim: 50 } }]);
+    expect((await body(await patch(sharedId, [tile("regions"), pivotTile]))).status).toBe(200);
+    expect((await getImage(sharedId, backdrop, clientCookie)).status).toBe(200);
+    const stolen = await body(await settings([{ id: "page-1", name: "Page 1", picture: { id: String(privateImage.data.image.id) } }]));
+    expect(stolen.status).toBe(400);
+    expect(stolen.data.error).toMatch(/background picture isn't one of this report's/);
+    expect((await body(await settings([{ id: "page-1", name: "Page 1" }]))).status).toBe(200);
+    expect((await getImage(sharedId, backdrop, ownerCookie)).status).toBe(404);
   });
 
   it("stops showing a dashboard once it's unshared", async () => {

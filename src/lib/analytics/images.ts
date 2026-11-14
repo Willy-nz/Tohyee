@@ -49,11 +49,18 @@ export async function readDashboardImage(tx: OrgTx, dashboardId: string, imageId
  * report's images, and images no tile uses any more are removed (an image
  * uploaded and then not used, or a removed image tile).
  */
-export async function checkDashboardImages(tx: OrgTx, dashboardId: string, tiles: Array<{ title: string; visual: string; image?: { id: string } }>): Promise<void> {
-  const used = tiles.flatMap((tile) => (tile.visual === "image" && tile.image ? [tile.image.id] : []));
+export async function checkDashboardImages(
+  tx: OrgTx,
+  dashboardId: string,
+  tiles: Array<{ title: string; visual: string; image?: { id: string } }>,
+  /** Images the report's pages use as backgrounds (#707): kept, and checked, like a tile's. */
+  pagePictures: string[] = [],
+): Promise<void> {
+  const used = [...tiles.flatMap((tile) => (tile.visual === "image" && tile.image ? [tile.image.id] : [])), ...pagePictures];
   const result = await tx.query<{ id: string }>("select id::text from analytics_dashboard_images where dashboard_id = $1", [dashboardId]);
   const own = new Set(result.rows.map((row) => row.id));
   const missing = tiles.find((tile) => tile.visual === "image" && tile.image && !own.has(tile.image.id));
   if (missing) throw new ValidationError(`${missing.title}: that image isn't one of this report's. Upload it again.`);
+  if (pagePictures.some((id) => !own.has(id))) throw new ValidationError("A page's background picture isn't one of this report's. Upload it again.");
   await tx.query("delete from analytics_dashboard_images where dashboard_id = $1 and not (id = any($2::bigint[]))", [dashboardId, used]);
 }

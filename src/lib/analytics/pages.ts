@@ -26,6 +26,12 @@ export type ReportPage = {
   width?: PageWidth;
   /** Behind the page's tiles: shaded, or any colour (it gets a dark version like other chosen colours). Left out, the theme's. */
   background?: "tinted" | string;
+  /**
+   * A picture behind the page's tiles (#707): one of the report's own
+   * uploaded images, covering the page. `dim` (0 to 90) washes it out towards
+   * the page colour so tiles and text stay readable; left out, 0.
+   */
+  picture?: { id: string; dim?: number };
   /** Not in the page tabs: reached only by drill-through or a button (Power BI's hidden pages). */
   hidden?: boolean;
   /** Other pages' groups can be drilled through to it, showing it filtered to the group (decision 756). */
@@ -44,6 +50,20 @@ export function reportPages(pages: ReportPage[] | undefined): ReportPage[] {
 /** The id the single page of a report without pages answers to. */
 export const FIRST_PAGE = "page-1";
 
+function parsePicture(input: unknown, name: string): ReportPage["picture"] {
+  if (input === undefined || input === null) return undefined;
+  const raw = (typeof input === "object" ? input : {}) as Record<string, unknown>;
+  if (typeof raw.id !== "string" || !/^\d{1,18}$/.test(raw.id)) throw new ValidationError(`${name}: upload the background picture again.`);
+  if (raw.dim === undefined || raw.dim === null || raw.dim === 0) return { id: raw.id };
+  if (typeof raw.dim !== "number" || !Number.isInteger(raw.dim) || raw.dim < 0 || raw.dim > 90) throw new ValidationError(`${name}: fade the background picture by 0 to 90.`);
+  return { id: raw.id, dim: raw.dim };
+}
+
+/** The images a report's pages use as backgrounds. */
+export function pagePictureIds(pages: ReportPage[] | undefined): string[] {
+  return (pages ?? []).flatMap((page) => (page.picture ? [page.picture.id] : []));
+}
+
 /** Checks the pages a report is saved with (unknown settings dropped, wrong ones refused). */
 export function parsePages(input: unknown): ReportPage[] | undefined {
   if (input === undefined || input === null) return undefined;
@@ -60,12 +80,13 @@ export function parsePages(input: unknown): ReportPage[] | undefined {
     if (raw.width !== undefined && raw.width !== null && !PAGE_WIDTHS.includes(raw.width as PageWidth)) throw new ValidationError(`${name}: choose the page's width from the list.`);
     const width = raw.width && raw.width !== "full" ? (raw.width as PageWidth) : undefined;
     const background = raw.background === undefined || raw.background === null || raw.background === "" ? undefined : raw.background === "tinted" ? "tinted" : hexColour(raw.background, `${name} background`);
-    return { id, name, ...(width ? { width } : {}), ...(background ? { background } : {}), ...(raw.hidden === true ? { hidden: true } : {}), ...(raw.drillThrough === true ? { drillThrough: true } : {}) };
+    const picture = parsePicture(raw.picture, name);
+    return { id, name, ...(width ? { width } : {}), ...(background ? { background } : {}), ...(picture ? { picture } : {}), ...(raw.hidden === true ? { hidden: true } : {}), ...(raw.drillThrough === true ? { drillThrough: true } : {}) };
   });
   if (pages.length && pages.every((page) => page.hidden)) throw new ValidationError("At least one page has to show in the page tabs.");
   // One page with nothing set is the same as no pages.
   const firstFilters = (input[0] as Record<string, unknown> | undefined)?.filters;
-  if (pages.length === 1 && !pages[0].width && !pages[0].background && !pages[0].drillThrough && pages[0].name === "Page 1" && !(Array.isArray(firstFilters) && firstFilters.length)) return undefined;
+  if (pages.length === 1 && !pages[0].width && !pages[0].background && !pages[0].picture && !pages[0].drillThrough && pages[0].name === "Page 1" && !(Array.isArray(firstFilters) && firstFilters.length)) return undefined;
   return pages.length ? pages : undefined;
 }
 
@@ -120,7 +141,7 @@ export function removePage<T extends { page?: string }>(pages: ReportPage[] | un
   const left = list.filter((page) => page.id !== pageId);
   if (left.every((page) => page.hidden)) left[0] = { ...left[0], hidden: undefined };
   const kept = tiles.filter((tile) => tilePage(tile, list) !== pageId).map((tile) => withPage(tile, tilePage(tile, list), left));
-  return { pages: left.length === 1 && left[0].name === "Page 1" && !left[0].width && !left[0].background ? undefined : left, tiles: kept };
+  return { pages: left.length === 1 && left[0].name === "Page 1" && !left[0].width && !left[0].background && !left[0].picture ? undefined : left, tiles: kept };
 }
 
 /** Moves a page earlier or later; tiles keep their pages. */

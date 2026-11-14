@@ -4,7 +4,7 @@ import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { IllustratedIcon } from "@/components/illustrated-icon";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
 import { ChartFormatPanel } from "@/components/analytics/chart-format-panel";
 import { KeyFigureView } from "@/components/analytics/key-figure";
@@ -327,6 +327,18 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   // The report's edit history (decision 1414): saved versions, by people and through an AI.
   const [showHistory, setShowHistory] = useState(false);
   const [theming, setTheming] = useState(false);
+  // Present (#707): the report full screen, a page at a time, like slides.
+  const [presenting, setPresenting] = useState(false);
+  const presentRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!presenting) return;
+    // Leaving the browser's full screen (Esc, or its own button) ends the show.
+    const onFullScreen = () => {
+      if (!document.fullscreenElement) setPresenting(false);
+    };
+    document.addEventListener("fullscreenchange", onFullScreen);
+    return () => document.removeEventListener("fullscreenchange", onFullScreen);
+  }, [presenting]);
   // The format painter (#376): a tile's format, copied to paste on others.
   const [copied, setCopied] = useState<{ from: string; title: string; format: ChartFormat | undefined } | null>(null);
   const [editingTile, setEditingTile] = useState<Tile | "new" | "new-text" | null>(null);
@@ -550,7 +562,21 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const page = openingPage(pages, onlyTile ? tilePage(onlyTile, pages) : pageChoice);
   const pageTiles = onlyTile ? [onlyTile] : tilesOnPage(dashboard.tiles, pages, page.id);
   if (embed?.tileId && !onlyTile) return <Notice tone="warning">That tile isn&apos;t in the report any more. Choose Change to pick another.</Notice>;
-  const look = pageStyle(page);
+  const look = pageStyle(page, embed ? undefined : { organisationId, dashboardId: dashboard.id });
+  // The slides are the pages in the tabs, in order (a hidden page is still reached by its button or drill-through).
+  const slides = reportPages(pages).filter((entry) => !entry.hidden);
+  const slideAt = slides.findIndex((entry) => entry.id === page.id);
+  const startPresenting = () => {
+    setPresenting(true);
+    // Full screen when the browser allows it; otherwise it still fills the window.
+    void presentRef.current?.requestFullscreen?.().catch(() => undefined);
+    // The keys go to the report: arrows step through its pages.
+    requestAnimationFrame(() => presentRef.current?.focus());
+  };
+  const stopPresenting = () => {
+    setPresenting(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+  };
   const choosePage = (pageId: string, remember = true) => {
     if (remember && pageId !== page.id) setPageHistory((history) => [...history.slice(-19), page.id]);
     setPageChoice(pageId);
@@ -680,9 +706,25 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const themeScope = `report-theme-${dashboard.id}`;
   const themeClass = isTohyee(theme) ? themeScope : `${themeScope} ${styles.themed}`;
 
+  const presentKeys = (event: React.KeyboardEvent) => {
+    if (!presenting) return;
+    // Typing in a slicer or a box isn't stepping through slides.
+    if ((event.target as HTMLElement | null)?.closest?.("input, select, textarea, [contenteditable=true]")) return;
+    const forward = event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ";
+    const back = event.key === "ArrowLeft" || event.key === "PageUp";
+    if (event.key === "Escape") stopPresenting();
+    else if (forward && slideAt >= 0 && slideAt < slides.length - 1) choosePage(slides[slideAt + 1].id, false);
+    else if (back && slideAt > 0) choosePage(slides[slideAt - 1].id, false);
+    else if (event.key === "Home" && slides.length) choosePage(slides[0].id, false);
+    else if (event.key === "End" && slides.length) choosePage(slides[slides.length - 1].id, false);
+    else return;
+    event.preventDefault();
+  };
+
   return (
     <ReportThemeStyle theme={theme} scope={themeScope}>
       <YearEndMonth.Provider value={dates.financialYearEndMonth}>
+      <div ref={presentRef} tabIndex={-1} onKeyDown={presentKeys} className={presenting ? `${styles.presenting} ${themeClass}` : styles.presentRoot} data-presenting={presenting ? "true" : undefined}>
       {embed ? null : <div className={styles.header}>
         <div>
           {editing ? (
@@ -718,7 +760,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
             </>
           )}
         </div>
-        <div className={ui.rowButtons}>
+        <div className={ui.rowButtons} data-present="hide">
+          {!editing ? <Button variant="secondary" onClick={startPresenting} title="Show the report full screen, a page at a time">Present</Button> : null}
           {canEdit ? <Button variant="secondary" aria-expanded={sharing} onClick={() => setSharing(!sharing)}>Share</Button> : null}
           {canEdit ? <Button variant="secondary" aria-expanded={showHistory} onClick={() => setShowHistory(!showHistory)}>History</Button> : null}
           {canEdit && editing ? (
@@ -799,6 +842,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
       {editing && tables.error ? <Notice tone="error">{tables.error}</Notice> : null}
       {editing && tables.data?.tables.length === 0 ? <Notice tone="info">Connect and load a <Link href="/analytics/sources">data source</Link> to start adding charts.</Notice> : null}
 
+      <div data-present="hide">
       {embed && !embed.showFilters ? null : <FilterBar
         organisationId={organisationId}
         dashboardId={dashboard.id}
@@ -815,13 +859,16 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         pageId={page.id}
         pages={reportPages(pages)}
       />}
+      </div>
 
-      <ReportFreshnessLine organisationId={organisationId} dashboardId={dashboard.id} />
-      {onlyTile ? null : <PageTabs
+      <div data-present="hide"><ReportFreshnessLine organisationId={organisationId} dashboardId={dashboard.id} /></div>
+      {presenting && slides.length > 1 ? <p className={styles.slideName}>{page.name}</p> : null}
+      {onlyTile || presenting ? null : <PageTabs
         pages={pages}
         current={page.id}
         onChoose={choosePage}
         editing={editing}
+        pictures={{ organisationId, dashboardId: dashboard.id }}
         panelId={`report-page-${dashboard.id}`}
         onAdd={() => {
           const id = `p${Date.now().toString(36)}`;
@@ -1080,7 +1127,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                       Remove
                     </Button>
                   </div>
-                ) : isItemVisual(tile.visual) || embed ? null : (
+                ) : isItemVisual(tile.visual) || embed || presenting ? null : (
                   // Only saved tiles can be pinned, so not while the dashboard is being changed.
                   <PinTileMenu organisationId={organisationId} dashboardId={dashboard.id} tileId={tile.id} />
                 )}
@@ -1137,6 +1184,15 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           })}
         </div>
       ))}
+      {presenting ? (
+        <div className={styles.slideBar} role="group" aria-label="Slides">
+          <Button size="small" variant="secondary" disabled={slideAt <= 0} onClick={() => choosePage(slides[slideAt - 1].id, false)} aria-label="Previous page">←</Button>
+          <span aria-live="polite">{slides.length > 1 ? `${slideAt + 1} of ${slides.length}` : "1 of 1"}</span>
+          <Button size="small" variant="secondary" disabled={slideAt < 0 || slideAt >= slides.length - 1} onClick={() => choosePage(slides[slideAt + 1].id, false)} aria-label="Next page">→</Button>
+          <Button size="small" variant="secondary" onClick={stopPresenting}>Exit</Button>
+        </div>
+      ) : null}
+      </div>
       </YearEndMonth.Provider>
     </ReportThemeStyle>
   );
