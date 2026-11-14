@@ -14847,7 +14847,7 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       the books sees both kinds. A report viewer (a client, who sees nothing
       of the books) sees a **published** report on a page shared with them,
       and is refused a draft: publishing is the deliberate act of freezing
-      something to hand over. Jess hasn't confirmed this rule yet. A report
+      something to hand over. Jess confirmed this rule on 14 Nov 2026. A report
       archived or deleted later shows "archived or deleted" on its tile and
       doesn't stop the page saving. No migration. Not built yet: a draft
       following the Analytics report's dates, splitting a long report over
@@ -14895,3 +14895,15 @@ Claude to "give it a go". Claude's details, as Xero does, not yet reviewed.
       from #692: comparison and sparkline by default, ratios as percent,
       rounded formula answers, donut labels, the dates bar. Claude's
       details, not yet reviewed.
+1624. **A share of money reads as a percentage, and donut labels are whole
+      percents** (#692, second part). A calculated value that divides money
+      by money (such as ([Sales] - [Costs]) / [Sales]) now comes back with a
+      default number format of a percentage to one decimal, so 0.6 shows as
+      "60.0%" without anyone formatting it. The answer itself is unchanged
+      (still the exact fraction), a tile's own number format wins, and a
+      formula that multiplies afterwards (× 100) or divides by a count or a
+      plain number is left as a number. A pie or donut slice's label shows
+      a whole percent ("16%", and "<1%" for a sliver); the tooltip keeps the
+      decimals. Also recorded: Jess confirmed decision 1620's rule that a
+      client sees a published report on a shared page and never a draft.
+      Claude's details, not yet reviewed.
